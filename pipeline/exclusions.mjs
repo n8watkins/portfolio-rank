@@ -28,7 +28,7 @@
 import { APPLIED_REMOVAL_WHERE, carriesName, checkSite, mapPool, normKey } from "./health.mjs";
 import { excludedUrl, readJson } from "./list-util.mjs";
 import { capturedBlocked, isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
-import { notPortfolioReason } from "./portfolio-guard.mjs";
+import { SIGNAL_NAMES, STRONG_SIGNALS, notPortfolioReason } from "./portfolio-guard.mjs";
 import { LEFT_LIST } from "./build-feed.mjs";
 import { retireArchivedSite } from "./archive-return.mjs";
 import {
@@ -125,6 +125,29 @@ const withoutFound = (e) => {
   return copy;
 };
 
+/**
+ * THE HOOK for detectors that veto an archive return (third review of #292):
+ * each takes the passing checkSite result (./health.mjs: ok, finalUrl, title,
+ * pageText, heading, links, signals, moved, hijack) and returns why the entry
+ * stays archived, or null. The first that answers wins; its answer is shown on
+ * /admin/health-pool as what was found. A failing verdict (a parked page, a
+ * gambling forward, "not the site: ...") never reaches here: checkSite already
+ * failed it. The reading-fixes branch (fix/read-the-finished-page) adds its
+ * own here: a hijack flag on a same-site page, a parking lander that passed.
+ */
+export const RETURN_VETOES = [
+  // A forward to another domain that carries none of the person's name (./health.mjs redirectVerdict).
+  (r) => (r?.moved && r?.hijack ? "answers, but it forwards to another domain that carries none of the person's name" : null),
+];
+/** Why a passing archived entry still stays archived (RETURN_VETOES), or null. */
+export const returnVeto = (r) => {
+  for (const veto of RETURN_VETOES) {
+    const why = veto(r);
+    if (why) return why;
+  }
+  return null;
+};
+
 export const passesFullCheck =
   ({ render, fetchImpl } = {}) =>
   async (url, entry) => {
@@ -136,12 +159,19 @@ export const passesFullCheck =
     }
     if (r?.ok !== true) return false;
     const found = { day: new Date().toISOString().slice(0, 10), final_url: r.finalUrl ?? url, title: String(r.title ?? "").slice(0, 120) };
-    // The same person's site, not a re-registered domain serving something else (#292 review, F4): the page
-    // carries the listed person's name. Otherwise it stays archived, with what was found for the owner.
-    // The page's own words only: a re-registered domain keeps the person's name in its address.
-    if (!carriesName(entry?.name ?? "", { title: r.title, text: r.pageText, heading: r.heading })) {
-      return { ok: false, found: { ...found, why: "answers, but the page does not carry the listed person's name" } };
+    // A portfolio again, not a re-registered domain serving something else (#292 reviews, F4 and the third
+    // review): the page carries the listed person's name (the page's own words only: a re-registered domain
+    // keeps the name in its address), or the code finds strong portfolio signals on it (a person who signs
+    // with a handle, "@mrashid" for Mohammed Al-Rashid). An archive return starts fresh and goes through
+    // the door (./archive-return.mjs, lib/reviews/door.mjs), so a page naming the person that is not their
+    // portfolio is judged there. Otherwise it stays archived, with what was found for the owner.
+    const named = carriesName(entry?.name ?? "", { title: r.title, text: r.pageText, heading: r.heading });
+    const score = Number(r.signals?.score ?? 0);
+    if (!named && !(score >= STRONG_SIGNALS)) {
+      return { ok: false, found: { ...found, why: `answers, but the page carries neither the listed person's name nor strong portfolio signals (${score} of ${SIGNAL_NAMES.length})` } };
     }
+    const veto = returnVeto(r);
+    if (veto) return { ok: false, found: { ...found, why: veto } };
     // Archived for a capture that never showed the site: back only when the page itself shows one by the
     // capture's own rule (./capture-blocked.mjs capturedBlocked on its words and links, so a short page that
     // links out still shows a site), so a gate or a loader that is still there does not cycle through the

@@ -88,8 +88,18 @@ export const CONFIRM_AFTER_MS = 1 * DAY;
  * answers, an HTTP error, a parked or for-sale page) keeps the next day.
  */
 export const CONFIRM_WEAK_AFTER_MS = 7 * DAY;
-/** A failure reason that is weak evidence (CONFIRM_WEAK_AFTER_MS). */
-export const WEAK_VERDICT = /^(renders blank|capture blocked: |redirects to \S+, not a portfolio|duplicate of )/;
+/**
+ * A failure reason that is weak evidence (CONFIRM_WEAK_AFTER_MS): a blank
+ * render, a blocked capture, a redirect to a social profile, a duplicate, and
+ * (from the reading-fixes branch, fix/read-the-finished-page, pipeline/gate.mjs
+ * parkedPage and pipeline/health.mjs checkSite) "not the site: ..." (a web
+ * server's default page, a host's placeholder, a maintenance page, an app's
+ * error page: temporary by nature) and "does not load (the browser's error
+ * page)" (our browser's own view). A parking lander ("parking page: ...",
+ * "parking phrase: ...") and a forward to a gambling site ("redirects to X, a
+ * gambling site") stay positive evidence: the next day.
+ */
+export const WEAK_VERDICT = /^(renders blank|capture blocked: |redirects to \S+, not a portfolio|duplicate of |not the site: |does not load \(the browser's error page\))/;
 /** The wait from the first failure to the confirming re-check, for a failure with `reason`. */
 export const confirmAfterMs = (reason) => (WEAK_VERDICT.test(String(reason ?? "")) ? CONFIRM_WEAK_AFTER_MS : CONFIRM_AFTER_MS);
 /**
@@ -102,6 +112,12 @@ export const confirmAfterMs = (reason) => (WEAK_VERDICT.test(String(reason ?? ""
  * it is the normal pace, shown on /admin/health-pool.
  */
 export const HIDE_PER_DAY = 20;
+/**
+ * DEFAULT: the drain for weak verdicts (third review of #292): at most this
+ * many hidden in any 24 hours. A real blank page, a real duplicate or a real
+ * placeholder is rare; many at once is far likelier to be our reader.
+ */
+export const HIDE_WEAK_PER_DAY = 5;
 /**
  * DEFAULT: the freeze for faults on our side, measured by NEW first failures,
  * not by the backlog: more than SPIKE_NEW sites (about 5% of the list) entering
@@ -118,15 +134,32 @@ export const HIDE_PER_DAY = 20;
 export const SPIKE_NEW = 100;
 export const SPIKE_CLASS = 50;
 export const SPIKE_WINDOW_MS = 2 * DAY;
+/**
+ * DEFAULT: the freeze for weak verdicts (third review of #292). A fault in our
+ * reader that keeps going (blank renders, 24 new a day for a week) never makes
+ * a 48-hour spike, and weak verdicts wait 7 days anyway, so they are counted
+ * over SPIKE_WEAK_WINDOW_MS (the 7-day confirmation and a day): more than
+ * SPIKE_WEAK new weak first failures freezes them. The freeze lifts only when
+ * fewer than SPIKE_WEAK of its held sites still fail (the reader fixed, or the
+ * sites recovered), never on a timer; the one owner alert stands until then.
+ * 8 genuinely blank sites in a week stay under it and drain at
+ * HIDE_WEAK_PER_DAY, with no alert.
+ */
+export const SPIKE_WEAK = 50;
+export const SPIKE_WEAK_WINDOW_MS = 8 * DAY;
+/** Whether a failure reason is weak evidence (WEAK_VERDICT). */
+export const isWeakVerdict = (reason) => WEAK_VERDICT.test(String(reason ?? ""));
 /** The kind of a failure reason, for the spike's per-kind count. */
 export function reasonClass(reason) {
   const r = String(reason ?? "");
+  if (/^does not load \(the browser's error page\)/.test(r)) return "browser-error-page";
   if (/^HTTP \d/.test(r)) return "http-error";
   if (notAnswering(r)) return "not-answering";
   if (/^renders blank/.test(r)) return "blank";
   if (/^capture blocked: /.test(r)) return "blocked-capture";
   if (/^duplicate of /.test(r)) return "duplicate";
   if (/^redirects to \S+, not a portfolio/.test(r)) return "social-redirect";
+  if (/^not the site: /.test(r)) return "not-the-site";
   return "wrong-content";
 }
 /** DEFAULT: how often a not-working site is checked again, by days since it became not working: daily for a week, weekly to day 30, then monthly. */
@@ -289,7 +322,10 @@ export function failOnLadder(prev, result, now = new Date()) {
       firstFailAt: iso(t),
       lastFailAt: iso(t),
       reason: result.reason,
-      pool: { stage: FAILING, startedAt: iso(t), nextAt: iso(t + RECHECK_AFTER_MS), since: null, unclear: 0, firstAt: iso(t), held: null },
+      // firstAt: a row already failing with no ladder (the old weekly-counted rule's 'suspect', on release
+      // night) keeps its original first failure, so that one-time restart is never counted as a spike of new
+      // failures; its evidence (startedAt) starts now like any first failure.
+      pool: { stage: FAILING, startedAt: iso(t), nextAt: iso(t + RECHECK_AFTER_MS), since: null, unclear: 0, firstAt: prev?.health === "suspect" && prev?.firstFailAt ? String(prev.firstFailAt) : iso(t), held: null },
     };
   }
   const due = pool.nextAt == null || t >= ms(pool.nextAt) - DUE_SLACK_MS;
@@ -302,7 +338,10 @@ export function failOnLadder(prev, result, now = new Date()) {
       next = { ...next, stage: RECHECKED, nextAt: iso(Math.max(confirmAt, t + RECHECK_AFTER_MS)) };
     } else if (pool.stage === RECHECKED && t < confirmAt - DUE_SLACK_MS) {
       // Due on the next day's terms, but this failure is a weak verdict: it waits for its own confirming day.
-      next = { ...next, nextAt: iso(confirmAt) };
+      // A site held by a freeze is checked daily meanwhile, so the freeze sees it recover (a weak freeze
+      // lifts only when most of its held sites pass again).
+      const daily = pool.held === "freeze" || pool.held === "freeze-weak";
+      next = { ...next, nextAt: iso(daily ? Math.min(confirmAt, t + DAY) : confirmAt) };
     } else if (pool.stage === RECHECKED) {
       // Still failing on its confirming day: into the temporary pool.
       next = { ...next, stage: NOT_WORKING, since: iso(t), nextAt: iso(notWorkingNext(t, t)) };

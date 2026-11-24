@@ -268,9 +268,14 @@ Nothing at any step writes a row to your review page.
    Still failing: the site goes into the temporary pool.
    It is hidden from browse, search, the leaderboard, the tiers, the games and the sitemap, and its profile page answers "not found" (`lib/hidden.mjs`).
    Nothing is deleted: its rank, votes, grade and captures stay.
-   Two failures on one day never hide a site: the hiding check comes at least a day after the first failure, and a week after it for a blank page, a blocked capture, a redirect to a social profile or a duplicate (weak evidence the checker itself can cause).
-   No more than 20 sites are hidden in any 24 hours, oldest first failure first; the rest wait their turn, still shown, and are hidden as places free (36 dead sites: 20 one day, 16 the next). This is the ordinary pace and sends you nothing; `/admin/health-pool` shows who is waiting.
-   A spike is different: when more than 100 sites (about 5% of the list), or more than 50 for one kind of reason, start failing within 48 hours, the fault is most likely ours or a host-wide outage, so none of them is hidden while it lasts and you get one alert. It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day, or a week) before it is hidden, at the same 20 a day.
+   Two failures on one day never hide a site: the hiding check comes at least a day after the first failure, and a week after it for a blank page, a blocked capture, a redirect to a social profile, a duplicate, a placeholder page or the browser's error page (weak evidence the checker itself can cause).
+   No more than 20 sites are hidden in any 24 hours, oldest first failure first, and no more than 5 of those weak verdicts; the rest wait their turn, still shown, and are hidden as places free (36 dead sites: 20 one day, 16 the next).
+   This is the ordinary pace and sends you nothing; `/admin/health-pool` shows who is waiting.
+   A spike is different: when more than 100 sites (about 5% of the list), or more than 50 for one kind of reason, start failing within 48 hours, the fault is most likely ours or a host-wide outage, so none of them is hidden while it lasts and you get one alert.
+   It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day) before it is hidden, at the same 20 a day.
+   Weak verdicts are counted over 8 days instead: a fault in our reader can go on for a week at a steady pace.
+   More than 50 new ones in 8 days holds every weak verdict, still shown and checked daily, with one alert; it lifts only when fewer than 50 of the held sites still fail, never on a timer, and each still failing then needs a full week again.
+   On release night, the sites already failing under the old rule keep their first failure date, so they never look like a spike; `node pipeline/health-check.mjs --dry-run` counts them beforehand ("Restarted on the ladder").
 4. **Keep re-checking** (hourly, when due): daily for the first 7 days, weekly to day 30, then monthly.
    Every night one plain request also goes to each hidden site; if it answers with words, its full re-check comes within the hour.
    A check that passes brings the site straight back, exactly as it was, tier included.

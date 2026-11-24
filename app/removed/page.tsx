@@ -64,7 +64,7 @@ export default function RemovedPage() {
               grade do not come with it.
             </p>
             <p>
-              Is your site back up, or was it removed by mistake?{" "}
+              Was your site removed by mistake?{" "}
               <a
                 href={SITE.submit}
                 target="_blank"
@@ -73,7 +73,9 @@ export default function RemovedPage() {
               >
                 Submit it again
               </a>{" "}
-              and it returns on the next sync.
+              and a person will look at it. A site taken off for being down or gone
+              needs nothing: it comes back by itself once one of those checks
+              passes.
             </p>
           </div>
         </div>

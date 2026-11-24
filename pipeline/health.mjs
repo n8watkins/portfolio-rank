@@ -72,9 +72,13 @@ import {
   NOT_WORKING,
   RECHECKED,
   RECHECK_AFTER_MS,
+  HIDE_WEAK_PER_DAY,
   SPIKE_CLASS,
   SPIKE_NEW,
+  SPIKE_WEAK,
+  SPIKE_WEAK_WINDOW_MS,
   SPIKE_WINDOW_MS,
+  isWeakVerdict,
   ON_LADDER_SQL,
   PURGE_BACK,
   PURGE_GONE,
@@ -222,15 +226,21 @@ export const NAME_TEXT_CHARS = 2000;
  *   a part in a script written without spaces (Chinese, Japanese, Korean,
  *   Thai...) as written, whatever its length;
  *   a one-word name in the title or the first heading only (`heading`);
- *   a name with nothing to test (only words under three letters) never matches.
+ *   a name of only short words ("Ed Li", third review of #292): all of them,
+ *   as whole words together, in the title or the first heading only;
+ *   no name at all never matches.
  * The address never counts: a re-registered domain keeps the name in it.
+ * The archive check takes a page with strong portfolio signals too (a handle
+ * instead of the name: ./exclusions.mjs passesFullCheck).
  */
 export function carriesName(name, { title = "", text = "", heading = "" } = {}) {
   const parts = String(name ?? "").normalize("NFC").split(/[^\p{L}\p{N}\p{M}]+/u).filter(Boolean);
   const unspaced = parts.filter((p) => UNSPACED.test(p));
-  const words = parts.filter((p) => !UNSPACED.test(p)).map(fold).filter((w) => [...w].length >= 3);
+  const long = parts.filter((p) => !UNSPACED.test(p)).map(fold).filter((w) => [...w].length >= 3);
+  const shortOnly = !unspaced.length && !long.length;
+  const words = shortOnly ? parts.map(fold) : long;
   if (!unspaced.length && !words.length) return false;
-  const one = unspaced.length + words.length === 1 && !unspaced.length;
+  const one = shortOnly || (unspaced.length + words.length === 1 && !unspaced.length);
   const where = one ? `${title}\n${heading}` : `${title}\n${String(text ?? "").slice(0, NAME_TEXT_CHARS)}`;
   const folded = fold(where);
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -594,8 +604,10 @@ export async function runHealthCheck({
   schemaReady = false,
   // The day's pace of hiding and the spike freeze's limits (./not-working.mjs); a test may set its own.
   hidePerDay = HIDE_PER_DAY,
+  hideWeakPerDay = HIDE_WEAK_PER_DAY,
   spikeNew = SPIKE_NEW,
   spikeClass = SPIKE_CLASS,
+  spikeWeak = SPIKE_WEAK,
   // The time a site's check finished, as ms: the real clock in a real run; a run given its own `now` (a
   // simulated clock) stays at that time unless it passes a clock of its own.
   clock = nowIn ? () => nowIn.getTime() : Date.now,
@@ -825,6 +837,7 @@ export async function runHealthCheck({
     // The not-working pool: first failures (out of the AI's work), sites hidden by this run, sites
     // back from the ladder, sites not working LEAVE_AFTER_DAYS (the weekly export takes them off the list).
     newlyFailing: [],
+    restarted: [],
     newlyHidden: [],
     returned: [],
     leavingList: [],
@@ -854,15 +867,18 @@ export async function runHealthCheck({
     // A removal decided in the review queue is down with its reason (rule 3 of nextHealth), off the ladder.
     computed.set(r, { row, prev, at, next: nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at) });
   }
-  const pace = await hidingPace(db, { hasPool, hasFirst: marksCols.has("pool_first_at"), now, hidePerDay, spikeNew, spikeClass });
+  const pace = await hidingPace(db, { hasPool, hasFirst: marksCols.has("pool_first_at"), hasHeld: marksCols.has("pool_held"), now, hidePerDay, hideWeakPerDay, spikeNew, spikeClass, spikeWeak });
   summary.pace = pace;
   const DAYMS = 86400000;
   const isoAt = (ms) => new Date(ms).toISOString();
-  // Out of a freeze once the spike is over: a site still failing starts its evidence again from now (the next
-  // day, or a week for a weak verdict), so nothing frozen is hidden on what was seen during the spike.
-  if (!pace.frozen) {
+  // Out of a freeze once it lifts (a strong spike's window has passed; most of a weak freeze's held sites
+  // pass again): a site still failing starts its evidence again from now (the next day, or a week for a
+  // weak verdict), so nothing frozen is hidden on what was seen during the freeze.
+  {
     for (const [r, c] of computed) {
-      if (c.prev?.pool?.held !== "freeze" || !c.next.pool) continue;
+      const held = c.prev?.pool?.held;
+      const lifted = (held === "freeze" && !pace.frozen) || (held === "freeze-weak" && !pace.weakFrozen);
+      if (!lifted || !c.next.pool) continue;
       const t = c.at.getTime();
       c.next = { ...c.next, health: c.next.health === "down" ? "suspect" : c.next.health, fails: Math.min(Number(c.next.fails ?? 0), RECHECKED), pool: { ...c.next.pool, stage: Math.min(c.next.pool.stage, RECHECKED), since: null, startedAt: isoAt(t), nextAt: isoAt(t + confirmAfterMs(c.next.reason)), held: null } };
       pace.released.push({ url: r.url, reason: c.next.reason });
@@ -873,25 +889,34 @@ export async function runHealthCheck({
     .filter(([, c]) => c.next.pool?.stage === NOT_WORKING && c.prev?.pool?.stage !== NOT_WORKING && c.prev?.health !== "down")
     .sort(([, a], [, b]) => String(a.prev?.pool?.firstAt ?? "").localeCompare(String(b.prev?.pool?.firstAt ?? "")));
   const spikeFrom = now.getTime() - SPIKE_WINDOW_MS;
-  let allowance = pace.allowance;
+  const left = { strong: pace.allowance, weak: pace.allowanceWeak };
   for (const [r, c] of hiding) {
+    const weak = isWeakVerdict(c.next.reason);
     const firstAt = Date.parse(String(c.prev?.pool?.firstAt ?? ""));
-    const fromSpike = pace.frozen && ((Number.isFinite(firstAt) && firstAt >= spikeFrom) || c.prev?.pool?.held === "freeze");
+    const fromSpike = !weak && pace.frozen && ((Number.isFinite(firstAt) && firstAt >= spikeFrom) || c.prev?.pool?.held === "freeze");
     const holdAt = (pool) => ({ ...c.next, health: "suspect", fails: RECHECKED, pool: { ...c.next.pool, stage: RECHECKED, since: null, ...pool } });
-    if (fromSpike) {
-      // A spike (a fault on our side, most likely): held, and its evidence starts again from now, so once the
-      // spike is over it still needs its full confirming wait (the next day, or a week for a weak verdict).
+    if (weak && pace.weakFrozen) {
+      // A weak freeze (our reader, most likely, and it may keep going): every weak verdict waits, still shown,
+      // checked daily, its evidence starting again; it lifts only when most of them pass again.
+      c.next = holdAt({ startedAt: isoAt(c.at.getTime()), nextAt: isoAt(c.at.getTime() + DAYMS), held: "freeze-weak" });
+      pace.frozenHeld.push({ url: r.url, reason: c.next.reason });
+    } else if (fromSpike) {
+      // A strong spike (a fault on our side, or a host-wide outage): held, and its evidence starts again from
+      // now, so once the spike is over it still needs its full confirming wait.
       c.next = holdAt({ startedAt: isoAt(c.at.getTime()), nextAt: isoAt(c.at.getTime() + DAYMS), held: "freeze" });
       pace.frozenHeld.push({ url: r.url, reason: c.next.reason });
-    } else if (allowance <= 0) {
-      // The day's allowance is used: waits, still shown, until a place frees (the oldest hide of the day turns 24 hours).
-      const free = pace.oldestToday ? Date.parse(pace.oldestToday) + DAYMS : c.at.getTime() + DAYMS;
+    } else if (left[weak ? "weak" : "strong"] <= 0) {
+      // The day's allowance for its kind is used: waits, still shown, until a place frees (the oldest hide of
+      // that kind in the last day turns 24 hours).
+      const oldest = weak ? pace.oldestWeakToday : pace.oldestToday;
+      const free = oldest ? Date.parse(oldest) + DAYMS : c.at.getTime() + DAYMS;
       c.next = holdAt({ nextAt: isoAt(Math.max(c.at.getTime() + RECHECK_AFTER_MS, free)), held: "drain" });
       pace.drained.push({ url: r.url, reason: c.next.reason });
     } else {
-      allowance--;
+      left[weak ? "weak" : "strong"]--;
       c.next = { ...c.next, pool: { ...c.next.pool, held: null } };
-      pace.oldestToday = pace.oldestToday ?? isoAt(c.at.getTime());
+      if (weak) pace.oldestWeakToday = pace.oldestWeakToday ?? isoAt(c.at.getTime());
+      else pace.oldestToday = pace.oldestToday ?? isoAt(c.at.getTime());
     }
   }
   const plans = [];
@@ -1057,6 +1082,10 @@ export async function runHealthCheck({
     // The not-working pool (./not-working.mjs).
     const wasOnLadder = Boolean(prev?.pool) || prev?.health === "suspect" || prev?.health === "down";
     if (next.pool && !wasOnLadder) summary.newlyFailing.push({ url: r.url, reason: next.reason });
+    // The old weekly-counted rule's failing rows restarting on the ladder (release night): counted so a dry
+    // run shows how many there are, by kind, before the first real run. They keep their original first
+    // failure (./not-working.mjs failOnLadder), so they are never counted as a spike of new failures.
+    if (next.pool && !prev?.pool && prev?.health === "suspect") summary.restarted.push({ url: r.url, reason: next.reason, kind: reasonClass(next.reason), firstAt: next.pool.firstAt });
     if (next.pool?.stage === NOT_WORKING && prev?.pool?.stage !== NOT_WORKING && prev?.health !== "down") summary.newlyHidden.push({ url: r.url, reason: next.reason });
     if (r.ok === true && prev?.pool) summary.returned.push({ url: r.url, wasNotWorking: prev.pool.stage === NOT_WORKING });
     if (next.pool?.stage === NOT_WORKING && leavesList(next.pool.since, now)) summary.leavingList.push({ url: r.url, since: next.pool.since });
@@ -1135,16 +1164,21 @@ export async function runHealthCheck({
   // The spike freeze: one owner alert while it holds, cleared by itself once the spike is over (read from
   // the marks, so every run agrees). The day's ordinary pace (the drain) never alerts.
   await reconcileAlerts(db, {
-    conditions: pace.frozen
-      ? [
-          {
-            key: SPIKE_ALERT_KEY,
-            kind: "problem",
-            title: `${pace.newFailures} listed sites started failing within ${SPIKE_WINDOW_MS / 86400000} days: none of them is hidden while it lasts`,
-            detail: `So many new failures at once (by kind: ${Object.entries(pace.byClass).map(([k, n]) => `${k} ${n}`).join(", ")}) usually means the checker or a host-wide outage rather than the sites. They stay shown; once the spike is over, each still failing is hidden only after its full confirming wait, ${hidePerDay} a day. This clears by itself.`,
-          },
-        ]
-      : [],
+    conditions:
+      pace.frozen || pace.weakFrozen
+        ? [
+            {
+              key: SPIKE_ALERT_KEY,
+              kind: "problem",
+              title: pace.weakFrozen
+                ? `${Math.max(pace.newWeak, pace.heldWeak)} listed sites look blank, blocked or not themselves to our reader: none of them is hidden while it lasts`
+                : `${pace.newFailures} listed sites started failing within ${SPIKE_WINDOW_MS / 86400000} days: none of them is hidden while it lasts`,
+              detail: pace.weakFrozen
+                ? `${pace.newWeak} new weak verdicts (a blank page, a blocked capture, a social redirect, a duplicate, not the site, the browser's error page) within ${SPIKE_WEAK_WINDOW_MS / 86400000} days, ${pace.heldWeak} held that still fail. So many usually means our reader, and it may keep going, so this stands until fewer than ${spikeWeak} of them still fail; then each still failing needs a full week again before it is hidden, ${hideWeakPerDay} a day.`
+                : `So many new failures at once (by kind: ${Object.entries(pace.byClass).map(([k, n]) => `${k} ${n}`).join(", ")}) usually means the checker or a host-wide outage rather than the sites. They stay shown; once the spike is over, each still failing is hidden only after its full confirming wait, ${hidePerDay} a day. This clears by itself.`,
+            },
+          ]
+        : [],
     scope: (key) => key === SPIKE_ALERT_KEY,
     now,
     log,
@@ -1205,24 +1239,58 @@ export const SPIKE_ALERT_KEY = "health-spike-freeze";
  *                 still fail, by kind (byClass); frozen when over the limits
  * Returns that, with empty lists for the sites this run holds.
  */
-async function hidingPace(db, { hasPool, hasFirst, now, hidePerDay, spikeNew, spikeClass }) {
-  const out = { hiddenToday: 0, allowance: hidePerDay, oldestToday: null, newFailures: 0, byClass: {}, frozen: false, frozenHeld: [], drained: [], released: [] };
+async function hidingPace(db, { hasPool, hasFirst, hasHeld, now, hidePerDay, hideWeakPerDay, spikeNew, spikeClass, spikeWeak }) {
+  const out = {
+    // The drain, by kind: strong evidence and weak verdicts (./not-working.mjs isWeakVerdict) each have their own allowance.
+    hiddenToday: 0,
+    hiddenWeakToday: 0,
+    allowance: hidePerDay,
+    allowanceWeak: hideWeakPerDay,
+    oldestToday: null,
+    oldestWeakToday: null,
+    // The strong spike: new first failures of strong evidence within SPIKE_WINDOW_MS, released on that timer.
+    newFailures: 0,
+    byClass: {},
+    frozen: false,
+    // The weak spike: new weak first failures within SPIKE_WEAK_WINDOW_MS, and the sites it holds that still fail.
+    newWeak: 0,
+    heldWeak: 0,
+    weakFrozen: false,
+    frozenHeld: [],
+    drained: [],
+    released: [],
+  };
   if (!hasPool) return out;
   const join = `FROM health_marks m JOIN portfolios p ON p.url = m.url WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL`;
   const today = (
-    await db.execute({ sql: `SELECT COUNT(*) AS n, MIN(m.pool_since) AS oldest ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ?`, args: [new Date(now.getTime() - 86400000).toISOString()] })
-  ).rows[0];
-  out.hiddenToday = Number(today?.n ?? 0);
-  out.oldestToday = today?.oldest == null ? null : String(today.oldest);
+    await db.execute({ sql: `SELECT p.health_reason, m.pool_since ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ? ORDER BY m.pool_since`, args: [new Date(now.getTime() - 86400000).toISOString()] })
+  ).rows;
+  for (const r of today) {
+    const weak = isWeakVerdict(r.health_reason);
+    if (weak) out.hiddenWeakToday++;
+    else out.hiddenToday++;
+    if (weak) out.oldestWeakToday = out.oldestWeakToday ?? String(r.pool_since);
+    else out.oldestToday = out.oldestToday ?? String(r.pool_since);
+  }
   out.allowance = Math.max(0, hidePerDay - out.hiddenToday);
+  out.allowanceWeak = Math.max(0, hideWeakPerDay - out.hiddenWeakToday);
   const first = hasFirst ? "COALESCE(m.pool_first_at, m.pool_started_at)" : "m.pool_started_at";
-  const recent = (await db.execute({ sql: `SELECT p.health_reason ${join} AND ${first} >= ?`, args: [new Date(now.getTime() - SPIKE_WINDOW_MS).toISOString()] })).rows;
-  out.newFailures = recent.length;
+  const recent = (await db.execute({ sql: `SELECT p.health_reason, ${first} AS first_at ${join} AND ${first} >= ?`, args: [new Date(now.getTime() - SPIKE_WEAK_WINDOW_MS).toISOString()] })).rows;
+  const strongFrom = new Date(now.getTime() - SPIKE_WINDOW_MS).toISOString();
   for (const r of recent) {
+    if (isWeakVerdict(r.health_reason)) {
+      out.newWeak++;
+      continue;
+    }
+    if (String(r.first_at) < strongFrom) continue;
+    out.newFailures++;
     const k = reasonClass(r.health_reason);
     out.byClass[k] = (out.byClass[k] ?? 0) + 1;
   }
+  if (hasHeld) out.heldWeak = Number((await db.execute(`SELECT COUNT(*) AS n ${join} AND m.pool_held = 'freeze-weak'`)).rows[0]?.n ?? 0);
   out.frozen = out.newFailures > spikeNew || Object.values(out.byClass).some((n) => n > spikeClass);
+  // A weak freeze lifts only when fewer than the limit of the sites it holds still fail, never on a timer.
+  out.weakFrozen = out.newWeak > spikeWeak || out.heldWeak >= spikeWeak;
   return out;
 }
 
@@ -1302,6 +1370,19 @@ export function healthSummary(s) {
     `A site that fails a check (it does not answer, is parked or blank, redirects to a social profile, or duplicates another entry) leaves the AI's work at once and is hidden in the temporary pool when its re-check the next day fails too (pipeline/not-working.mjs); ${s.leftToRecheck ? `${s.leftToRecheck} site(s) on that ladder were left to the hourly re-check. ` : ""}One passing check brings it back as it was. An inconclusive check leaves the state unchanged, a bot wall alone never counts, and nothing here goes to the owner's review queue.`,
     "",
   ];
+  if (s.restarted?.length) {
+    // Release night: the old rule's failing rows restart on the ladder with their original first failure.
+    const by = {};
+    for (const r of s.restarted) by[r.kind] = (by[r.kind] ?? 0) + 1;
+    lines.push(
+      `### Restarted on the ladder (${s.restarted.length})`,
+      "",
+      `Sites already failing under the old weekly-counted rule, now on the ladder. They keep their original first failure, so they never count as a spike of new failures. By kind: ${Object.entries(by)
+        .map(([k, n]) => `${k} ${n}`)
+        .join(", ")}.`,
+      "",
+    );
+  }
   if (s.dryRun && s.changes) {
     lines.push(`### Would change (${s.changes.length})`, "", "| URL | From | To | Stage | Hidden | Reason |", "| --- | --- | --- | ---: | --- | --- |");
     for (const c of s.changes) lines.push(`| ${cell(c.url)} | ${cell(c.from ?? "unchecked")} | ${cell(c.to ?? "unchecked")} | ${c.stage ?? ""} | ${c.hidden ? "yes" : "no"} | ${cell(c.reason)} |`);

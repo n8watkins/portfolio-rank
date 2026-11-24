@@ -6,7 +6,7 @@ import { tag } from "@/components/ui/Chip";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { healthPool } from "@/lib/admin/health-pool.mjs";
-import { ARCHIVE_EVERY_DAYS, ARCHIVE_FIRST_DAYS, HIDE_PER_DAY, LEAVE_AFTER_DAYS, RETURNS_SHOWN_DAYS } from "@/pipeline/not-working.mjs";
+import { ARCHIVE_EVERY_DAYS, ARCHIVE_FIRST_DAYS, HIDE_PER_DAY, HIDE_WEAK_PER_DAY, LEAVE_AFTER_DAYS, RETURNS_SHOWN_DAYS } from "@/pipeline/not-working.mjs";
 
 // /admin/health-pool (owner, 2026-11-23): the temporary pool and the archive,
 // read-only. Sites failing their health checks never reach the review queue;
@@ -164,7 +164,7 @@ export default async function AdminHealthPoolPage() {
         id="failing"
         title="Failing, not hidden yet"
         count={p.failing.length}
-        about={`Failed one or two checks: out of grading and AI comparisons, still shown. Hidden only if its confirming check fails too: the next day, or a week on for a page that only looks blank, a capture that never showed the site, a redirect to a social profile or a duplicate. At most ${HIDE_PER_DAY} are hidden a day; the rest wait their turn here.`}
+        about={`Failed one or two checks: out of grading and AI comparisons, still shown. Hidden only if its confirming check fails too: the next day, or a week on for a page that only looks blank, a capture that never showed the site, a redirect to a social profile, a duplicate, a placeholder page or the browser's error page. At most ${HIDE_PER_DAY} are hidden a day, and ${HIDE_WEAK_PER_DAY} of those weaker verdicts; the rest wait their turn here.`}
         empty="None. Every listed site passed its last check."
       >
         {p.failing.map((s) => (
@@ -173,7 +173,15 @@ export default async function AdminHealthPoolPage() {
             url={s.url}
             name={s.name}
             reason={s.reason || "no reason recorded"}
-            badge={s.held === "drain" ? { text: "Waiting its turn", cls: tagWrap } : s.held === "freeze" ? { text: "Held: a spike of failures", cls: tagDown } : undefined}
+            badge={
+              s.held === "drain"
+                ? { text: "Waiting its turn", cls: tagWrap }
+                : s.held === "freeze"
+                  ? { text: "Held: a spike of failures", cls: tagDown }
+                  : s.held === "freeze-weak"
+                    ? { text: "Held: likely our reader", cls: tagDown }
+                    : undefined
+            }
             data={{ "data-failing-site": s.url }}
             facts={[day(s.started) && `Failing since ${day(s.started)}`, when(s.next) && `next check ${when(s.next)}`]}
           />

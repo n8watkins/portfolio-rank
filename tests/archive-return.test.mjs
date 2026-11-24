@@ -16,6 +16,7 @@ import { ownerVerdict, ownerKeepsSite, reviewOf, undoneRemovals } from "../lib/r
 import { archivedKey, isArchivedKey, retireArchivedSite } from "../pipeline/archive-return.mjs";
 import { weeklyExport } from "../pipeline/exclusions.mjs";
 import { answer } from "./helpers/door-night.mjs";
+import { siteKeyOf } from "../lib/grader/url.mjs";
 
 const A = "https://returning.example"; // archived, then back
 const B = "https://opponent-b.example";
@@ -161,4 +162,17 @@ test("the weekly export retires an archived site that passes its check; the old 
   assert.equal(await n(db, "SELECT COUNT(*) AS n FROM votes WHERE winner IN (?, 'https://www.returning.example/') OR loser IN (?, 'https://www.returning.example/')", [A, A]), 0);
   await comeBack(db);
   await startsFresh(db);
+});
+
+test("an archive return drops the old site's saved results, the grader's free checks by site key among them; another site's stay", async () => {
+  const db = await world();
+  await archive(db, T0 + 20 * D);
+  const site = siteKeyOf(A);
+  const mine = [`psi:${A}`, `psi-desktop:${A}`, `inspect:${A}`, `share:${A}`, `grader:quick:${site}`, `recheck:${site}`];
+  const other = `grader:quick:${siteKeyOf(B)}`;
+  for (const k of [...mine, other]) await db.execute({ sql: "INSERT INTO cache (k, v, at) VALUES (?, '{}', 0)", args: [k] });
+  const r = await retireArchivedSite(db, A, { now: new Date(T0 + 25 * D) });
+  assert.equal(r.deleted["cache.k"], mine.length);
+  assert.equal(await n(db, `SELECT COUNT(*) AS n FROM cache WHERE k IN (${mine.map(() => "?").join(", ")})`, mine), 0);
+  assert.equal(await n(db, "SELECT COUNT(*) AS n FROM cache WHERE k = ?", [other]), 1);
 });

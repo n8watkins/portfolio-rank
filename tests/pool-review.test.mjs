@@ -11,14 +11,15 @@ import { createClient } from "@libsql/client";
 import * as health from "../pipeline/health.mjs";
 import * as pool from "../pipeline/not-working.mjs";
 import { runRecheck } from "../pipeline/recheck.mjs";
-import { passesFullCheck, planDeadRecheck } from "../pipeline/exclusions.mjs";
+import { RETURN_VETOES, passesFullCheck, planDeadRecheck, returnVeto } from "../pipeline/exclusions.mjs";
 import { ACTIVE } from "../pipeline/roster.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
 import { activeAlerts } from "../pipeline/alerts.mjs";
+import { ensureReviewSchema } from "../lib/reviews/store.mjs";
 import { migrate } from "../lib/schema.mjs";
 import { refreshTiers } from "../lib/tiers-store.mjs";
 import { healthPool } from "../lib/admin/health-pool.mjs";
-import { PORTFOLIO_HTML, T0, answer, col, freshDb, site } from "./helpers/door-night.mjs";
+import { EMPTY_HTML, PORTFOLIO_HTML, T0, answer, col, freshDb, site } from "./helpers/door-night.mjs";
 
 const quiet = () => {};
 const H = 3600000;
@@ -91,7 +92,7 @@ test("the drain: two batches in one hour never hide more than the day's 20 betwe
   assert.equal(await hiddenCount(db), pool.HIDE_PER_DAY);
 });
 
-test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on one day) drains, 20 a day", async () => {
+test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on one day) drains, 5 a day", async () => {
   const many = Array.from({ length: 40 }, (_, i) => `https://wave-${String(i).padStart(2, "0")}.example`);
   const { db } = await setup(many, 0);
   const blank = async (u) => response(200, "<div id=root></div>", u);
@@ -103,10 +104,11 @@ test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on
   await check(T0 + D);
   assert.equal(await hiddenCount(db), 0, "a weak verdict waits a week");
   await check(T0 + 7 * D);
-  assert.equal(await hiddenCount(db), 20);
+  assert.equal(await hiddenCount(db), pool.HIDE_WEAK_PER_DAY);
   assert.equal(await spikeAlert(db), false, "40 blank pages is under the spike limits");
-  await check(T0 + 8 * D);
-  assert.equal(await hiddenCount(db), 40);
+  for (let d = 8; d <= 14; d++) await check(T0 + d * D + H);
+  assert.equal(await hiddenCount(db), 40, "all hidden within eight days, 5 a day");
+  assert.equal(await spikeAlert(db), false);
 });
 
 test("the spike freeze: 300 sites failing at once (a host-wide 500) are none hidden and alert; when it ends, those still failing need their full evidence again and drain", async () => {
@@ -211,7 +213,7 @@ test("F4: an archived domain that answers with someone else's site stays archive
   const answersSpam = passesFullCheck({ fetchImpl: async (u) => response(200, spam, u) });
   const a = await answersSpam(entry.url, entry);
   assert.equal(a.ok, false);
-  assert.match(a.found.why, /does not carry the listed person's name/);
+  assert.match(a.found.why, /neither the listed person's name nor strong portfolio signals/);
   assert.equal(a.found.title, "Best Casino Bonuses 2026");
   const r = await planDeadRecheck({ excluded: [entry], now: at(Date.parse("2026-12-01T00:00:00Z")), answers: answersSpam });
   assert.deepEqual(r.back, []);
@@ -222,7 +224,7 @@ test("F4: an archived domain that answers with someone else's site stays archive
   // The same person's portfolio: back.
   const answersOwn = passesFullCheck({ fetchImpl: async (u) => response(200, PORTFOLIO_HTML, u) });
   assert.equal(await answersOwn(entry.url, entry), true);
-  // A name with no usable word never matches: it stays archived.
+  // A short name in the body text only is not enough: only the title or the first heading counts for it.
   assert.equal(health.carriesName("Al", { text: "Al builds things" }), false);
 });
 
@@ -301,7 +303,9 @@ test("item 2: the name test needs every name word as a whole word near the top; 
   yes("Matvey", { title: "Matvey", text: "" });
   yes("Matvey", { title: "Home", heading: "Matvey Ivanov", text: "" });
   no("Matvey", { title: "Home", heading: "Welcome", text: "Matvey made this" }, "a one-word name only in the title or the first heading");
-  no("Al Bo", { title: "Al Bo", text: "Al Bo" }, "nothing to test: never a match");
+  yes("Al Bo", { title: "Al Bo", text: "" }, "a name of only short words: whole words in the title");
+  no("Al Bo", { title: "Home", text: "Al Bo" }, "but only in the title or the first heading");
+  no("", { title: "Anything", text: "" }, "no name: never a match");
   // Real portfolios from the benchmark: the surname first, and the surname as an initial.
   yes("Benjamin Cyubahiro", { title: "Cyubahiro Benjamin | Portfolio", text: "" });
   yes("Mnelisi Mthuli", { title: "Home - Mnelisi M. | Senior .NET Developer", text: "" });
@@ -355,4 +359,171 @@ test("item 3: a closed key is never an address on a person's own pages, and admi
   const votes = fs.readFileSync("app/votes/page.tsx", "utf8");
   assert.match(votes, /isArchivedKey\(url\)[\s\S]*NO_LONGER_LISTED/);
   assert.match(fs.readFileSync("lib/me.ts", "utf8"), /isArchivedKey\(url\)/);
+});
+
+// ---------------------------------------------------------------------------
+// The third review: a fault on our side that keeps going, the release-night restart, the archive's
+// return test, the reading-fixes branch's verdicts
+
+const BLANK_HTML = "<div id=root></div>";
+
+/**
+ * Real portfolios that our reader sees as blank: `perDay` more each day for `days` days, from day 1, the
+ * fault never fixed unless `fixed(url, day)` says so. A check of every site each day (and an hour later,
+ * the first re-check), through `until`. Returns each day's hidden count and alert, and the database.
+ */
+async function blankFault({ perDay, days, until, fixed = () => false, spread = null }) {
+  const sites = spread ?? Array.from({ length: perDay * days }, (_, i) => ({ url: `https://blank-${String(i).padStart(3, "0")}.example`, day: 1 + Math.floor(i / perDay) }));
+  const { db } = await setup([], 0);
+  for (const s of sites) await site(db, s.url, { rubric: answer(true) });
+  let day = 0;
+  const blankNow = (u) => {
+    const s = sites.find((x) => u.startsWith(x.url));
+    return Boolean(s && s.day <= day && !fixed(s.url, day));
+  };
+  const fetchImpl = async (u) => response(200, blankNow(u) ? BLANK_HTML : PORTFOLIO_HTML, u);
+  const render = async (u) => (blankNow(u) ? { status: 200, finalUrl: u, title: "", text: "", media: false, html: BLANK_HTML } : goodPage(u));
+  const feed = sites.map((s) => ({ url: s.url, name: "Ann Lee" }));
+  const check = (t) => health.runHealthCheck({ db, feed, fetchImpl, render, now: at(t), scheduled: "check", alerts: false, doorLimit: 0, log: quiet });
+  const log = [];
+  for (day = 0; day <= until; day++) {
+    const s = await check(T0 + day * D);
+    await check(T0 + day * D + H);
+    log.push({ day, hidden: await hiddenCount(db), alert: await spikeAlert(db), weakFrozen: s.pace.weakFrozen });
+  }
+  return { db, log, sites };
+}
+
+for (const perDay of [24, 26, 40]) {
+  test(`a weak fault that keeps going: blank renders for ${perDay} new real sites a day for a week, never fixed, hide none and alert until it ends`, async () => {
+    const { log } = await blankFault({ perDay, days: 7, until: 24 });
+    assert.deepEqual(
+      log.filter((l) => l.hidden > 0).map((l) => l.day),
+      [],
+      "no real site hidden on any day",
+    );
+    // The alert stands from the day the count passes the limit to the end, never cleared while it lasts.
+    const first = log.findIndex((l) => l.alert);
+    assert.ok(first > 0 && first <= 4, `alert from day ${first}`);
+    assert.ok(log.slice(first).every((l) => l.alert), "the alert stays up while the held sites still fail");
+  });
+}
+
+test("a weak freeze lifts when the sites recover: the alert clears, and the few still failing need a full week again, 5 a day", async () => {
+  const sites = Array.from({ length: 60 }, (_, i) => ({ url: `https://recover-${String(i).padStart(2, "0")}.example`, day: 1 }));
+  const stuck = new Set(sites.slice(0, 7).map((s) => s.url));
+  const { log } = await blankFault({ spread: sites, until: 22, fixed: (u, day) => day >= 9 && !stuck.has(u) });
+  const at_ = (d) => log[d];
+  assert.equal(at_(8).alert, true, "frozen while all 60 look blank");
+  assert.equal(at_(8).hidden, 0);
+  // Day 9: the held sites are checked daily and 53 pass; at the next run fewer than 50 held still fail, so
+  // the freeze lifts and the alert clears.
+  assert.equal(at_(9).hidden, 0);
+  assert.equal(at_(9).alert, false, "the freeze lifted and the alert cleared");
+  assert.equal(at_(15).hidden, 0, "the 7 still failing need a full week from the lift");
+  assert.equal(at_(16).hidden, pool.HIDE_WEAK_PER_DAY, "then 5 a day");
+  assert.equal(at_(17).hidden, 7);
+  assert.ok(log.slice(9).every((l) => !l.alert), "no alert after the lift");
+});
+
+test("8 genuinely blank sites over a week are still hidden, with no alert", async () => {
+  const sites = Array.from({ length: 8 }, (_, i) => ({ url: `https://really-blank-${i}.example`, day: 1 + Math.floor((i * 7) / 8) }));
+  const { log } = await blankFault({ spread: sites, until: 16 });
+  assert.equal(log[16].hidden, 8);
+  assert.ok(log.every((l) => !l.alert));
+});
+
+test("release night: the old rule's failing rows restart with their first failure kept, so 60 of one kind trip no freeze; a dry run counts them first", async () => {
+  const many = Array.from({ length: 60 }, (_, i) => `https://old-suspect-${String(i).padStart(2, "0")}.example`);
+  const { db } = await setup(many, 0);
+  await ensureReviewSchema(db);
+  const old = new Date(T0 - 20 * D).toISOString();
+  for (const u of many) {
+    await db.execute({ sql: "UPDATE portfolios SET health = 'suspect', health_fails = 1, health_first_fail_at = ?, health_reason = 'HTTP 500' WHERE url = ?", args: [old, u] });
+    await db.execute({ sql: "DELETE FROM health_marks WHERE url = ?", args: [u] });
+  }
+  const fetchImpl = async (u) => response(500, "Internal Server Error", u);
+  const render = async (u) => ({ status: 500, finalUrl: u, title: "", text: "Internal Server Error", media: false, html: "" });
+  const feed = many.map((url) => ({ url, name: "Ann Lee" }));
+  const check = (t, more = {}) => health.runHealthCheck({ db, feed, fetchImpl, render, now: at(t), scheduled: "check", alerts: false, doorLimit: 0, log: quiet, ...more });
+  // The owner's count beforehand: the dry run lists them by kind and writes nothing.
+  const dry = await check(T0, { dryRun: true });
+  assert.equal(dry.restarted.length, 60);
+  assert.match(health.healthSummary(dry), /### Restarted on the ladder \(60\)[\s\S]*http-error 60/);
+  assert.equal(await col(db, many[0], "health_first_fail_at"), old, "the dry run wrote nothing");
+  const s0 = await check(T0);
+  assert.equal(s0.restarted.length, 60);
+  assert.equal(String((await db.execute({ sql: "SELECT pool_first_at FROM health_marks WHERE url = ?", args: [many[0]] })).rows[0].pool_first_at), old, "the first failure is kept");
+  await check(T0 + H);
+  const s = await check(T0 + D);
+  assert.equal(s.pace.frozen, false, "not a spike: none of them is a new failure");
+  assert.equal(await spikeAlert(db), false);
+  assert.equal(await hiddenCount(db), pool.HIDE_PER_DAY, "the ordinary drain");
+});
+
+test("the reading-fixes branch's verdicts: not the site and the browser's error page are weak (a week), parking and gambling forwards keep the next day", () => {
+  // The exact reason strings of fix/read-the-finished-page (pipeline/gate.mjs parkedPage and placeholderPage,
+  // pipeline/health.mjs checkSite and redirectVerdict), read with git show on 2026-11-23.
+  const weak = [
+    "not the site: nginx's default page",
+    "not the site: Apache's default page",
+    "not the site: IIS's default page",
+    "not the site: Caddy's default page",
+    "not the site: cPanel's default page",
+    "not the site: Plesk's default page",
+    "not the site: a maintenance page",
+    "not the site: a host's placeholder page",
+    "not the site: GitHub Pages' page for no site",
+    "not the site: a host's page for an unpublished site",
+    "not the site: Streamlit's error page",
+    "not the site: a notice that the site was removed",
+    "not the site: a not-found page",
+    "not the site: an empty directory listing",
+    "does not load (the browser's error page)",
+  ];
+  const strong = [
+    "parking page: GoDaddy parking lander",
+    "parking page: Sedo parking lander",
+    "parking page: a script from a parking service",
+    'parking phrase: "this domain is for sale"',
+    "redirects to sedo.com",
+    "redirects to lucky-slots.example, a gambling site",
+    "does not load (net::ERR_NAME_NOT_RESOLVED)",
+    "does not load (HTTP 503)",
+  ];
+  for (const r of weak) assert.equal(pool.confirmAfterMs(r), pool.CONFIRM_WEAK_AFTER_MS, r);
+  for (const r of strong) assert.equal(pool.confirmAfterMs(r), pool.CONFIRM_AFTER_MS, r);
+  // Each has its own kind in the spike count.
+  assert.equal(pool.reasonClass("not the site: nginx's default page"), "not-the-site");
+  assert.equal(pool.reasonClass("does not load (the browser's error page)"), "browser-error-page");
+  assert.equal(pool.reasonClass("parking page: Sedo parking lander"), "wrong-content");
+});
+
+test("the archive's return test: the name or strong portfolio signals; a short name in the title; both missing stays archived with what was found", async () => {
+  const back = async (name, html) => passesFullCheck({ fetchImpl: async (u) => response(200, html, u) })("https://archived.example", { url: "https://archived.example", name, kind: "dead", reason: "The domain no longer resolves", removed: "2026-11-01" });
+  const page = (title, body) => `<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`;
+  const portfolioBody = `<h1>@mrashid</h1><a href="#projects">Projects</a><a href="#about">About me</a><a href="mailto:m@r.dev">Contact</a><a href="/resume.pdf">Resume</a><a href="https://github.com/mrashid">GitHub</a><p>${"I build web apps. ".repeat(10)}</p>`;
+  // A handle instead of the name: strong signals bring it back (it goes through the door as a new site).
+  assert.equal(health.carriesName("Mohammed Al-Rashid", { title: "@mrashid", text: "@mrashid" }), false);
+  assert.equal(await back("Mohammed Al-Rashid", page("@mrashid", portfolioBody)), true);
+  // A name of only short words, in the title.
+  assert.equal(await back("Ed Li", page("Ed Li | Developer", `<p>${"Hello there. ".repeat(10)}</p>`)), true);
+  // Neither: stays archived, with what was found shown on /admin/health-pool.
+  const none = await back("Ed Li", EMPTY_HTML);
+  assert.equal(none.ok, false);
+  assert.match(none.found.why, /neither the listed person's name nor strong portfolio signals \(\d of 6\)/);
+  // Pages that name the person come back to the door, where a new site is judged (known: the door decides these).
+  assert.equal(await back("Alex Chen", page("Best Casino 2026", `<p>Alex Chen wins big. ${"Play slots now. ".repeat(10)}</p>`)), true);
+  assert.equal(await back("Ali", page("Ali Baba Slots", `<p>${"Play slots now. ".repeat(10)}</p>`)), true);
+  // The veto hook: a detector's answer keeps a passing entry archived, with its reason.
+  assert.match(String(returnVeto({ ok: true, moved: true, hijack: true })), /another domain/);
+  assert.equal(returnVeto({ ok: true, moved: true, hijack: false }), null);
+  RETURN_VETOES.push((r) => (/casino/i.test(String(r.title ?? "")) ? "answers, but a detector calls it a gambling site" : null));
+  try {
+    const vetoed = await back("Alex Chen", page("Best Casino 2026", `<p>Alex Chen wins big.</p>`));
+    assert.equal(vetoed.ok, false);
+    assert.match(vetoed.found.why, /gambling/);
+  } finally {
+    RETURN_VETOES.pop();
+  }
 });
