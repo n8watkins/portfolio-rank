@@ -9,13 +9,13 @@ The source is the hosted audit page (https://claude.ai/artifact/UEyvwv9e2dW31ZrP
 | # | Recommendation | Status |
 | ---: | --- | --- |
 | 1 | Pause the re-grade stage until v3 | Done in code (PR #148): `DEFAULT_PLAN.stages.regrade.cap` is 0, so re-grades are off unless `GEMINI_BUDGET` turns them on. Production: all background Gemini work is paused by owner decision (below). |
-| 2 | Stop gating Lighthouse prewarm on Gemini's letter | Done on `main`'s prewarm (PR #148): every graded portfolio that is not "not a portfolio", up to 400 a day. Still open in `lib/freshness.mjs` `lighthouseDue` (PR #130), which keeps `tiers = ["S", "A", "B"]` and needs the same change. |
+| 2 | Stop gating Lighthouse prewarm on Gemini's letter | Done on `main`'s prewarm (PR #148): every graded portfolio that is not "not a portfolio", up to 400 a day. `lib/freshness.mjs` `lighthouseDue` no longer reads the letter either (rubric v3, `feat/gemini-three-outputs`): every Gemini-graded site that is not "not a portfolio". |
 | 3 | Close the injection gaps in comparisons and the screen | Partly done (PR #148): comparisons and the legacy pairwise vote strip every `<site_data>` marker through `pipeline/site-data.mjs`, with tests. Done: the screenshot rule in the grade and comparison prompts (`grade-v2.1`, `compare-v1.1`, `batch-v1.1`). Open: `screen.py` (outside this repository). |
 | 4 | Stop the discovery screen from retrying a spent daily quota | Not started (`screen.py` lives in `~/research`, outside this repository). |
 | 5 | Find out whether Google counts 503s | Done (PR #148): Google's billing docs say failed requests count against the quota, so the accountant keeps counting every request, now with the source cited and a test. |
 | 6 | Label every prompt in the request log | Done (PR #148): `gemini_requests.prompt` holds the prompt id and version (`grade-v2`, `compare-v1`, `content-claims-judge-v1`, `library-check-v1`, `polls-v1`, ...). |
 | 7 | Build a small gold set and eval harness first | Not started; the round-1 batch experiment (PR #141) is the seed. |
-| 8 | Rubric v3 prompt: reason first, anchors, no letter | Not started. |
+| 8 | Rubric v3 prompt: reason first, anchors, no letter | Built narrower by the owner's decision of 2026-11-22 (`feat/gemini-three-outputs`, prompt `grade-v3`): no letter, a portfolio reason before the answer, and only the five-second test and roles besides; the dropped axes are gone rather than anchored. |
 | 9 | Projects-aware evidence, built by code | Not started. |
 | 10 | Grade five per request and return their order | Not started. |
 | 11 | Retry a busy model by moving on, not by waiting | Not started. |

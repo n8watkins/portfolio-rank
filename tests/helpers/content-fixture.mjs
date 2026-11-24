@@ -11,7 +11,7 @@ import { ensureRubricHistory } from "../../pipeline/rubric-history.mjs";
 import { ensureRankingSchema } from "../../lib/ranking/store.mjs";
 import { ensureGeminiLog } from "../../pipeline/gemini-log.mjs";
 import { PRIMARY_MODEL } from "../../pipeline/gemini.mjs";
-import { topGrades } from "../../pipeline/content/facts.mjs";
+import { BUILDERS } from "../../pipeline/content/facts.mjs";
 import { mockAnswer } from "../../pipeline/content/mock-writer.mjs";
 import { TOPICS } from "../../pipeline/content/topic.mjs";
 import { saveAutomation } from "../../lib/content/automation.mjs";
@@ -57,6 +57,19 @@ export async function fixture({ motion = null } = {}) {
   await add({ url: "https://not-a-portfolio.dev", name: "Not Aportfolio", tier: "S", score: 5, over: { is_portfolio: false } });
   return db;
 }
+
+/**
+ * The top-grades sheet as its builder made it from this fixture before rubric v3 (it compared the
+ * five-second test; since v3 the model gives no score, so the real builder is never ready). The
+ * engine's own checks (numbers, names, ties, claims, the writer) are tested on it: a content test
+ * hands BUILDERS_FOR_TESTS to the engine as ctx.builders (contentCtx does), and gets this sheet,
+ * stamped with the night's date, for a "top-grades" draft. The shared BUILDERS map is not changed.
+ */
+const RECORDED = fs.readFileSync(new URL("../fixtures/content-sheets/top-grades-before-v3.json", import.meta.url), "utf8");
+export async function topGrades(_db, { now }) {
+  return JSON.parse(RECORDED.replaceAll("2026-11-17T04:30:00.000Z", new Date(now).toISOString()));
+}
+export const BUILDERS_FOR_TESTS = { ...BUILDERS, "top-grades": topGrades };
 
 export async function sheetAndRoster(opts = { motion: [2, 1] }) {
   const db = await fixture(opts);
@@ -111,6 +124,7 @@ export function contentCtx(db, { now = MONDAY, mode = "dry-run", keys = {}, ai =
       flags: { contentMode: mode },
       content: { env: "test", keys, ai, store: store ?? (async (key, bytes) => (stored.set(key, bytes), key)) },
       runId: "test",
+      builders: BUILDERS_FOR_TESTS,
     },
   };
 }

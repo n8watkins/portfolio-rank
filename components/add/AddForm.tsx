@@ -49,8 +49,7 @@ function Running({ since }: { since: number }) {
 
 /**
  * "Add your portfolio": one address, every check at once (POST /api/add),
- * then the portfolio's profile, where the AI report card fills in once it's
- * graded.
+ * then the portfolio's profile, with its code checks and fix list.
  */
 export function AddForm({ initialUrl = "" }: { initialUrl?: string }) {
   const id = useId();

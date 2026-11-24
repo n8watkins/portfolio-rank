@@ -175,8 +175,12 @@ Each chain is a list of steps in the order they happen.
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
-   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
-   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link (`pipeline/capture-projects.mjs`).
+   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 4).
+   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link or of the home page's own address for a hash route ("/#/projects"), and reads it once its list has stopped changing, within the step's 25 seconds (`pipeline/capture-projects.mjs`).
+   Up to 8 project links are checked: one link per repository (or per folder of one, linked by its tree), and at most 3 of one outside site before the others; the site's own project pages count only as real pages, on a host that answers every address by the text they do not share with a page that cannot exist (AUTOMATION.md, Rubric v2).
+   On the projects page, a link to another page of the same site counts as a project page at any path only when it sits in the main content, not in a menu, a list of profiles, an aside or a section that is not projects, its whole label does not name a section of the site ("About", "Get in touch", "Next project") nor start with a call to action ("Download Resume", "Read my articles"; "View project" is fine), and at the top of the site its path is not a page that is never a project ("/resume", "/services", "/blog", "/about"); below the top of the site its path must not name one either ("/topics/react"), and the page's own menu, header or footer must not link it too ("/contact", "/blog").
+   Each link counts once, in the highest place it is seen in: a link in a work list that the projects list links again is a project; but what the home page shows outside its projects is raised by the projects page only when that page links it more than once, as a project card does.
+   A menu is found by its shape, whatever it is built from: the links beside a link to the home page or to the projects page itself, at the same depth, mostly to the site's own pages and mostly naming its sections; only its own pages are left out, never a demo or a repository.
    When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`), `lib/freshness.mjs` `screenshotsDue`.
    A capture is due again for one of two reasons only: it is 90 days old, or a person asked for a new one (your "Re-measure", or a re-grade an owner asked for).
@@ -215,15 +219,21 @@ Each chain is a list of steps in the order they happen.
    Lighthouse for every member comes from the nightly prewarm (`scripts/lib/prewarm.mjs`), graded or not; until it has run, those items count the library median.
    The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
 9. **Grade** (night stage 1, `grade_new`).
-   One Gemini request with the screenshot, the page text and the facts.
-   It answers whether it is a portfolio and writes the Gemini report card (scores and notes).
-   It never sets or moves the Starting rank or the Tier, and its own letter is never shown on a listed site's pages.
+   One Gemini request with the screenshot, the page text and the facts (rubric v3, prompt `grade-v3`, `pipeline/rubric.mjs`).
+   It is asked two things and nothing else: whether it is a portfolio (with a short reason, written first) and the roles the page names.
+   Your decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
+   It never sets or moves the Starting rank or the Tier, and none of its answers is shown (your decision, 2026-11-23: no Gemini report card); "is it a portfolio" feeds the removal rule below and the roles name the profile for search engines.
+   Your decision (2026-11-23): the five-second test will be measured by code, so the model is not asked it; older grades' five-second scores stay in the database, unread and unshown.
+   Grades made before v3 keep their old fields in the database, and no site is graded again because of v3.
+   No profile, list, stat, rank or tier reads those fields.
+   Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
+   Before `RANKING_V2` is turned on, those views must be reseeded from the code checks or retired if any page shows them.
    A stored screenshot that does not show the site is checked first and set aside.
    Paused.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
-   2. Gemini says portfolio: it is listed with its report card, unless its address is not a portfolio page (step 3).
+   2. Gemini says portfolio: it is listed, unless its address is not a portfolio page (step 3).
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
       So does an address whose host is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist; any Substack or Medium page, subdomains included; any Linktree page on `linktr.ee` or `linktree.com`; and the link-in-bio pages `bio.link` and `beacons.ai`), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page.", "any substack should never be considered a portfolio page." and "A link tree is not a portfolio page ... A medium page is not a portfolio page".
@@ -380,8 +390,8 @@ Always on; no switch.
 
 ### Ranking
 
-The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
-The rank starts from the Code checks score and moves with face-off votes.
+No Gemini answer is in the ranking or shown on a page; the model decides only whether a page is a portfolio (the removal rule).
+The rank starts from the Code checks score and moves with face-off votes; no Gemini output is in it.
 Every place that shows the Code checks score shows each item and the total to one decimal when it is not whole, and never rounds a score up to its maximum (`lib/check-points.mjs` `formatPoints`): 9.4 of 10 shows as 9.4/10, never 10/10.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).
@@ -410,6 +420,8 @@ The routes answer 404 and the five-minute tick returns at once.
    The same browser capture, behind a filtering proxy.
 3. **Grade** (`pipeline/people.mjs`).
    One Gemini request from the day's quota, or the visitor's own key.
+   It still uses the frozen v2 prompt (`pipeline/rubric-v2.mjs`: Gemini's letter and five scores), because the visitor's report is built on them; listed sites use v3.
+   What that report shows under v3 waits for your decision.
    A request that cannot be answered waits, and the hourly task 7 finishes it.
 4. **Report and email** (the five-minute tick, `worker/grader.ts`).
    The visitor gets a report page and, if they asked, a one-time link by email.

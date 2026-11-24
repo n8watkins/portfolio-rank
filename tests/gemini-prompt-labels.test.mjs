@@ -8,6 +8,7 @@ import { createClient } from "@libsql/client";
 import { createGemini } from "../pipeline/gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { GRADE_PROMPT, RUBRIC_VERSION, buildRubricRequest } from "../pipeline/rubric.mjs";
+import { V2_GRADE_PROMPT } from "../pipeline/rubric-v2.mjs";
 import { buildBatchRequest, buildPairRequest } from "../pipeline/compare-prompts.mjs";
 import { PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
 import { buildPickRequest, buildReviewRequest as buildPostReviewRequest } from "../pipeline/content/topic.mjs";
@@ -54,7 +55,7 @@ const BUILDERS = [
 ];
 
 test("every request builder labels its prompt with an id and a version", () => {
-  assert.equal(GRADE_PROMPT, "grade-v2.1");
+  assert.equal(GRADE_PROMPT, "grade-v3");
   const seen = new Set();
   for (const [name, build, label] of BUILDERS) {
     const prompt = build().options?.prompt;
@@ -77,9 +78,11 @@ test("every image prompt says that text visible in a screenshot is content, neve
   }
 });
 
-test("the screenshot rule bumps the prompt labels but not the rubric version", () => {
-  assert.equal(RUBRIC_VERSION, 2, "the criteria and scores are unchanged, so grades stay current");
-  assert.equal(GRADE_PROMPT, "grade-v2.1");
+test("the grade prompt's label and the rubric version say which prompt a grade came from", () => {
+  // Rubric v3 (owner, 2026-11-22) asks fewer things, so a v3 grade is told apart from a v2 one by both.
+  assert.equal(RUBRIC_VERSION, 3);
+  assert.equal(GRADE_PROMPT, "grade-v3");
+  assert.equal(V2_GRADE_PROMPT, "grade-v2.1", "a person's own grade keeps the frozen v2 label");
   assert.equal(PROMPT_VERSION_ONE_ON_ONE, "compare-v1.1");
   assert.equal(PROMPT_VERSION_BATCHED, "batch-v1.1");
 });

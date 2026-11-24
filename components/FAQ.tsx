@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { SITE } from "@/lib/site";
 
-const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
+const ITEMS: { q: string; a: React.ReactNode }[] = [
   {
     q: "How are portfolios ranked?",
     a: (
       <>
-        Head-to-head votes feed an ELO rating (like chess). An AI casts the first
-        rounds so the board isn&apos;t empty, then people refine it.{" "}
+        Each site&apos;s starting rank comes from checks our code measures; then
+        head-to-head votes move it, as an ELO rating (like chess).{" "}
         <a href="/how" className="text-accent hover:underline">
           Full explanation →
         </a>
@@ -17,8 +17,8 @@ const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
     ),
   },
   {
-    q: "How does the AI grade them?",
-    a: `Code checks the facts (links, domain, a fresh footer and the like); Gemini reads each site's screenshot and text and scores ${aiJudges}. When it compares two sites it also weighs real Lighthouse and polish data. It judges how a site looks and reads, so it only seeds the ranking; humans get the final say.`,
+    q: "What does the AI do?",
+    a: `Code measures the facts that rank a site (links, domain, speed, a fresh footer and the like), and people's votes move it. The owner reviews what is listed. No AI model decides anything: an AI check that asks whether a page is a portfolio exists, but it is switched off, and it never changes the rank.`,
   },
   {
     q: "Why do I have to sign in to vote?",
@@ -62,9 +62,7 @@ const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
   },
 ];
 
-/** aiJudges: what Gemini scores, from the rubric (lib/rubric-copy.ts, read on the server). */
-export function FAQ({ aiJudges }: { aiJudges: string }) {
-  const ITEMS = items(aiJudges);
+export function FAQ() {
   // Accordion: one panel open at a time. Animated open/close via the
   // grid-template-rows 0fr→1fr trick (see .accordion-panel in globals.css).
   const [open, setOpen] = useState<number | null>(null);

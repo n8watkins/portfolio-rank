@@ -6,8 +6,9 @@ import { hiddenUrls } from "@/lib/roster";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
 import { ownerMarks } from "@/lib/ownership/same-site.mjs";
-import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
+import { factLines } from "@/lib/grader/report.mjs";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { keptOutputs } from "@/pipeline/rubric.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
 
 // What the /top page shows, read on the server: one page of a ranking view
@@ -103,15 +104,15 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   for (const r of grades.rows) {
     const url = String(r.url);
     if (gradeHidden(url)) continue;
-    // The fact chips from the newest measured facts (lib/fresh-facts.mjs).
-    const g = freshGrade(String(r.ai_rubric), r.facts) as Record<string, unknown> | null;
+    // The fact chips from the newest measured facts (lib/fresh-facts.mjs), code only: no Gemini answer is
+    // shown (owner, 2026-11-23), so there is no "best" line from the model.
+    const g = keptOutputs(freshGrade(String(r.ai_rubric), r.facts)) as Record<string, unknown> | null;
     if (!g || typeof g !== "object") continue;
     // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their chip.
     const facts = (factLines(g) as { id: string; label: string; pass: boolean | null; shownAs: string }[])
       .filter((f) => CHIP[f.id] && typeof f.pass === "boolean")
       .map((f) => ({ label: f.id === "project_links" && f.shownAs !== f.label ? f.shownAs : CHIP[f.id], pass: f.pass as boolean }));
-    const top = (strengthsAndFixes(g).strengths as { title: string; why: string; by: string }[]).find((s) => s.by === "ai");
-    out.set(url, { facts, best: top ? { label: top.title, note: top.why } : null });
+    out.set(url, { facts, best: null });
   }
   return out;
 }
@@ -253,20 +254,26 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
 // the AI seed standing in until enough people have voted.
 const MIN_VOTES = 1;
 
-async function loadElo(limit: number): Promise<Leaderboard> {
+/**
+ * The ELO board's order (RANKING_V2 off): listed, shown sites with at least
+ * MIN_VOTES people's votes, best ELO first, as /top shows them; place i + 1.
+ * The home page reads the same order (lib/home.ts), so the two never disagree.
+ */
+export async function eloOrder(limit: number): Promise<{ url: string; elo: number; votes: number }[]> {
   const hidden = await hiddenUrls();
-  const [res, votes] = await db().batch(
-    [
-      { sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT ?", args: [MIN_VOTES, limit + 50] },
-      // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
-      "SELECT n FROM vote_totals WHERE k = 'all'",
-    ],
-    "read"
-  );
-  const ranked = res.rows
+  const res = await db().execute({ sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC, url LIMIT ?", args: [MIN_VOTES, limit + 50] });
+  return res.rows
     .map((r) => ({ url: String(r.url), elo: Number(r.elo), votes: Number(r.votes) }))
     .filter((r) => byUrl.has(r.url) && !hidden.has(r.url))
     .slice(0, limit);
+}
+
+async function loadElo(limit: number): Promise<Leaderboard> {
+  const [ranked, votes] = await Promise.all([
+    eloOrder(limit),
+    // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
+    db().execute("SELECT n FROM vote_totals WHERE k = 'all'"),
+  ]);
   const urls = ranked.map((r) => r.url);
   const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);
   const rows: Entry[] = ranked.map((r, i) => {

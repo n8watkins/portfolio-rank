@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ListChecks, Sparkles, Trophy } from "lucide-react";
+import { ListChecks, Trophy } from "lucide-react";
 import { toolsEnabled } from "@/lib/tools/server";
 import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 import { AddForm } from "@/components/add/AddForm";
 
 // "Add your portfolio" (ROUTES.add, owner 2026-11-12): the one way in. Every
-// check runs at once and the portfolio gets its profile, where its rank, AI
-// report card and fix list live (app/p/[slug], docs/TOOLS.md).
+// check runs at once and the portfolio gets its profile, where its rank and
+// fix list live (app/p/[slug], docs/TOOLS.md). No AI report card (owner, 2026-11-23).
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Add Your Portfolio: Free Speed, Link Preview and Hiring Checks - PortfolioRank",
   description:
-    "Add your developer portfolio to PortfolioRank for free: Lighthouse on mobile and desktop, your link preview, resume, GitHub, contact and project-link checks, an AI report card and a rank.",
+    "Add your developer portfolio to PortfolioRank for free: Lighthouse on mobile and desktop, your link preview, resume, GitHub, contact and project-link checks, and a rank.",
   alternates: { canonical: "/add" },
 };
 
@@ -21,7 +21,6 @@ const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
 const WHAT = [
   { Icon: ListChecks, title: "A fix list, right away", body: "Speed on phones and desktops, how your link looks when shared, and the basics hiring managers look for, each with how to fix it." },
-  { Icon: Sparkles, title: "An AI report card", body: "Design, writing and projects scored with notes, weakest first. It fills in when your portfolio is graded." },
   { Icon: Trophy, title: "A rank", body: `Face-offs against ${PORTFOLIO_COUNT_LABEL} developer portfolios set your letter, from S to D.` },
 ];
 
@@ -43,7 +42,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
         </div>
       </section>
       <div className="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {WHAT.map(({ Icon, title, body }, i) => (
             <li key={title} className="card rise p-5" style={d(180 + 60 * i)}>
               <span className="icon-tile h-10 w-10">

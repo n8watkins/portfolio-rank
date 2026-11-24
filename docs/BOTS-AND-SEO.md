@@ -242,6 +242,9 @@ This is the change that removes the cost line.
 
 - A profile with no grade and no tagline today renders a name, a domain and a screenshot: thin, near-duplicate content across hundreds of pages.
   Make it `noindex, follow` until it has a grade, and leave it out of the sitemap.
+  Since 2026-11-23 "a grade" is a code test, as no model runs in normal running: a listed site that PortfolioRank shows (not down, and a failed recapture, a rate-limited one included, counts only while the health check is not "live", as `lib/hidden.mjs` `HIDDEN_WHERE`), with a stored screenshot, that the daily run made a ranked library member (`lib/tiers-store.mjs` `IN_LIBRARY_SQL`), or a stored Gemini "yes"; a Gemini "not a portfolio" on record still keeps it out, and so does an address the address rule names (a code host, Substack, Medium or a link-in-bio page, on the listed or the final address; `addressNotPortfolio`), held for the owner or not.
+  Counting the change on a database, read only: `node scripts/count-sitemap-change.mjs [--list]`.
+  The same test decides the profile's index tag (`lib/profile-seo.ts` `indexable`), the sitemap (`lib/sitemap-profiles.mjs`), the printable report (`app/report/print`) and the blog's fact sheets.
 - A site the health check hides (down, dead, parked) still answers 200 and is indexable: make it `noindex` while hidden (it is already out of the sitemap).
 - A removed profile is a 404 today; a 410 tells crawlers faster that it is gone for good.
 - Public lists (`/list/<slug>`) are user-made: `noindex` until a list has, say, 5 portfolios and a title.

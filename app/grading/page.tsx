@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { ArrowRight, Bot, ChevronRight, CircleCheck, Code2, Swords, Trophy } from "lucide-react";
+import { ArrowRight, ChevronRight, CircleCheck, Code2, Swords, Trophy } from "lucide-react";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { CHECK_ITEMS, CHECK_POINTS } from "@/lib/check-points.mjs";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
-import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
+import { CODE_CRITERIA } from "@/pipeline/rubric.mjs";
+import { GeminiQuestions } from "@/components/tiers/GeminiQuestions";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { EloGrading } from "@/components/tiers/EloGrading";
@@ -12,15 +13,16 @@ import { BASE_ELO } from "@/lib/elo";
 
 // How grading works while RANKING_V2 is off, kept short and true for what a
 // visitor sees with the switch off: the Code checks score (lib/check-points.mjs)
-// each profile shows, what "top X%" means (the AI grade's order, on the home
-// page and grade reports), what is checked, and the leaderboard of face-off
+// each profile shows, what "top X%" means (the leaderboard: people's votes),
+// what is checked (the AI check is switched off,
+// components/tiers/GeminiQuestions.tsx), and the leaderboard of face-off
 // votes (lib/leaderboard.ts loadElo: everyone starts at BASE_ELO). The
 // Starting rank from the code checks and the tiers are explained on the
 // RANKING_V2 page (components/tiers/EloGrading.tsx), where they are shown.
 
 export const metadata: Metadata = {
   title: "How grading works - PortfolioRank",
-  description: "What code measures for the Code checks score, what a top 10% place says, what Gemini's report card is and how people's votes move the ranking.",
+  description: "What code measures for the Code checks score, what a top 10% place says, the one thing an AI model decides and how people's votes move the ranking.",
 };
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
@@ -44,8 +46,6 @@ const FACT_NAMES: Record<string, string> = {
   original: "Not a template",
 };
 
-const pct = (w: number) => `${Math.round(w * 100)}%`;
-
 export default function GradingPage() {
   // Tiers by ELO (RANKING_V2): the explanation of letters from votes and starting ranks from checks.
   if (rankingViewsEnabled()) return <EloGrading />;
@@ -59,7 +59,7 @@ export default function GradingPage() {
             How grading works
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Code measures each site for its Code checks score. Gemini writes a report card on the side. People&apos;s votes decide the leaderboard.
+            Code measures each site for its Code checks score. People&apos;s votes decide the leaderboard, and the owner reviews what is listed. No AI model decides anything.
           </p>
         </div>
       </section>
@@ -86,7 +86,7 @@ export default function GradingPage() {
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
           <p className="text-[15px] text-mute">
-            Only 1 in 10 graded portfolios placed higher by the AI grade.
+            Only 1 in 10 portfolios on the leaderboard placed higher by people&apos;s votes. No AI answer ever moves a place.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {BANDS.map((b) => (
@@ -105,11 +105,11 @@ export default function GradingPage() {
 
         {/* What's checked */}
         <section aria-labelledby="checked" className="mt-14">
-          <SectionHeader id="checked" eyebrow="What's checked" title="Facts by code, a report card by AI" className="mb-5" />
+          <SectionHeader id="checked" eyebrow="What's checked" title="Measured by code, no AI" className="mb-5" />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">
-                <Code2 className="h-4 w-4 text-mute" aria-hidden /> Code: yes or no
+                <Code2 className="h-4 w-4 text-mute" aria-hidden /> Code: yes or no, and it ranks the site
               </h3>
               <ul className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5 text-sm">
                 {facts.map((c) => (
@@ -121,21 +121,7 @@ export default function GradingPage() {
               </ul>
             </div>
             <div className="card p-5 sm:p-6">
-              <h3 className="flex items-center gap-2 font-bold">
-                <Bot className="h-4 w-4 text-mute" aria-hidden /> Gemini report card: 1 to 5, from a screenshot and the text
-              </h3>
-              <p className="mt-1 text-sm text-mute">An opinion from one look, kept apart from the Code checks score.</p>
-              <ul className="mt-4 grid gap-2.5 text-sm">
-                {AI_CRITERIA.map((c) => (
-                  <li key={c.id} className="flex items-center gap-3">
-                    <span className="min-w-0 flex-1 font-medium">{c.name}</span>
-                    <span className="h-1.5 w-24 overflow-hidden rounded-full bg-edge" aria-hidden>
-                      <span className="block h-full rounded-full bg-fill" style={{ width: `${(c.weight / 0.3) * 100}%` }} />
-                    </span>
-                    <span className="w-9 shrink-0 text-right text-xs text-mute tabular-nums">{pct(c.weight)}</span>
-                  </li>
-                ))}
-              </ul>
+              <GeminiQuestions />
             </div>
           </div>
           <p className="mt-3 text-sm text-mute">A grade describes the page, not the developer.</p>
