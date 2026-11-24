@@ -6,7 +6,7 @@
 //
 // measureFacts is pure; checkLinks makes HTTP requests (HEAD, then GET when
 // HEAD is refused), capped in number and time, never to private addresses.
-import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, scanPage, stripTags } from "./page-controls.mjs";
+import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, removeElements, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
 import { parkingPhrase, visibleText } from "./gate.mjs";
 
@@ -20,7 +20,14 @@ import { parkingPhrase, visibleText } from "./gate.mjs";
 // after the year ("2026 ©"); the capture measures the phone view too and
 // merges it in (mergeViews). A row gets the new version at its next capture,
 // or from the whole-list re-measure (remeasure-all.yml, see AUTOMATION.md).
-export const FACTS_VERSION = 3;
+// 4 (2026-11-23): the misses of the production trial of version 3 on 25 sites. An own page on a host that
+// answers every address is judged by its text of its own (OWN_PAGE_MIN_WORDS); on the projects page a link to
+// the site's own page counts at any path that is not a section of the site (isProjectsPageLink); one outside
+// host takes at most PER_HOST_MAX of the places before the others; a hash route ("#/projects") can be the
+// projects page; the capture waits for the projects page's content to settle (./capture-projects.mjs). The
+// project-link rule, its words and its points are version 3's (PROJECT_RULE_VERSION): version 3 and 4 facts are
+// read alike, and the re-measure of the whole list measures the version 3 rows again.
+export const FACTS_VERSION = 4;
 export const LINK_CHECK_MAX = 8;
 export const LINK_TIMEOUT_MS = 8000;
 /** The fewest project links that load for "project links load" to pass (and for full project points, lib/check-points.mjs). */
@@ -42,11 +49,14 @@ export const LOW_TIER = 3;
 export const LOW_LINKS = "never";
 /**
  * Own project pages on a host that answers 200 for an address that cannot exist (a catch-all host, an app
- * shell) are verified by their text instead of their status (checkProjectLinks): at least this many words of
- * their own, and no more than this share of their words shared with the nonsense page or the home page.
+ * shell) are verified by their text instead of their status (checkLinks): the lines of text a page does not
+ * share with the nonsense page or the home page (its menu, header, footer and sidebar are on those too) must
+ * hold at least this many distinct words. Judged by the text of its own, not by a share of the whole page, so
+ * a short write-up under a menu of several hundred words counts (bhavaniravi.com's project pages: 30 to 49 of
+ * their own), while a catch-all host's identical pages (none of their own) and a thin page (a title, a line)
+ * do not.
  */
-export const OWN_PAGE_MIN_WORDS = 50;
-export const OWN_PAGE_MAX_OVERLAP = 0.8;
+export const OWN_PAGE_MIN_WORDS = 20;
 /** The facts version whose project-link rule is the one below; older facts keep the rule they were measured under. */
 export const PROJECT_RULE_VERSION = 3;
 const isLinks = (l) => Boolean(l && typeof l === "object" && typeof l.checked === "number");
@@ -156,13 +166,17 @@ const CERTIFICATE_PATH = {
   "learn.microsoft.com": /\/(?:api\/)?credentials\b|\/users\/[^/]+\/(?:credentials|transcript|achievements)\b/i,
   "datacamp.com": /^\/(?:completed\/)?statement-of-accomplishment\//i,
 };
-const isCertificate = (h, path) => CERTIFICATE_HOSTS.test(h) || Boolean(CERTIFICATE_PATH[h]?.test(path));
+// A certificate's verification or badge page on any host, by its path: Oracle's
+// catalog-education.oracle.com/ords/certview/sharebadge (houssambouzid.dev's certificates, in a panel the
+// projects heading runs into), "/verify-certificate", "/certificate-verification".
+const CERTIFICATE_ANY_PATH = /(?:^|\/)(?:certview|sharebadge|verify-?certificates?|certificates?-verification)(?:\/|$)/i;
+const isCertificate = (h, path) => CERTIFICATE_HOSTS.test(h) || Boolean(CERTIFICATE_PATH[h]?.test(path)) || CERTIFICATE_ANY_PATH.test(path);
 /** A CodePen profile (codepen.io/name), not one of its pens (codepen.io/name/pen/id). */
 const isCodepenProfile = (u) => /(^|\.)codepen\.io$/i.test(u.hostname) && u.pathname.split("/").filter(Boolean).length <= 1;
 
-// Hosts that are profiles or services, not project demos.
+// Hosts that are profiles or services, not project demos (booking links too: calendar.app.google, Cal.com, TidyCal).
 const NOT_PROJECT =
-  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
+  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|app\.google|tidycal\.com|zcal\.co|savvycal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
 // App store and extension store listings are projects, though their parent hosts are on the list above.
 const STORE_HOST = /^(?:play\.google\.com|chromewebstore\.google\.com)$/i;
 // The sites of the tools a developer uses, as named in a "Tools I use" list: languages, frameworks and
@@ -360,8 +374,9 @@ const LISTING_NAME = new RegExp(String.raw`^(?:${LISTING_WORDS})$`, "iu");
 const LISTING_SEGMENT = { test: (s) => LISTING_NAME.test(pageName(s)) };
 // Names that are a projects page only as the site's first path segment and under a label that says the same:
 // "/made" labelled "Made" (milan.milanovic.org), "/lab" labelled "Lab". Not "/research/lab", not "/ci/builds"
-// labelled "CI", and never a listing above a project's own page ("/builds/1234").
-const MAKER_PAGE = /^(?:made|builds|lab|creations)$/i;
+// labelled "CI", and never a listing above a project's own page ("/builds/1234"). "/toys" labelled "Toys"
+// (expensive.toys: its UI toys, each a page of its own under /toys).
+const MAKER_PAGE = /^(?:made|builds|lab|creations|toys)$/i;
 const makerPage = (segs, label) =>
   segs.length === 1 && MAKER_PAGE.test(pageName(segs[0])) && new RegExp(String.raw`(?<!\p{L})${pageName(segs[0])}(?!\p{L})`, "iu").test(String(label ?? ""));
 // A segment that a GET could act on: sign-in and sign-out, subscription and account actions ("/unsubscribe",
@@ -423,6 +438,201 @@ function isOwnProjectPath(path, base = "") {
   return !(nameUnderListing ? parents : segs).some((s) => SECTION_SEGMENT.test(s));
 }
 
+// Pages of a personal site that are not one project, beside SECTION_SEGMENT's: what the person uses, is doing now,
+// writes, says, reads, earned and is reached by, in English and other languages, and the site's own legal and
+// taxonomy pages. Only for links on the projects page that are not under a listing (isProjectsPageLink): "/uses",
+// "/now", "/talks", "/til", "/slash" (an index of such pages, amanhimself.dev's), "/topics/react", "/kontakt".
+const SITE_SECTION_SEGMENT = new RegExp(
+  String.raw`^(?:` +
+    [
+      // What the person uses, writes, says and reads.
+      String.raw`uses|now|slash(?:es)?|writing|writings|essays|notes|til|snippets|thoughts|journal|talks|speaking|podcasts?|videos|newsletters?|links|bookmarks|books|reading|library|photos|photography|gallery|archives?|changelog|colophon|guestbook|stack|tech-?stack|tools|toolbox|gear|setup|resources`,
+      // Their story, what they earned, who they are.
+      String.raw`experience|education|skills|testimonials|recommendations|achievements?|accomplishments|certifications?|certificates?|credentials|awards?|honou?rs|publications?|papers|research|journey|timeline|story|my-story|history|authors?|team|people|bio|me|who-?am-?i|hire(?:-me)?|work-with-me|availability|sponsors?|donate|support|community|events|home|index|welcome|start`,
+      // Reaching them, in English and other languages.
+      String.raw`get-?in-?touch|lets-?talk|let-?s-?talk|say-?hi|say-?hello|hello|reach-?out|connect|book(?:-a)?-call|schedule|appointments?|contacto|contato|contatti|kontakt|kontakty|contactez-?moi|contacte|sobre(?:-mi|-mim)?|acerca(?:-de(?:-mi)?)?|a-?propos|qui-suis-je|uber-?mich|ueber-?mich|über-?mich|chi-sono|over-?mij|o-?mnie|inicio|accueil|startseite`,
+      // The site's legal pages, its feeds and its ways of sorting posts.
+      String.raw`privacy(?:-policy)?|cookie-?policy|terms(?:-of-(?:service|use))?|imprint|impressum|datenschutz|mentions-legales|aviso-legal|legal-notice|disclaimer|accessibility|credits|acknowledg(?:e)?ments|topics?|series|labels?|collections?|feeds?|atom|sitemap`,
+    ].join("|") +
+    String.raw`)$`,
+  "i"
+);
+// A link's whole label that names a section of the site, a way to reach the person or a step through a list:
+// "Home", "Achievements", "Get in touch", "Let's talk →", "Sobre mí", "Next project", "Older posts". Such a link on
+// the projects page is never a project, whatever its address ("/start" labelled "Home").
+const SECTION_LABEL = new RegExp(
+  String.raw`^(?:(?:my|our|view|see|read|view my|see my|read my|more|other|all)\s+)?(?:` +
+    [
+      String.raw`home|homepage|start|main page|about(?: me| us)?|contact(?: me| us)?|get in touch|let'?s talk|let’s talk|say hi|say hello|hire me|work with me|book a call|schedule a call|reach out|blog|posts|articles|writing|notes|newsletter|resume|cv|uses|now|talks|speaking|achievements|accomplishments|certifications|certificates|awards|honou?rs|publications|papers|research|experience|education|skills|stack|tech stack|tools|resources|journey|timeline|story|testimonials|recommendations|team|authors?`,
+      String.raw`what i use|what i'?m (?:doing|up to)(?: now)?|what i’m (?:doing|up to)(?: now)?|who i am|(?:slash )?pages|quién soy|quien soy|wer ich bin|schreib mir|écris[- ]moi|ecris[- ]moi|qui suis[- ]je|contactez[- ]moi`,
+      String.raw`privacy(?: policy)?|cookie policy|cookies|terms(?: of (?:service|use))?|imprint|impressum|datenschutz|legal|legal notice|mentions légales|aviso legal|accessibility|credits|sitemap|rss|feed|topics|series|tags|categories`,
+      String.raw`inicio|accueil|startseite|sobre(?: mí| mi| mim)?|acerca de(?: mí)?|à propos|a propos|qui suis-je|über mich|uber mich|chi sono|over mij|o mnie|contacto|contato|contatti|kontakt|contactez-moi|me contacter|escríbeme|escribeme`,
+      String.raw`(?:next|previous|prev|older|newer|more)(?: (?:project|projects|post|posts|page|work|case study))?|(?:see|view|show) (?:all|more)(?: projects| work)?|all projects|back(?: to (?:top|home|projects|work))?|load more|page \d+|\d+`,
+    ].join("|") +
+    String.raw`)$`,
+  "iu"
+);
+/** A link's label as SECTION_LABEL reads it: arrows, bullets and dashes are spaces. */
+const labelOf = (l) => String(l.text ?? "").replace(/[→←↗↘›»«‹·•|#–—:-]+/gu, " ").replace(/\s+/g, " ").trim();
+// ISO 639-1 language codes, for a language switch at the start of the path ("/en", "/pt-BR", "/zh-Hans").
+const LANGUAGE_CODES = new Set(
+  "aa ab ae af ak am an ar as av ay az ba be bg bh bi bm bn bo br bs ca ce ch co cr cs cu cv cy da de dv dz ee el en eo es et eu fa ff fi fj fo fr fy ga gd gl gn gu gv ha he hi ho hr ht hu hy hz ia id ie ig ii ik io is it iu ja jv ka kg ki kj kk kl km kn ko kr ks ku kv kw ky la lb lg li ln lo lt lu lv mg mh mi mk ml mn mr ms mt my na nb nd ne ng nl nn no nr nv ny oc oj om or os pa pi pl ps pt qu rm rn ro ru rw sa sc sd se sg si sk sl sm sn so sq sr ss st su sv sw ta te tg th ti tk tl tn to tr ts tt tw ty ug uk ur uz ve vi vo wa wo xh yi yo za zh zu".split(" ")
+);
+/**
+ * A language switch: an ISO 639-1 code, alone or with a 2-letter region or a script ("pt-br", "zh-hant", "sr-latn").
+ * The scripts are the ISO 15924 codes sites use, so "/ar-demo" (an AR demo) is no language.
+ */
+const isLanguage = (s) => {
+  const m = /^([a-z]{2})(?:[-_](?:[a-z]{2}|hans|hant|latn|cyrl|arab|deva|beng|grek|hebr|jpan|kore|taml|thai|telu|guru|gujr|knda|mlym|orya|sinh|ethi|geor|armn|mong|tibt))?$/i.exec(s);
+  return Boolean(m && LANGUAGE_CODES.has(m[1].toLowerCase()));
+};
+/** A year, as a dated archive of posts uses one ("/2024/05/launch"). */
+const YEAR_SEGMENT = /^(?:19|20)\d{2}$/;
+
+/**
+ * Whether a same-site link on the site's own projects page, in its main content, is a page for one project
+ * whatever its path ("/rht", "/apps/lasttimei"), read with its label (labelOf): it is not another listing
+ * ("/work"), its first segment is not a language ("/en", "/pt-br": "/ai-chat" and "/go-cli" are projects), no
+ * segment is an action, and its whole label does not name a section of the site or a step through a list
+ * (SECTION_LABEL: "About", "Get in touch", "Next project", "2"). Below the top of the site no segment is a section
+ * of the site (NOT_PROJECT_SEGMENT, SITE_SECTION_SEGMENT: "/topics/react", "/blog/post"), a year or a page number.
+ * At the top of the site a page that is never a project is rejected by its path whatever its label
+ * (NEVER_PROJECT_TOP: "/resume" "Download Resume", "/services" "Work with me on your next product", "/blog"
+ * "Read my latest articles"), and a label that starts with an action is a section's call to action
+ * (ACTION_LABEL: "See what I'm certified in", "Explore skills"). Other section words may also name a project, so
+ * there the label decides: "/notes/" labelled "Notes, a markdown app", "/tools/" labelled "Dev Tools Hub" and "/2048/"
+ * labelled "2048" (the game) are projects; "/notes" labelled "Notes" and "/achievements" labelled "My achievements"
+ * are not, nor is a link with no label at a section's path. A project page named like one of the first kind
+ * ("/resume" labelled "Resume Builder") is not counted: a resume at "/resume" is common, a project there rare. The
+ * home page, the projects page itself and its menus (menuLinks) are left out by the caller. On the projects page
+ * only: on the home page a same-site link is a section of the site far more often than a project.
+ */
+function isProjectsPageLink(path, label = "") {
+  const segs = segmentsOf(path).map(pageName);
+  if (!segs.length || LISTING_SEGMENT.test(segs.at(-1)) || MAKER_PAGE.test(segs.at(-1)) || isLanguage(segs[0]) || segs.some((s) => ACTION_SEGMENT.test(s))) return false;
+  // A project named by a number, labelled by the same number ("/2048/" "2048"), is the one place a number is a name.
+  const namedByNumber = segs.length === 1 && /^\d+$/.test(segs[0]) && label === segs[0];
+  if (!namedByNumber && (SECTION_LABEL.test(label) || isActionLabel(label))) return false;
+  const section = (s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s);
+  if (segs.length === 1) {
+    if (NEVER_PROJECT_TOP.test(segs[0])) return false;
+    return namedByNumber || ((label !== "" || !section(segs[0])) && !/^\d+$/.test(segs[0]) && !YEAR_SEGMENT.test(segs[0]));
+  }
+  return !/^\d+$/.test(segs.at(-1)) && !segs.some((s) => section(s) || YEAR_SEGMENT.test(s));
+}
+
+// The pages at the top of a site that are never a project, whatever their label: who the person is and how to
+// reach or hire them, their resume and writing, what they sell, the site's legal pages and accounts, in English and
+// the common other languages. Words that may also name a project (notes, tools, timeline, stack, journal, gallery,
+// books, uses, now, lab) are not here: the label decides those (isProjectsPageLink).
+const NEVER_PROJECT_TOP = new RegExp(
+  String.raw`^(?:` +
+    [
+      String.raw`about(?:-me|-us)?|contact(?:-me|-us)?|get-?in-?touch|lets-?talk|say-?hello|say-?hi|hire(?:-me)?|work-with-me|book(?:-a)?-call`,
+      String.raw`resume|cv|curriculum|curriculum-vitae|lebenslauf|blog|posts?|articles?|newsletter|services?|pricing|faq|certifications?|certificates?|achievements?|awards?|testimonials?`,
+      String.raw`privacy(?:-policy)?|terms(?:-of-(?:service|use))?|imprint|impressum|datenschutz|legal(?:-notice)?|mentions-legales|aviso-legal|cookies?(?:-policy)?|login|log-?in|signin|sign-?in|signup|sign-?up|register|account`,
+      String.raw`sobre(?:-mi|-mim)?|acerca(?:-de(?:-mi)?)?|contacto|contato|contatti|kontakt|a-?propos|qui-suis-je|uber-?mich|ueber-?mich|über-?mich|chi-sono|over-?mij|o-?mnie|servicios|servicos|serviços|leistungen|tarifs|precios|preise`,
+    ].join("|") +
+    String.raw`)$`,
+  "i"
+);
+// A label that starts with an action is a call to action of a section ("Download Resume", "Read my latest
+// articles", "See what I'm certified in", "Work with me on your next product", "Get in touch"), unless it opens the
+// project itself ("View project", "See the demo", "Explore the app", "Check out the live site").
+const ACTION_LABEL = /^(?:download|read|see|view|explore|learn|check|hire|work with|book|contact|get)(?![\p{L}])/iu;
+const OPENS_PROJECT = /^(?:view|see|explore|check(?: out)?|get|download|read)\s+(?:the\s+|this\s+)?(?:project|demo|app|case study|live|site|website|game|code|source|repo|it)(?![\p{L}])/iu;
+const isActionLabel = (label) => ACTION_LABEL.test(label) && !OPENS_PROJECT.test(label);
+
+/**
+ * Whether a same-site link names a section of the site, by its whole label or by a word of its path
+ * ("/my-certifications", "/achievements-and-awards"): only to tell a menu from a grid (menuLinks).
+ */
+function isSectionLink(l, self) {
+  if (SECTION_LABEL.test(labelOf(l))) return true;
+  try {
+    const u = new URL(l.href);
+    if (!sameHost(u.hostname.toLowerCase(), self)) return false;
+    const words = segmentsOf(u.pathname).map(pageName).flatMap((s) => [s, ...s.split(/[-_]+/)]);
+    return words.some((s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s));
+  } catch {
+    return false;
+  }
+}
+
+/** How deep a menu may sit below the container its links share: "<div><a>", "<ul><li><a>", "<ul><li><span><a>". */
+const MENU_DEPTH = 3;
+/**
+ * The projects page's own-page links that sit in a menu, whatever it is built from (a "<div class="navbar">" is no
+ * <nav>, its home link may be a logo image): a link to the home page or to the projects page itself (not an
+ * in-page anchor, nor a card labelled with the site's address) marks the smallest element around it that holds at
+ * least 3 links, and the links at the same depth in that element are a menu when at least MENU_OWN_SHARE of them
+ * go to the site's own pages and at least half of those (the home and projects links aside) name a section of the
+ * site by label or path (isSectionLink). Only the own pages in it are taken out, never a demo or a repository. So a
+ * card grid whose one card is the portfolio itself ("Live" to "/"), a breadcrumb's "Home" beside cards named
+ * "Todo App" or "Chat", a logo beside project links, and a "← home" line above one paragraph per project are not
+ * menus. `links` are the projects page's, with `anc` (./page-controls.mjs scanPage). Returns a Set of them.
+ */
+function menuLinks(links, homeUrl, pageUrl) {
+  const strip = (p) => p.replace(/\/index\.html?$/i, "").replace(/\/+$/, "").toLowerCase();
+  const self = host(homeUrl);
+  const targets = new Set([strip(pathOfUrl(homeUrl)), strip(pathOfUrl(pageUrl))]);
+  const isFrameTarget = (l) => {
+    // Not an in-page anchor, nor a project card's link to the site itself labelled with its address
+    // ("younes-megaache.com" as one card among the projects on younes-megaache.com/projects).
+    if (String(l.raw ?? "").startsWith("#") || isAddressLabel(l)) return false;
+    try {
+      const u = new URL(l.href);
+      return sameHost(u.hostname.toLowerCase(), self) && targets.has(strip(u.pathname));
+    } catch {
+      return false;
+    }
+  };
+  const count = new Map();
+  for (const l of links) for (const id of l.anc ?? []) count.set(id, (count.get(id) ?? 0) + 1);
+  const menus = [];
+  for (const l of links) {
+    if (!isFrameTarget(l) || !l.anc?.length) continue;
+    for (let k = l.anc.length - 1; k >= 0; k--) {
+      if ((count.get(l.anc[k]) ?? 0) < 3) continue;
+      const depth = l.anc.length - 1 - k;
+      if (depth <= MENU_DEPTH) menus.push({ id: l.anc[k], depth });
+      break;
+    }
+  }
+  const out = new Set();
+  const ownSite = (l) => {
+    if (String(l.raw ?? "").startsWith("#")) return false;
+    try {
+      return sameHost(new URL(l.href).hostname.toLowerCase(), self);
+    } catch {
+      return false;
+    }
+  };
+  for (const m of menus) {
+    const group = links.filter((l) => {
+      const k = l.anc?.indexOf(m.id) ?? -1;
+      return k >= 0 && l.anc.length - 1 - k === m.depth;
+    });
+    // A menu links the site's own pages: a card grid's "Live" and "Code" links go out (one card's "Live" that points
+    // back to the portfolio itself does not make the grid a menu).
+    const own = group.filter(ownSite);
+    if (own.length < group.length * MENU_OWN_SHARE) continue;
+    // And it names the site's sections ("Achievements", "Certifications", "/publications"), whatever the length of
+    // its labels; a breadcrumb's "Home" beside cards named "Todo App", "Chat", "Weather" makes no menu of them.
+    const others = own.filter((l) => !isFrameTarget(l));
+    const sections = others.filter((l) => isSectionLink(l, self)).length;
+    if (!others.length || sections < others.length / 2) continue;
+    // Only the site's own pages are taken out: a demo or a repository is never a menu item.
+    for (const l of own) out.add(l);
+  }
+  return out;
+}
+/** The least share of a menu's links that go to the site's own pages (menuLinks). */
+const MENU_OWN_SHARE = 0.7;
+/** A label that is a web address: "github.com", "younes-megaache.com", "app.example.dev/demo". */
+const ADDRESS_LABEL = /^(?:https?:\/\/)?(?:www\.)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?$/iu;
+const isAddressLabel = (l) => ADDRESS_LABEL.test(String(l.text ?? "").replace(/\s+/g, " ").trim());
+
 /**
  * A page whose own name says it is one project: "project-sync.html", "/project_solar", "/work-dashboard",
  * "/case-study-x": "project", "work" or "case study", then "-" or "_" and a name. Not "/works-cited" (a
@@ -463,11 +673,38 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       return "";
     }
   })();
-  const seen = new Set();
   const tiers = [[], [], []];
+  // The projects page's menus, whatever they are built from (menuLinks): their links to the site's own pages are
+  // its frame (a demo or a repository never is).
+  const pageLinksOnly = links.filter((l) => l.from === "projects_page");
+  const menu = pageLinksOnly.length ? menuLinks(pageLinksOnly, siteUrl, pageLinksOnly[0].page) : new Set();
+  // The site's own pages that the projects page's menu, header or footer links: at any path (isProjectsPageLink) a
+  // section of the site, never a project, however its main content links it ("Work together" to "/contact",
+  // "Explore skills" to "/skills" on portfolio.lewishadden.com, "read the notes" to "/blog" on marbelona.com).
+  const framePaths = new Set(pageLinksOnly.filter((l) => l.inChrome || menu.has(l)).map((l) => ownPageUrl(l, self)?.path).filter(Boolean));
+  // Each link once, in the highest tier it is seen in: a link in a work-experience list that the projects list
+  // links again is a project (avi-aggarwal.com's hypjam.com, marbelona.com's ParkinganPH).
+  const best = new Map();
+  // The addresses the home page (either view) shows outside its projects.
+  const homeLow = new Set();
+  // How many times the projects page's main content links each outside address (furniture, below).
+  const cardLinks = new Map();
+  for (const l of pageLinksOnly) {
+    if (l.inChrome || l.inAside || menu.has(l)) continue;
+    const k = projectUrl(l, self)?.key;
+    if (k) cardLinks.set(k, (cardLinks.get(k) ?? 0) + 1);
+  }
+  const place = (key, t, entry) => {
+    const had = best.get(key);
+    if (had && had.t <= t) return;
+    if (had) tiers[had.t].splice(tiers[had.t].indexOf(had.entry), 1);
+    best.set(key, { t, entry });
+    tiers[t].push(entry);
+  };
   for (const l of links) {
     const from = l.from ?? "home";
     const onProjectsPage = from === "projects_page";
+    if (onProjectsPage && menu.has(l)) continue;
     // A credit ("Powered by Hugo & Narrow", "Theme by ..."), repository included: never a project. The one place a
     // repository is dropped. Not inside the projects, nor in the main content of the projects page, where "Built
     // with Next.js & <a>source</a>" describes the project itself.
@@ -475,7 +712,7 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     const p = projectUrl(l, self);
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
-      if (seen.has(p.key) || (l.inSocial && !p.repo)) continue;
+      if (l.inSocial && !p.repo) continue;
       // On the site's own projects page (a listing page by its path or label, projectsPageFor) the whole
       // main content is the projects, whatever its headings and classes: its title is almost always an h1
       // "Projects", which opens no section, and utility-class cards say nothing. Nav, header and footer stay out.
@@ -488,33 +725,116 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // A repository, or a subdomain of the site's own domain (its own work), counts as in the projects anywhere
       // but the page's frame and a section whose heading says it is not projects ("Work Experience" with an
       // employer's repositories, "Repos I like").
-      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside);
-      seen.add(p.key);
-      tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
+      // What the home page shows outside its projects (an employer in its About, a webring at its foot) is not made a
+      // project by the projects page's main content alone, whatever its label there ("Acme" at home, "Acme Inc." in
+      // the projects page's intro; amanhimself.dev's webrings). Unless the projects page links it as a project card
+      // does, more than once (its title and its "open app →": marbelona.com's ParkinganPH, first in its experience).
+      const furniture = onProjectsPage && !l.inProjects && homeLow.has(p.key) && (cardLinks.get(p.key) ?? 0) < 2;
+      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside && !furniture);
+      if (!onProjectsPage && !inProjects) homeLow.add(p.key);
+      place(p.key, inProjects ? 0 : 2, { url: p.key, from, kind: "outbound" });
       continue;
     }
     const own = ownPageUrl(l, self);
     // Never the home page itself (a site served under a path, as samrinjaji.github.io/my-portfolio/ is).
-    if (!own || own.path.replace(/\/index\.html?$/, "") === homePath || seen.has(own.key) || l.inChrome || l.inSocial) continue;
+    if (!own || own.path.replace(/\/index\.html?$/, "") === homePath || best.has(own.key) || l.inChrome || l.inSocial) continue;
     const rel = homePath && own.path.startsWith(`${homePath}/`) ? own.path.slice(homePath.length) : own.path;
     let ok = false;
     if (onProjectsPage) {
       const base = pathOfUrl(l.page);
-      ok = own.path !== base && isOwnProjectPath(rel, homePath && base.startsWith(homePath) ? base.slice(homePath.length) : base);
+      const relBase = homePath && base.startsWith(homePath) ? base.slice(homePath.length) : base;
+      // Under a listing or the projects page's own path; or, in its main content (not an aside), a page of the site
+      // at any path that is not one of its section pages (amanhimself.dev's apps at "/rht", "/lasttimei").
+      // Not in an aside, a section that is not projects or a list of profiles, and not labelled as a section of the site.
+      // A page at any path also counts only when the page's menu, header or footer does not link it too (framePaths);
+      // a project under the listing may be in a sidebar list of projects as well (bhavaniravi.com's).
+      ok = own.path !== base && (isOwnProjectPath(rel, relBase) || (!l.inAside && !l.inOther && !framePaths.has(own.path) && isProjectsPageLink(rel, labelOf(l))));
     } else {
       // In a home page projects section, with a project page's path, or a page of its own whose name says
       // project ("project-sync.html", sebascherny.github.io's case studies at the site's root).
       ok = Boolean(l.inProjects) && (isOwnProjectPath(rel) || isNamedProjectPage(rel));
     }
     if (!ok) continue;
-    seen.add(own.key);
-    tiers[1].push({ url: own.key, from, kind: "own page" });
+    place(own.key, 1, { url: own.key, from, kind: "own page" });
   }
   // Every own project page goes ahead of the lowest tier, which only fills the slots left over (sujanbhatta.tech:
   // 6 case studies, then partner logos). stimmie.dev's own apps on its subdomains are in the first tier now, so
   // its own pages no longer push them out.
-  const own = tiers[1].map((c) => ({ ...c, tier: 2 }));
-  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own, ...tiers[2].map((c) => ({ ...c, tier: LOW_TIER }))].slice(0, max);
+  // At most PER_HOST_MAX links of one outside host first, so one site does not take every place (bekahhw.com's
+  // "My Work" page: 8 articles on one shut-down company site before its live projects); the places left are filled
+  // in order. The higher tiers are picked first, so a link outside the projects never takes a project's place.
+  // One repository is one project: only its first link counts (garebear99.github.io linked three releases of one
+  // plugin's repository, which alone made a pass), the highest tier first. The same outside page twice, its
+  // fragment aside, is one link already (projectUrl drops the fragment).
+  const repos = new Set();
+  const oneEach = (c) => {
+    const k = c.kind === "outbound" ? hostKey(c.url) : "";
+    if (!k.includes("/")) return true;
+    if (repos.has(k)) return false;
+    repos.add(k);
+    return true;
+  };
+  const high = [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...tiers[1].map((c) => ({ ...c, tier: 2 }))].filter(oneEach);
+  const low = tiers[2].map((c) => ({ ...c, tier: LOW_TIER })).filter(oneEach);
+  const picked = spreadByHost(high, max);
+  return [...picked, ...spreadByHost(low, max - picked.length)];
+}
+
+/** The most links of one outside host taken before other hosts get a place (a repository counts once, oneEach). */
+export const PER_HOST_MAX = 3;
+const CODE_HOST = /^(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)$/i;
+/**
+ * What PER_HOST_MAX and the one-link-per-repository rule count per: the host without "www.", or on a code host
+ * the repository's owner and name ("github.com/ana/app"), since each repository is a project of its own; and a
+ * folder of a repository, linked by its tree or a file in it, is a project of its own too
+ * ("github.com/ana/js-projects/tree/main/calculator" and ".../blob/main/todo/index.html" are two, a beginner's one
+ * repository of practice projects). Releases, tags, the wiki, issues, commits and a file at the repository's top
+ * ("blob/main/README.md") are the repository's.
+ */
+export function hostKey(url) {
+  try {
+    const u = new URL(url);
+    const h = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (!CODE_HOST.test(h)) return h;
+    const segs = u.pathname.split("/").filter(Boolean).map((s) => s.toLowerCase());
+    const [owner = "", repo = ""] = segs;
+    const key = `${h}/${owner}/${repo.replace(/\.git$/, "")}`;
+    // GitHub, Bitbucket and Codeberg: /tree/<branch>/<dir> or /blob/<branch>/<dir>/<file>; GitLab puts "-" first.
+    const rest = segs.slice(2)[0] === "-" ? segs.slice(3) : segs.slice(2);
+    const kind = rest[0];
+    if (kind === "tree" || kind === "src") return rest.length >= 3 ? `${key}/${rest[2]}` : key;
+    if (kind === "blob") return rest.length >= 4 ? `${key}/${rest[2]}` : key;
+    return key;
+  } catch {
+    return "";
+  }
+}
+/**
+ * At most `max` of `list`, in its order: first every candidate whose outside host (hostKey) has had fewer than
+ * PER_HOST_MAX places (the site's own pages are not counted per host), then the ones skipped, in order, for the
+ * places left.
+ */
+function spreadByHost(list, max) {
+  if (!(max > 0)) return [];
+  const perHost = new Map();
+  const take = new Set();
+  for (const c of list) {
+    if (take.size >= max) break;
+    if (c.kind === "own page") {
+      take.add(c);
+      continue;
+    }
+    const k = hostKey(c.url);
+    const had = perHost.get(k) ?? 0;
+    if (had >= PER_HOST_MAX) continue;
+    perHost.set(k, had + 1);
+    take.add(c);
+  }
+  for (const c of list) {
+    if (take.size >= max) break;
+    take.add(c);
+  }
+  return list.filter((c) => take.has(c));
 }
 
 /**
@@ -533,6 +853,31 @@ const pathOfUrl = (u) => {
     return "";
   }
 };
+
+/**
+ * A same-site link whose address is the home page's but for a hash route ("#/projects", "#!/work/"), as
+ * { key: the address with its route, segs: the route's segments }, or null. An in-page anchor ("#projects") is not
+ * a route, nor is a route with a query ("#/projects?tab=x"). Loading it is a plain GET of the home page itself (the
+ * part after "#" is never sent); the app's own router then shows the route.
+ */
+export function hashRoute(l, homeUrl) {
+  let u;
+  let h;
+  try {
+    u = new URL(l.href);
+    h = new URL(homeUrl);
+  } catch {
+    return null;
+  }
+  if ((u.protocol !== "http:" && u.protocol !== "https:") || !sameHost(u.hostname.toLowerCase(), h.hostname.toLowerCase())) return null;
+  const strip = (p) => p.replace(/\/index\.html?$/i, "").replace(/\/+$/, "").toLowerCase();
+  if (strip(u.pathname) !== strip(h.pathname) || u.search) return null;
+  const m = /^#!?\/([^?]*)$/.exec(u.hash);
+  if (!m) return null;
+  const segs = segmentsOf(m[1]).map(pageName);
+  if (!segs.length || segs.some((s) => ACTION_SEGMENT.test(s))) return null;
+  return { key: u.href, segs };
+}
 
 /**
  * The projects a home page shows itself, as the pass counts them: its
@@ -559,6 +904,14 @@ export function projectsPageFor(links, homeUrl) {
   if (shownProjects(links, homeUrl) >= MIN_PROJECT_LINKS) return null;
   let byText = null;
   for (const l of links) {
+    // A route of an app on the home page's own address: "#/projects", "#!/work" (chiragsamal.github.io).
+    const route = hashRoute(l, homeUrl);
+    if (route) {
+      if (route.segs.some((s) => NOT_PROJECT_SEGMENT.test(s))) continue;
+      if (LISTING_SEGMENT.test(route.segs.at(-1)) || makerPage(route.segs, l.text)) return route.key;
+      if (!byText && PROJECTS_LINK_TEXT.test(String(l.text ?? ""))) byText = route.key;
+      continue;
+    }
     const own = ownPageUrl(l, self);
     if (!own) continue;
     // Read below the home page's own path, so a site served under /my-portfolio/ is not its own projects page.
@@ -672,25 +1025,29 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
  * plain GET: when it answers 404 or another error, own pages count by their
  * status like any link; when it answers 2xx (a host or an app shell that
  * answers every address), each own page is fetched (GET, its body capped at
- * OWN_PAGE_MAX_BYTES) and loads only when its visible text has at least
- * OWN_PAGE_MIN_WORDS distinct words, and at most OWN_PAGE_MAX_OVERLAP of them
- * are also on the nonsense page and on the home page (`homeText`); two own
- * pages with the same text count once. An own page that answered but failed
- * that is counted as checked, not loading, in `own_unverified`.
+ * OWN_PAGE_MAX_BYTES) and loads only when the lines of its visible text that
+ * are on neither the nonsense page nor the home page (`homeText`) hold at
+ * least OWN_PAGE_MIN_WORDS distinct words (ownText); two own pages with the
+ * same text of their own count once. An own page that answered but failed
+ * that is counted as checked, not loading, in `own_unverified`. When the
+ * nonsense page answers 2xx but says it is not found (its title or first h1,
+ * saysNotFound: a "soft 404", as an app that draws its pages in the browser
+ * serves), the host tells its pages apart itself: an own page loads when it
+ * answers 2xx and does not say so, and is broken when it does.
  *
  * Returns { checked, ok, broken, blocked, own_ok, own_unverified, own_check }:
  * `own_ok` how many of the loading ones are own pages, `own_check` "status",
- * "text" or null (no own pages).
+ * "text", "not_found_page" or null (no own pages).
  */
-export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "", lowLinks = LOW_LINKS } = {}) {
+export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "", lowLinks = LOW_LINKS, homeUrl = null } = {}) {
   const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
   const headers = { Accept: "text/html,*/*;q=0.8", ...(userAgent ? { "User-Agent": userAgent } : {}) };
-  /** A plain GET with its visible text (the body capped), or null when it failed. */
+  /** A plain GET with the lines of its visible text (the body capped), or null when it failed. */
   async function getPage(url) {
     try {
       const r = await fetchImpl(url, { method: "GET", redirect: "follow", headers, signal: AbortSignal.timeout(timeoutMs) });
       const html = await readCapped(r, OWN_PAGE_MAX_BYTES);
-      return { status: r.status, words: wordSet(visibleText(html)) };
+      return { status: r.status, lines: textLines(html), notFound: saysNotFound(html) };
     } catch {
       return null;
     }
@@ -731,10 +1088,19 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   // Once per check: does the host answer an address that cannot exist?
   const firstOwn = queue.find((c) => c.kind === "own page");
   let byText = null;
+  let notFoundPage = false;
   if (firstOwn) {
     const probe = await getPage(nonsenseUrl(firstOwn.url));
-    byText = probe && probe.status >= 200 && probe.status < 300 ? { probe: probe.words, home: wordSet(homeText) } : null;
-    res.own_check = byText ? "text" : "status";
+    // A host that answers 200 but says the made-up address is not found (nevo.is-a.dev: "NEVO | Project Not Found",
+    // its pages drawn in the browser) tells its pages apart itself: own pages count when they answer and do not say so.
+    // Only when the home page does not say so too: a site titled "404 Studio - Ana" says it on every page.
+    if (probe && probe.status >= 200 && probe.status < 300 && probe.notFound) {
+      const home = await getPage(homeUrl ?? new URL("/", firstOwn.url).href);
+      notFoundPage = Boolean(home && home.status < 400 && !home.notFound);
+    }
+    // The lines every page of the site shares (its menu, header, footer): the nonsense page's and the home page's.
+    if (!notFoundPage) byText = probe && probe.status >= 200 && probe.status < 300 ? { frame: new Set([...probe.lines, ...textLines(homeText, { html: false })]) } : null;
+    res.own_check = notFoundPage ? "not_found_page" : byText ? "text" : "status";
   }
   const seenTexts = new Set();
   /** An own page on a host that answers every address: loads only with text of its own. */
@@ -742,10 +1108,17 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     const got = await getPage(url);
     if (!got) return "broken";
     if (got.status >= 400) return [401, 403, 429, 999].includes(got.status) ? "blocked" : "broken";
-    const key = [...got.words].sort().join(" ");
-    const real = got.words.size >= OWN_PAGE_MIN_WORDS && overlap(got.words, byText.probe) <= OWN_PAGE_MAX_OVERLAP && overlap(got.words, byText.home) <= OWN_PAGE_MAX_OVERLAP && !seenTexts.has(key);
-    seenTexts.add(key);
+    const mine = ownText(got.lines, byText.frame);
+    const real = mine.words >= OWN_PAGE_MIN_WORDS && !seenTexts.has(mine.key);
+    seenTexts.add(mine.key);
     return real ? "ok" : "own_unverified";
+  }
+  /** An own page on a host whose made-up address says "not found": loads when it answers and does not say so. */
+  async function ownByNotFound(url) {
+    const got = await getPage(url);
+    if (!got) return "broken";
+    if (got.status >= 400) return [401, 403, 429, 999].includes(got.status) ? "blocked" : "broken";
+    return got.notFound ? "broken" : "ok";
   }
   const done = [];
   await Promise.all(
@@ -754,7 +1127,8 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
         const c = queue.shift();
         let verdict;
         try {
-          if (c.kind === "own page" && byText && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByText(c.url);
+          if (c.kind === "own page" && notFoundPage && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByNotFound(c.url);
+          else if (c.kind === "own page" && byText && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByText(c.url);
           else verdict = await one(c.url);
         } catch {
           verdict = null;
@@ -796,17 +1170,55 @@ export function nonsenseUrl(url) {
   return u.href;
 }
 
-/** The distinct words (3 letters or more, lower case) of a text. */
-function wordSet(text) {
-  return new Set(String(text ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+/**
+ * The lines of a page's visible text, lower case, spaces collapsed, empty ones left out: of its HTML (block
+ * elements and <br> end a line; scripts, styles and noscript removed), or with `html: false` of a text that
+ * already has its lines (the stored page text).
+ */
+export function textLines(src, { html = true } = {}) {
+  const text = html ? stripTags(removeElements(removeElements(removeElements(src, "script"), "style"), "noscript"), { lines: true }) : String(src ?? "");
+  return text
+    .replace(/&[a-z#0-9]+;/gi, " ")
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter(Boolean);
 }
-/** The share of `a`'s words that are also in `b` (0 when `a` is empty). */
-function overlap(a, b) {
-  if (!a.size) return 0;
-  let shared = 0;
-  for (const w of a) if (b.has(w)) shared++;
-  return shared / a.size;
+// A short line (its title, a heading) that says the page was not found: "NEVO | Project Not Found", "404",
+// "This page does not exist", "Page introuvable".
+const NOT_FOUND_LINE =
+  /(?<![\p{L}\p{N}])(?:404|not found|no such page|does(?:n['’]t| not) exist|(?:could(?:n['’]t| not)|can['’]?t|cannot) (?:be )?find|introuvable|no encontrad[ao]|nicht gefunden|non trovat[ao]|não encontrad[ao])(?![\p{L}\p{N}])/iu;
+/**
+ * Whether a page's HTML says it was not found: its title or its first h1, at most 10 words, says so. Only those,
+ * so a menu or a post titled "Fixing 404 errors" further down never makes a page "not found".
+ */
+export function saysNotFound(html) {
+  const s = String(html ?? "");
+  const title = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(s)?.[1] ?? "";
+  const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(s)?.[1] ?? "";
+  return [title, h1].some((t) => {
+    const line = stripTags(t).replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+    return line !== "" && line.split(" ").length <= 10 && NOT_FOUND_LINE.test(line);
+  });
 }
+
+/**
+ * An own page's text of its own: its lines that are not in `frame` (the lines of the nonsense page and the
+ * home page), as `words` (how many distinct words of 3 letters or more they hold) and `key` (the same text
+ * for two pages that are copies of each other). Scripts written without spaces between words (Chinese,
+ * Japanese, Thai, Lao, Khmer, Myanmar, Tibetan) have no words to split: there every NO_SPACE_LETTERS_PER_WORD
+ * of their letters count as one word, so a write-up of 60 such letters has 20 and a page title alone does not.
+ */
+export function ownText(lines, frame) {
+  const mine = [...new Set(lines.filter((l) => !frame.has(l)))];
+  const all = mine.join(" ");
+  const noSpace = all.match(NO_SPACE_LETTER) ?? [];
+  // Korean is written with spaces, but most of its words are two syllables: a Hangul word counts from two.
+  const words = new Set(all.replace(NO_SPACE_LETTER, " ").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 || (w.length === 2 && HANGUL_WORD.test(w))));
+  return { words: words.size + Math.floor(noSpace.length / NO_SPACE_LETTERS_PER_WORD), key: [...mine].sort().join("\n") };
+}
+const NO_SPACE_LETTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}\p{Script=Tibetan}]/gu;
+export const NO_SPACE_LETTERS_PER_WORD = 3;
+const HANGUL_WORD = /^\p{Script=Hangul}+$/u;
 /** The body of a response as text, at most `max` bytes. */
 async function readCapped(r, max) {
   if (!r.body?.getReader) return String((await r.text?.()) ?? "").slice(0, max);
@@ -942,7 +1354,7 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
   // capture passes the page text it stores (`input.homeText`, portfolios.page_text), so the nightly re-check,
   // which reads that stored text, compares own pages against exactly the same words.
   const homeText = storedText ?? (desktopInput.text || visibleText(desktopInput.html));
-  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText, lowLinks });
+  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText, lowLinks, homeUrl: facts.final_url });
   // The links checked, with where each came from and their tier: the nightly re-check (pipeline/evidence.mjs)
   // tests these again, by the same rule for the lowest tier.
   facts.project_candidates = candidates.map(({ url, from, kind, tier }) => ({ url, from, kind, tier }));
