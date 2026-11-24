@@ -21,7 +21,7 @@ import { SITE_URL } from "@/lib/site";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { ProfileV2, profileMetadata } from "./profile-v2";
-import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
+import { loadSeoExtras, profileJsonLd, visitAddress } from "@/lib/profile";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
 
@@ -155,10 +155,12 @@ export default async function PortfolioPage({
 
   const rubricRow = (
     await db().execute({
-      sql: "SELECT ai_rubric, facts FROM portfolios WHERE url = ?",
+      // answers_at: where the site answers while its listed address does not (lib/profile.ts visitAddress).
+      sql: "SELECT ai_rubric, facts, (SELECT m.answers_at FROM health_marks m WHERE m.url = portfolios.url) AS answers_at FROM portfolios WHERE url = ?",
       args: [url],
     })
   ).rows[0];
+  const visitUrl = visitAddress(url, rubricRow?.answers_at);
   // A verified owner may remove their portfolio or hide its grade
   // (lib/games/claims.mjs); a removed one is gone at once.
   // Fresh, never the minute cache: this render is kept at the edge for a day.
@@ -222,7 +224,7 @@ export default async function PortfolioPage({
               <AddToListButton url={url} />
               <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
               <a
-                href={url}
+                href={visitUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-lg bg-fill px-4 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"

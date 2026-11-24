@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
@@ -106,22 +107,26 @@ export default async function AdminAlertsPage() {
           Sites that stopped working
         </h2>
         <p className="mt-1 text-sm text-mute">
-          Failing: out of grading and AI comparisons, still shown. Not working: hidden everywhere until a check passes, then back as it was. Off the list after{" "}
-          {LEAVE_AFTER_DAYS} days. Nobody is emailed.
+          Failing: out of grading and AI comparisons, still shown. In the temporary pool: hidden everywhere until a check passes, then back as it was. Archived after{" "}
+          {LEAVE_AFTER_DAYS} days. Nobody is emailed.{" "}
+          <Link href="/admin/health-pool" className="font-semibold text-accent hover:underline">
+            Health pool
+          </Link>{" "}
+          has the archive and what came back.
         </p>
         {pool.length === 0 ? (
           <p className="card mt-3 p-5 text-sm text-mute">None. Every listed site answered its last check.</p>
         ) : (
           <>
             <p className="mt-3 text-sm" data-pool-counts>
-              <span className="font-semibold">{pool.filter((p) => p.hidden).length}</span> not working ·{" "}
+              <span className="font-semibold">{pool.filter((p) => p.hidden).length}</span> in the pool ·{" "}
               <span className="font-semibold">{pool.filter((p) => !p.hidden).length}</span> failing
             </p>
             <ul className="mt-3 grid gap-2">
               {pool.map((p) => (
                 <li key={p.url} className="card p-4 text-sm" data-pool-site={p.url}>
                   <p className="flex flex-wrap items-baseline gap-x-2">
-                    <span className={`text-xs font-semibold ${p.hidden ? "text-down" : "text-mute"}`}>{p.hidden ? "Not working" : "Failing"}</span>
+                    <span className={`text-xs font-semibold ${p.hidden ? "text-down" : "text-mute"}`}>{p.hidden ? "In the pool" : "Failing"}</span>
                     <span className="min-w-0 break-all font-semibold">{p.name || p.url}</span>
                   </p>
                   <p className="mt-1 break-all text-mute">

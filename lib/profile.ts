@@ -15,6 +15,7 @@ import type { PsiResult } from "@/lib/tools/psi";
 import type { ShareResult } from "@/lib/tools/share";
 import { psiKey, quickKey, shareKey } from "@/lib/tools/keys";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { visitAddress } from "@/lib/visit-address.mjs";
 import { inLibrary } from "@/lib/tiers-store.mjs";
 
 // Everything a portfolio's profile (/p/<address>) shows, for a listed
@@ -77,6 +78,11 @@ export type Saved<T> = (T & { at: number }) | null;
 
 export type Profile = {
   url: string;
+  /**
+   * Where "Visit" goes: the listed address, or, while the health check has found the listed address failing
+   * and the site answering at its own www or https form (health_marks.answers_at), that working address.
+   */
+  visitUrl: string;
   path: string;
   listed: Feed | null;
   name: string;
@@ -100,6 +106,8 @@ export type Profile = {
 };
 
 const listedBy = new Map((feed as Feed[]).map((p) => [p.url, p]));
+
+export { visitAddress };
 
 function domainOf(url: string) {
   try {
@@ -125,7 +133,15 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   if (owner.removedAt) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
-    listed ? client.execute({ sql: `SELECT ai_rubric, facts, (${GONE_WHERE}) AS gone FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]) : null,
+    listed
+      ? client
+          .execute({
+            // answers_at: where the site answers while its listed address does not (pipeline/health.mjs sameSiteAddress).
+            sql: `SELECT ai_rubric, facts, (${GONE_WHERE}) AS gone, (SELECT m.answers_at FROM health_marks m WHERE m.url = portfolios.url) AS answers_at FROM portfolios WHERE url = ?`,
+            args: [url],
+          })
+          .then((r) => r.rows[0])
+      : null,
     client.execute({ sql: "SELECT id, status, reason, result FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [siteKey] }).then((r) => r.rows[0]),
     listed ? null : seen(client, url),
     client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url)] }).then((r) => r.rows),
@@ -164,6 +180,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   const title = (share?.ok && (share.card?.siteName || share.tags?.["og:title"] || share.tags?.title)) || (quick?.ok && quick.title) || null;
   return {
     url,
+    visitUrl: visitAddress(url, rubricRow?.answers_at),
     path: profilePath(url),
     listed,
     name: listed?.name ?? (title ? String(title).split(/\s[|\-–]\s/)[0].slice(0, 80) : domainOf(url)),

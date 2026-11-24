@@ -291,30 +291,18 @@ test("3: a removal stays down with its reason when the weekly check sees an erro
   }
 });
 
-test("4: a collapsed-signals case the owner rejected, or a site he confirmed is a portfolio, is not reopened every week", async () => {
+test("4: low signals never write a review row, never pool or hide a site (owner's default, 2026-11-23)", async () => {
   const { db } = await freshDb();
-  const kept = "https://kept-by-owner.dev";
-  const confirmed = "https://confirmed-portfolio.dev";
+  const low = "https://reads-zero.dev";
   const g = { tier: "C", is_portfolio: true, model: PRIMARY_MODEL, rubric_version: 2, judged_at: "2026-10-01T00:00:00.000Z" };
-  const collapsedSignals = (at) => ({ ...signals(1), checked_at: at });
-  await site(db, kept, { rubric: g, needsReview: 1, healthSignals: collapsedSignals("2026-11-16T10:00:00.000Z") });
-  await site(db, confirmed, { rubric: g, needsReview: 1, healthSignals: collapsedSignals("2026-11-16T10:00:00.000Z") });
+  await site(db, low, { rubric: g, needsReview: 1, healthSignals: { ...signals(0), checked_at: "2026-11-16T10:00:00.000Z" } });
   await ensureReviewSchema(db);
-  await db.execute({
-    sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, verdicts, status, decided_at, decided_by, created_at)
-          VALUES ('recheck-543', ?, 'not_portfolio', 'listed', 'relist', 1, '{}', 'confirmed', '2026-11-12T00:00:00Z', 'admin:owner', '2026-11-11T00:00:00Z')`,
-    args: [confirmed],
-  });
-  const first = await syncReviewRows(db, { now: new Date(T0) });
-  assert.deepEqual(first.collapsed, [kept], "an owner-confirmed portfolio gets no collapse row");
-  const [row] = await reviewsOf(db, kept);
-  await decideReviews(db, { ids: [Number(row.id)], action: "reject", actor: "admin:owner", onFeed: () => true, now: new Date(T0 + 3600000) });
-  // Next week's health check finds the signals collapsed again.
-  for (const u of [kept, confirmed]) {
-    await db.execute({ sql: "UPDATE portfolios SET signals = ?, needs_review = 1 WHERE url = ?", args: [JSON.stringify(collapsedSignals("2026-11-23T10:00:00.000Z")), u] });
+  for (const t of [T0, T0 + 7 * DAY]) {
+    const s = await syncReviewRows(db, { now: new Date(t) });
+    assert.deepEqual(s.collapsed, []);
   }
-  const again = await syncReviewRows(db, { now: new Date(T0 + 7 * DAY) });
-  assert.deepEqual(again.collapsed, [], "settled by the owner");
+  assert.deepEqual(await reviewsOf(db, low), [], "no row for the owner");
+  assert.equal(await hidden(db, low), false, "still listed");
 });
 
 test("5: a waiting removal is closed, not applied, when a newer decision made it stale", async () => {
