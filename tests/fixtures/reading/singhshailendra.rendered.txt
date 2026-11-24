@@ -1,0 +1,66 @@
+Shailendra Singh
+AboutProjectsBlogsGithub
+Hey! I'm 
+Shailendra Singh
+
+I like building things, mostly with code. I'm a web developer with a keen intrest in Cyber Security as well, Nice to meet you!
+
+I'm highly experienced in React.js and Next.js. I’ve successfully delivered 11+ freelancing projects and provided over 200 hours of dedicated support to clients. Beyond development, I’m deeply passionate about system design and cybersecurity, and I like reading blogs and playing chess. Let's connect
+ if you want to bring your MVP idea to life. Read more
+
+Recent Writings
+
+I love sharing my knowledge with others. I hope you will click on them. Here are a few of my latest articles. You can find more on my blog page.
+
+How to create a CI/CD pipeline with GitHub Actions for Hostinger
+5 mins read
+June 18, 2024
+In this tutorial, we will learn how to create a CI/CD pipeline with GitHub Actions for Hostinger to deploy NextJs application.
+How to print your first 'Hello world' in console
+3 mins read
+April 18, 2023
+How to code? Correct way of learning to code. In this blog am talking about how i started and how you can start coding.
+My Projects
+
+I love building cool products and sharing my knowledge with others.Here are a few of my projects. You can find more on my projects page.
+
+Array Sorting Visualizer
+2022
+
+Created a Array-Sorting visualizer using JavaScript which gives a visual representation of how different sorting Techniques works
+
+JavaScript
+HTML
+CSS
+Bootstrap
+Website
+Source
+Kurma
+Oct 2024 - Present
+
+Kurma is an open-source Retrieval-Augmented Generation (RAG) that integrates open-source LLMs with Langchain. It allows seamless interaction with multiple PDFs simultaneously for enhanced document analysis and conversational capabilities.
+
+Python
+Streamlit
+openAI
+Huggingface
+langchain
+Website
+Source
+Life updates
+
+I love building cool products and sharing my knowledge with others. Here are a few of my projects. You can find more on my.
+
+2024
+Graduated from college with a degree in Computer Science
+Started working at Sophos as a Threat Researcher
+Started my journey to interact with the community (majorly X )
+2023
+Getting more clients for my freelance work
+Started learning Python Now
+Started working on my personal projects
+2022
+Started learning React and Firebase
+Started working on my personal projects
+Started my journey in the freelancing world
+© Shailendra Singh 2026. Website built using Next.js & TailwindCSS
