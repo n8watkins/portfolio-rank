@@ -64,7 +64,7 @@ import { atTheDoor } from "../lib/reviews/door.mjs";
 import { APPLIED, OPEN_CASE_SQL, ensureReviewSchema } from "../lib/reviews/store.mjs";
 import { rankForWrite, rankFromCode } from "../lib/tiers-store.mjs";
 import { assignShownRanks } from "../lib/ranking/store.mjs";
-import { reconcileAlerts } from "./alerts.mjs";
+import { activeAlerts, reconcileAlerts } from "./alerts.mjs";
 import {
   LADDER_UNKNOWN_SQL,
   HIDE_PER_DAY,
@@ -73,11 +73,15 @@ import {
   RECHECKED,
   RECHECK_AFTER_MS,
   HIDE_WEAK_PER_DAY,
+  HIDE_WEAK_LEAKING_PER_DAY,
+  NEVER_SHOWN_SQL,
+  SPIKE_WEAK_KIND_MIN,
   SPIKE_CLASS,
   SPIKE_NEW,
   SPIKE_WEAK,
   SPIKE_WEAK_WINDOW_MS,
   WEAK_HIDES_ALERT,
+  WEAK_HIDES_CLEAR,
   WEAK_HIDES_WINDOW_MS,
   WEAK_HOLD_MAX_MS,
   SPIKE_WINDOW_MS,
@@ -608,6 +612,7 @@ export async function runHealthCheck({
   // The day's pace of hiding and the spike freeze's limits (./not-working.mjs); a test may set its own.
   hidePerDay = HIDE_PER_DAY,
   hideWeakPerDay = HIDE_WEAK_PER_DAY,
+  hideWeakLeakingPerDay = HIDE_WEAK_LEAKING_PER_DAY,
   spikeNew = SPIKE_NEW,
   spikeClass = SPIKE_CLASS,
   spikeWeak = SPIKE_WEAK,
@@ -698,7 +703,7 @@ export async function runHealthCheck({
   const rowSql = (where) =>
     `SELECT p.url, p.status, p.reason, p.health, p.health_reason, p.health_fails, p.health_first_fail_at, p.health_checked_at,
             p.final_url, CASE WHEN json_valid(p.facts) THEN json_extract(p.facts, '$.final_url') END AS facts_final_url,
-            ${RUBRIC_TOKEN("p")} AS rubric_token,
+            ${RUBRIC_TOKEN("p")} AS rubric_token, CASE WHEN ${NEVER_SHOWN_SQL("p")} THEN 1 ELSE 0 END AS never_shown,
             CASE WHEN ${NOT_PORTFOLIO("p")} THEN 1 ELSE 0 END AS not_portfolio,
             CASE WHEN ${OPEN_CASE_SQL("p")} THEN 1 ELSE 0 END AS open_case,
             CASE WHEN ${REMOVAL_ON_RECORD_SQL("p")} THEN 1 ELSE 0 END AS decided_removal,
@@ -872,7 +877,7 @@ export async function runHealthCheck({
     // A removal decided in the review queue is down with its reason (rule 3 of nextHealth), off the ladder.
     computed.set(r, { row, prev, at, next: nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at) });
   }
-  const pace = await hidingPace(db, { hasPool, hasFirst: marksCols.has("pool_first_at"), hasHeld: marksCols.has("pool_held"), now, hidePerDay, hideWeakPerDay, spikeNew, spikeClass, spikeWeak, weakHidesAlert });
+  const pace = await hidingPace(db, { hasPool, hasFirst: marksCols.has("pool_first_at"), hasHeld: marksCols.has("pool_held"), hasHeldAt: marksCols.has("pool_held_at"), now, hidePerDay, hideWeakPerDay, hideWeakLeakingPerDay, spikeNew, spikeClass, spikeWeak, weakHidesAlert });
   summary.pace = pace;
   const DAYMS = 86400000;
   const isoAt = (ms) => new Date(ms).toISOString();
@@ -885,7 +890,7 @@ export async function runHealthCheck({
       const lifted = (held === "freeze" && !pace.frozen) || (held === "freeze-weak" && !pace.weakFrozenKinds.includes(reasonClass(c.next.reason)));
       if (!lifted || !c.next.pool) continue;
       const t = c.at.getTime();
-      c.next = { ...c.next, health: c.next.health === "down" ? "suspect" : c.next.health, fails: Math.min(Number(c.next.fails ?? 0), RECHECKED), pool: { ...c.next.pool, stage: Math.min(c.next.pool.stage, RECHECKED), since: null, startedAt: isoAt(t), nextAt: isoAt(t + confirmAfterMs(c.next.reason)), held: null } };
+      c.next = { ...c.next, health: c.next.health === "down" ? "suspect" : c.next.health, fails: Math.min(Number(c.next.fails ?? 0), RECHECKED), pool: { ...c.next.pool, stage: Math.min(c.next.pool.stage, RECHECKED), since: null, startedAt: isoAt(t), nextAt: isoAt(t + confirmAfterMs(c.next.reason)), held: null, heldAt: null } };
       pace.released.push({ url: r.url, reason: c.next.reason });
     }
   }
@@ -903,6 +908,12 @@ export async function runHealthCheck({
     // Kept through the weak drain too, so a released site is never held again by the same freeze.
     const heldAt = c.prev?.pool?.held === "freeze-weak" || c.prev?.pool?.held === "drain" ? (c.prev.pool.heldAt ?? null) : null;
     const holdExpired = heldAt != null && c.at.getTime() - Date.parse(heldAt) >= weakHoldMaxMs;
+    if (weak && Number(c.row?.never_shown ?? 0) === 1) {
+      // Never shown to anyone (./not-working.mjs NEVER_SHOWN_SQL): hiding it changes nothing visitors see, so it
+      // is neither held by a weak freeze nor counted against the weak drain's allowance or the slow leak.
+      c.next = { ...c.next, pool: { ...c.next.pool, held: null, heldAt: null } };
+      continue;
+    }
     if (weak && pace.weakFrozenKinds.includes(reasonClass(c.next.reason)) && holdExpired) {
       // Held WEAK_HOLD_MAX_MS and still failing: released into the weak drain below (a site that really is blank
       // for good), so no freeze holds a site forever.
@@ -1008,7 +1019,9 @@ export async function runHealthCheck({
       ["answers_at", r.ok === true ? r.answersAt ?? null : row?.answers_at == null ? null : String(row.answers_at)],
       ["pool_first_at", pool?.firstAt ?? null],
       ["pool_held", pool?.held ?? null],
-      ["pool_held_at", pool?.held === "freeze-weak" || pool?.held === "drain" ? (pool?.heldAt ?? null) : null],
+      // Kept while held, through the weak drain after a release on expiry, and while hidden after that release
+      // (the freeze alert counts those released sites: hidingPace releasedByClass).
+      ["pool_held_at", pool?.held === "freeze-weak" || pool?.held === "drain" || pool?.stage === NOT_WORKING ? (pool?.heldAt ?? null) : null],
     ].filter(([c]) => marksCols.has(c));
     const mark = {
       sql: `INSERT INTO health_marks (url, last_fail_at, unknown_weeks, unknown_last_at, unknown_since,
@@ -1185,23 +1198,38 @@ export async function runHealthCheck({
   // The spike freeze: one owner alert while it holds, cleared by itself once the spike is over (read from
   // the marks, so every run agrees). The day's ordinary pace (the drain) never alerts.
   // The slow leak (./not-working.mjs WEAK_HIDES_ALERT): weak verdicts hidden in the last week, this run's included.
-  pace.weakLeak = pace.weakHidden > weakHidesAlert;
+  // Raised over WEAK_HIDES_ALERT; once up it stays until the week's count falls to WEAK_HIDES_CLEAR, so the slowed
+  // drain (1 a day, 7 a week) never clears it while the leak goes on, and the drain never speeds up again unseen.
+  pace.weakLeak = pace.weakHidden > (pace.leakingAtStart ? WEAK_HIDES_CLEAR : weakHidesAlert);
   const holdDays = weakHoldMaxMs / 86400000;
   const byKind = (o) =>
     Object.entries(o)
       .map(([k, n]) => `${k} ${n}`)
       .join(", ");
   const spikeAlerts = [];
-  if (pace.frozen || pace.weakFrozen) {
+  // Released on expiry and still draining, or hidden within the last week (fifth review of #292, N1): the freeze
+  // alert stays up for them, so a release never hides real sites with no alert standing.
+  // (This run's releases were still held when hidingPace counted, so they are added here.)
+  for (const e of pace.expired) {
+    const k = reasonClass(e.reason);
+    pace.releasedByClass[k] = (pace.releasedByClass[k] ?? 0) + 1;
+  }
+  pace.releasing = pace.releasing || pace.expired.length > 0;
+  const releasedKinds = Object.keys(pace.releasedByClass).sort();
+  if (pace.frozen || pace.weakFrozen || pace.releasing) {
     spikeAlerts.push({
       key: SPIKE_ALERT_KEY,
       kind: "problem",
       title: pace.weakFrozen
         ? `Listed sites our reader sees as ${pace.weakFrozenKinds.join(", ")} are held, not hidden: ${pace.weakFrozenKinds.map((k) => Math.max(pace.newWeakByClass[k] ?? 0, pace.heldWeakByClass[k] ?? 0)).reduce((a, b) => a + b, 0)} of them`
-        : `${pace.newFailures} listed sites started failing within ${SPIKE_WINDOW_MS / 86400000} days: none of them is hidden while it lasts`,
+        : pace.frozen
+          ? `${pace.newFailures} listed sites started failing within ${SPIKE_WINDOW_MS / 86400000} days: none of them is hidden while it lasts`
+          : `Sites held as ${releasedKinds.join(", ")} for ${holdDays} days were released, hiding ${pace.weakPerDay} a day`,
       detail: [
         pace.weakFrozen &&
-          `New weak verdicts within ${SPIKE_WEAK_WINDOW_MS / 86400000} days by kind: ${byKind(pace.newWeakByClass) || "none"}; held and still failing: ${byKind(pace.heldWeakByClass) || "none"}. So many of one kind usually means our reader, and it may keep going; other kinds are not held. A kind lifts when fewer than ${spikeWeak} of its held sites still fail (then each still failing needs a full week again). A site held ${holdDays} days and still failing is released anyway and hidden at ${hideWeakPerDay} a day${pace.expired.length ? ` (${pace.expired.length} released this run)` : ""}: fix the reader before then to keep them listed.`,
+          `New weak verdicts within ${SPIKE_WEAK_WINDOW_MS / 86400000} days by kind: ${byKind(pace.newWeakByClass) || "none"}; held and still failing: ${byKind(pace.heldWeakByClass) || "none"}. So many usually means our reader, and it may keep going; kinds with few are not held. A kind lifts when fewer than ${spikeWeak} of its held sites still fail (then each still failing needs a full week again). A site held ${holdDays} days and still failing is released anyway and hidden at ${pace.weakPerDay} a day${pace.expired.length ? ` (${pace.expired.length} released this run)` : ""}: fix the reader before then to keep them listed.`,
+        pace.releasing &&
+          `Released, hiding ${pace.weakPerDay} a day: held ${holdDays} days and still failing, by kind ${byKind(pace.releasedByClass)} still draining or hidden in the last ${WEAK_HIDES_WINDOW_MS / 86400000} days. This stays up until the last of them has been hidden a week.`,
         pace.frozen &&
           `So many new failures at once (by kind: ${byKind(pace.byClass)}) usually means the checker or a host-wide outage rather than the sites. They stay shown; once the spike is over, each still failing is hidden only after its full confirming wait, ${hidePerDay} a day. This clears by itself.`,
       ]
@@ -1214,7 +1242,7 @@ export async function runHealthCheck({
       key: WEAK_LEAK_ALERT_KEY,
       kind: "problem",
       title: `${pace.weakHidden} listed sites were hidden in ${WEAK_HIDES_WINDOW_MS / 86400000} days on weak evidence (a blank page, a blocked capture, a duplicate...)`,
-      detail: `More than ${weakHidesAlert} in a week is more than real blank or broken sites usually make: our reader may be failing slowly, under the freeze's limit. Nothing is held for this; check a few on /admin/health-pool. It clears once the week's count falls back.`,
+      detail: `More than ${weakHidesAlert} in a week is more than real blank or broken sites usually make: our reader may be failing slowly, under the freeze's limit. Nothing is held for this, but while it is up the weak drain hides only ${hideWeakLeakingPerDay} a day; check a few on /admin/health-pool. It clears once the week's count falls to ${WEAK_HIDES_CLEAR} or fewer.`,
     });
   }
   await reconcileAlerts(db, {
@@ -1281,7 +1309,7 @@ export const WEAK_LEAK_ALERT_KEY = "health-weak-hides";
  *                 still fail, by kind (byClass); frozen when over the limits
  * Returns that, with empty lists for the sites this run holds.
  */
-async function hidingPace(db, { hasPool, hasFirst, hasHeld, now, hidePerDay, hideWeakPerDay, spikeNew, spikeClass, spikeWeak, weakHidesAlert }) {
+async function hidingPace(db, { hasPool, hasFirst, hasHeld, hasHeldAt, now, hidePerDay, hideWeakPerDay, hideWeakLeakingPerDay, spikeNew, spikeClass, spikeWeak, weakHidesAlert }) {
   const out = {
     // The drain, by kind: strong evidence and weak verdicts (./not-working.mjs isWeakVerdict) each have their own allowance.
     hiddenToday: 0,
@@ -1304,6 +1332,13 @@ async function hidingPace(db, { hasPool, hasFirst, hasHeld, now, hidePerDay, hid
     // The slow leak: weak verdicts hidden within WEAK_HIDES_WINDOW_MS (an alert only).
     weakHidden: 0,
     weakLeak: false,
+    // Whether the leak alert was up when the run started: the weak drain is then HIDE_WEAK_LEAKING_PER_DAY.
+    leakingAtStart: false,
+    weakPerDay: hideWeakPerDay,
+    weakTogether: 0,
+    // Per kind, sites released on expiry still draining or hidden within the last week (the alert stays up).
+    releasedByClass: {},
+    releasing: false,
     frozenHeld: [],
     // Weak-frozen sites released after WEAK_HOLD_MAX_MS held, into the weak drain.
     expired: [],
@@ -1312,26 +1347,59 @@ async function hidingPace(db, { hasPool, hasFirst, hasHeld, now, hidePerDay, hid
   };
   if (!hasPool) return out;
   const join = `FROM health_marks m JOIN portfolios p ON p.url = m.url WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL`;
+  // A weak verdict that counts: on a site visitors can see. A never-shown site (./not-working.mjs NEVER_SHOWN_SQL)
+  // is left out of the weak freeze, the slow-leak count and the weak drain's allowance.
+  const shown = `NOT ${NEVER_SHOWN_SQL("p")}`;
+  const counted = (r) => isWeakVerdict(r.health_reason) && Number(r.never_shown ?? 0) === 0;
+  // The slow leak first (it sets the weak drain's pace): weak verdicts hidden within WEAK_HIDES_WINDOW_MS.
+  out.weakHidden = (
+    await db.execute({
+      sql: `SELECT p.health_reason, CASE WHEN ${NEVER_SHOWN_SQL("p")} THEN 1 ELSE 0 END AS never_shown ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ?`,
+      args: [new Date(now.getTime() - WEAK_HIDES_WINDOW_MS).toISOString()],
+    })
+  ).rows.filter(counted).length;
+  // The weak drain slows while the leak alert is up (as the last run left it), and returns to its pace once it
+  // clears (the week's count back at the limit or under).
+  try {
+    out.leakingAtStart = (await activeAlerts(db)).some((a) => a.key === WEAK_LEAK_ALERT_KEY);
+  } catch {
+    out.leakingAtStart = out.weakHidden > weakHidesAlert;
+  }
+  out.weakPerDay = out.leakingAtStart ? Math.min(hideWeakPerDay, hideWeakLeakingPerDay) : hideWeakPerDay;
   const today = (
-    await db.execute({ sql: `SELECT p.health_reason, m.pool_since ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ? ORDER BY m.pool_since`, args: [new Date(now.getTime() - 86400000).toISOString()] })
+    await db.execute({
+      sql: `SELECT p.health_reason, m.pool_since, CASE WHEN ${NEVER_SHOWN_SQL("p")} THEN 1 ELSE 0 END AS never_shown ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ? ORDER BY m.pool_since`,
+      args: [new Date(now.getTime() - 86400000).toISOString()],
+    })
   ).rows;
   for (const r of today) {
     const weak = isWeakVerdict(r.health_reason);
+    if (weak && !counted(r)) continue;
     if (weak) out.hiddenWeakToday++;
     else out.hiddenToday++;
     if (weak) out.oldestWeakToday = out.oldestWeakToday ?? String(r.pool_since);
     else out.oldestToday = out.oldestToday ?? String(r.pool_since);
   }
   out.allowance = Math.max(0, hidePerDay - out.hiddenToday);
-  out.allowanceWeak = Math.max(0, hideWeakPerDay - out.hiddenWeakToday);
+  out.allowanceWeak = Math.max(0, out.weakPerDay - out.hiddenWeakToday);
   const first = hasFirst ? "COALESCE(m.pool_first_at, m.pool_started_at)" : "m.pool_started_at";
-  const recent = (await db.execute({ sql: `SELECT p.health_reason, ${first} AS first_at ${join} AND ${first} >= ?`, args: [new Date(now.getTime() - SPIKE_WEAK_WINDOW_MS).toISOString()] })).rows;
+  const recent = (
+    await db.execute({
+      sql: `SELECT p.url, p.health_reason, ${first} AS first_at, CASE WHEN ${NEVER_SHOWN_SQL("p")} THEN 1 ELSE 0 END AS never_shown ${join} AND ${first} >= ?`,
+      args: [new Date(now.getTime() - SPIKE_WEAK_WINDOW_MS).toISOString()],
+    })
+  ).rows;
   const strongFrom = new Date(now.getTime() - SPIKE_WINDOW_MS).toISOString();
+  // Per kind, the sites a weak freeze weighs: new within the window, or held by it (a set: one site counts once).
+  const active = {};
+  const add = (k, url) => (active[k] ??= new Set()).add(String(url));
   for (const r of recent) {
     const k = reasonClass(r.health_reason);
     if (isWeakVerdict(r.health_reason)) {
+      if (!counted(r)) continue;
       out.newWeak++;
       out.newWeakByClass[k] = (out.newWeakByClass[k] ?? 0) + 1;
+      add(k, r.url);
       continue;
     }
     if (String(r.first_at) < strongFrom) continue;
@@ -1339,23 +1407,41 @@ async function hidingPace(db, { hasPool, hasFirst, hasHeld, now, hidePerDay, hid
     out.byClass[k] = (out.byClass[k] ?? 0) + 1;
   }
   if (hasHeld) {
-    for (const r of (await db.execute(`SELECT p.health_reason ${join} AND m.pool_held = 'freeze-weak'`)).rows) {
+    for (const r of (await db.execute(`SELECT p.url, p.health_reason ${join} AND m.pool_held = 'freeze-weak' AND ${shown}`)).rows) {
       const k = reasonClass(r.health_reason);
       out.heldWeak++;
       out.heldWeakByClass[k] = (out.heldWeakByClass[k] ?? 0) + 1;
+      add(k, r.url);
     }
   }
   out.frozen = out.newFailures > spikeNew || Object.values(out.byClass).some((n) => n > spikeClass);
-  // A weak freeze, per kind: over the limit of new ones, or still holding the limit of failing sites. A held
-  // site is released after WEAK_HOLD_MAX_MS (in the hiding loop), so the held count falls and the kind lifts.
-  const kinds = new Set([...Object.keys(out.newWeakByClass), ...Object.keys(out.heldWeakByClass)]);
-  out.weakFrozenKinds = [...kinds].filter((k) => (out.newWeakByClass[k] ?? 0) > spikeWeak || (out.heldWeakByClass[k] ?? 0) >= spikeWeak).sort();
+  // A weak freeze, per kind: over the limit of new ones, or still holding the limit of failing sites; or one
+  // fault showing as several kinds: all weak kinds together over the limit, then every kind with at least
+  // SPIKE_WEAK_KIND_MIN. A held site is released after WEAK_HOLD_MAX_MS (in the hiding loop), so the counts
+  // fall and the kind lifts on its own.
+  const size = (k) => active[k]?.size ?? 0;
+  const together = Object.keys(active).reduce((n, k) => n + size(k), 0);
+  out.weakTogether = together;
+  out.weakFrozenKinds = Object.keys(active)
+    .filter((k) => (out.newWeakByClass[k] ?? 0) > spikeWeak || (out.heldWeakByClass[k] ?? 0) >= spikeWeak || (together > spikeWeak && size(k) >= SPIKE_WEAK_KIND_MIN))
+    .sort();
   out.weakFrozen = out.weakFrozenKinds.length > 0;
-  // The slow leak: weak verdicts hidden within WEAK_HIDES_WINDOW_MS, alerted over the limit (nothing held).
-  out.weakHidden = (
-    await db.execute({ sql: `SELECT p.health_reason ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ?`, args: [new Date(now.getTime() - WEAK_HIDES_WINDOW_MS).toISOString()] })
-  ).rows.filter((r) => isWeakVerdict(r.health_reason)).length;
-  out.weakLeak = out.weakHidden > weakHidesAlert;
+  // Sites a kind released on expiry still draining, or hidden within the last week: the freeze alert stays up for
+  // them ("released, hiding N a day"), so the release never hides real sites silently.
+  if (hasHeldAt) {
+    const since = new Date(now.getTime() - WEAK_HIDES_WINDOW_MS).toISOString();
+    for (const r of (
+      await db.execute({
+        sql: `SELECT p.health_reason ${join} AND m.pool_held_at IS NOT NULL AND COALESCE(m.pool_held, '') != 'freeze-weak' AND ${shown}
+              AND (m.pool_held = 'drain' OR (m.pool_stage = ${NOT_WORKING} AND m.pool_since > ?))`,
+        args: [since],
+      })
+    ).rows) {
+      const k = reasonClass(r.health_reason);
+      out.releasedByClass[k] = (out.releasedByClass[k] ?? 0) + 1;
+    }
+  }
+  out.releasing = Object.keys(out.releasedByClass).length > 0;
   return out;
 }
 

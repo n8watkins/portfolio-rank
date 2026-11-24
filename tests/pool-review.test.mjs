@@ -92,7 +92,7 @@ test("the drain: two batches in one hour never hide more than the day's 20 betwe
   assert.equal(await hiddenCount(db), pool.HIDE_PER_DAY);
 });
 
-test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on one day) drains, 5 a day", async () => {
+test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on one day) drains 5 a day, then 1 a day under the leak alert", async () => {
   const many = Array.from({ length: 40 }, (_, i) => `https://wave-${String(i).padStart(2, "0")}.example`);
   const { db } = await setup(many, 0);
   const blank = async (u) => response(200, "<div id=root></div>", u);
@@ -106,9 +106,16 @@ test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on
   await check(T0 + 7 * D);
   assert.equal(await hiddenCount(db), pool.HIDE_WEAK_PER_DAY);
   assert.equal(await spikeAlert(db), false, "40 blank pages is under the spike limits");
-  for (let d = 8; d <= 14; d++) await check(T0 + d * D + H);
-  assert.equal(await hiddenCount(db), 40, "all hidden within eight days, 5 a day");
-  assert.equal(await spikeAlert(db), false);
+  const byDay = {};
+  for (let d = 8; d <= 40; d++) {
+    await check(T0 + d * D + H);
+    byDay[d] = await hiddenCount(db);
+  }
+  assert.equal(byDay[9], 15, "5 a day");
+  assert.equal(byDay[10], 20, "the leak alert is raised at the end of this run (20 in a week)");
+  assert.equal(byDay[11], 21, "then 1 a day while it is up");
+  assert.equal(byDay[40], 40, "all hidden in the end");
+  assert.equal(await spikeAlert(db), false, "40 of one kind is no freeze");
 });
 
 test("the spike freeze: 300 sites failing at once (a host-wide 500) are none hidden and alert; when it ends, those still failing need their full evidence again and drain", async () => {
@@ -372,10 +379,12 @@ const BLANK_HTML = "<div id=root></div>";
  * fault never fixed unless `fixed(url, day)` says so. A check of every site each day (and an hour later,
  * the first re-check), through `until`. Returns each day's hidden count and alert, and the database.
  */
-async function blankFault({ perDay, days, until, fixed = () => false, spread = null }) {
+async function blankFault({ perDay, days, until, fixed = () => false, spread = null, before = async () => {} }) {
   const sites = spread ?? Array.from({ length: perDay * days }, (_, i) => ({ url: `https://blank-${String(i).padStart(3, "0")}.example`, day: 1 + Math.floor(i / perDay) }));
   const { db } = await setup([], 0);
-  for (const s of sites) await site(db, s.url, { rubric: answer(true) });
+  // A gated site (`gated`): never shown, its capture blocked and no screenshot (pipeline/not-working.mjs NEVER_SHOWN_SQL).
+  for (const s of sites) await site(db, s.url, s.gated ? { rubric: answer(true), status: "error", reason: "capture blocked: 9 words and no outbound links", captured: false } : { rubric: answer(true) });
+  await before(db);
   let day = 0;
   // A site's failure now: "blank" (the default) or "social" (it redirects to a LinkedIn profile), or null.
   const failing = (u) => {
@@ -404,6 +413,8 @@ async function blankFault({ perDay, days, until, fixed = () => false, spread = n
       day,
       hidden: await hiddenCount(db),
       hiddenSocial: await hiddenOf("https://social-"),
+      hiddenGated: await hiddenOf("https://gated-"),
+      perDay: s2.pace.weakPerDay,
       alert: alerts.includes(health.SPIKE_ALERT_KEY),
       leak: alerts.includes(health.WEAK_LEAK_ALERT_KEY),
       frozenKinds: s2.pace.weakFrozenKinds.join(",") || s.pace.weakFrozenKinds.join(","),
@@ -414,7 +425,7 @@ async function blankFault({ perDay, days, until, fixed = () => false, spread = n
   return { db, log, sites };
 }
 /** The day-by-day log of a simulation, for the report. */
-const printLog = (name, log) => console.log(`${name}\n${log.map((l) => `  day ${l.day}: hidden ${l.hidden}, held ${l.held}, released ${l.released}, frozen [${l.frozenKinds}], spike alert ${l.alert}, leak alert ${l.leak}`).join("\n")}`);
+const printLog = (name, log) => console.log(`${name}\n${log.map((l) => `  day ${l.day}: hidden ${l.hidden}, held ${l.held}, released ${l.released}, frozen [${l.frozenKinds}], weak drain ${l.perDay}/day, freeze alert ${l.alert}, leak alert ${l.leak}`).join("\n")}`);
 
 for (const perDay of [24, 26, 40]) {
   test(`a weak fault that keeps going: blank renders for ${perDay} new real sites a day for a week, never fixed, hide none for two weeks of holding and alert throughout`, async () => {
@@ -455,27 +466,82 @@ test("8 genuinely blank sites over a week are still hidden, with no alert", asyn
   assert.ok(log.every((l) => !l.alert && !l.leak), "neither the freeze alert nor the leak alert");
 });
 
-test("the slow leak (fourth review): blank renders for 6 new real sites a day for 30 days never freeze, and the leak alert says so", async () => {
+test("the slow leak: blank renders for 6 new real sites a day for 30 days never freeze; the leak alert is raised and slows the weak drain to 1 a day", async () => {
   const { log } = await blankFault({ perDay: 6, days: 30, until: 30 });
   printLog("6 new blank a day for 30 days", log);
   assert.ok(log.every((l) => !l.alert), "6 x 8 = 48: under the freeze, nothing is held");
   const first = log.findIndex((l) => l.leak);
   assert.ok(first > 0, "the leak alert is raised");
   assert.ok(log[first].hidden > pool.WEAK_HIDES_ALERT && log[first].hidden <= pool.WEAK_HIDES_ALERT + pool.HIDE_WEAK_PER_DAY, `on the day the week's weak hides pass ${pool.WEAK_HIDES_ALERT}`);
-  assert.ok(log.slice(first).every((l) => l.leak), "and stays up while the leak goes on");
+  assert.ok(log.slice(first + 1).some((l) => l.perDay === pool.HIDE_WEAK_LEAKING_PER_DAY), "the weak drain slows while it is up");
+  // 115 by day 30 at 5 a day before; roughly 40 now.
+  assert.ok(log[30].hidden >= 30 && log[30].hidden <= 50, `about 40 hidden by day 30 (${log[30].hidden})`);
 });
 
-test("a weak freeze never holds forever: 60 sites blank for good are released after 14 days held and hidden 5 a day", async () => {
+test("a weak freeze never holds forever: 60 sites blank for good are released after 14 days held, drain, and an alert stands every day until the drain ends", async () => {
   const sites = Array.from({ length: 60 }, (_, i) => ({ url: `https://forever-${String(i).padStart(2, "0")}.example`, day: 1 }));
-  const { log } = await blankFault({ spread: sites, until: 36 });
+  const { log } = await blankFault({ spread: sites, until: 70 });
   printLog("60 blank for good", log);
   assert.equal(log[8].held, 60, "held from day 8");
   assert.equal(log[21].hidden, 0, "none hidden while held");
-  assert.ok(log[21].alert, "the alert stands while they are held");
   assert.equal(log[22].released, 60, "released after 14 days held");
-  for (let d = 22; d <= 33; d++) assert.equal(log[d].hidden, Math.min(60, (d - 21) * pool.HIDE_WEAK_PER_DAY), `day ${d}: 5 a day`);
-  assert.equal(log[33].hidden, 60);
-  assert.ok(!log[23].alert, "the kind lifts once its held sites are released");
+  assert.equal(log[22].hidden, pool.HIDE_WEAK_PER_DAY, "then the weak drain");
+  const done = log.findIndex((l) => l.hidden === 60);
+  assert.ok(done > 22, `all hidden by day ${done}`);
+  const silent = log.slice(1, done + 1).filter((l) => !l.alert && !l.leak).map((l) => l.day);
+  assert.deepEqual(silent, [], "no silent day from day 1 until the drain ends");
+  assert.ok(log.slice(1, done + 1).every((l) => l.alert), "the freeze alert itself stays up: held, then released and hiding");
+});
+
+test("one fault as two kinds: 45 blank renders and 45 social redirects in 8 days freeze both", async () => {
+  const blank = Array.from({ length: 45 }, (_, i) => ({ url: `https://two-blank-${String(i).padStart(2, "0")}.example`, day: 1 + (i % 8) }));
+  const social = Array.from({ length: 45 }, (_, i) => ({ url: `https://social-${String(i).padStart(2, "0")}.example`, day: 1 + (i % 8), kind: "social" }));
+  const { log } = await blankFault({ spread: [...blank, ...social], until: 12 });
+  printLog("45 blank + 45 social", log);
+  assert.equal(log[8].frozenKinds, "blank,social-redirect", "both kinds frozen together");
+  assert.ok(log.every((l) => l.hidden === 0), "none hidden");
+  const first = log.findIndex((l) => l.alert);
+  assert.ok(first > 0 && first <= 5, `the alert from the day the two together pass 50 (day ${first})`);
+  assert.ok(log.slice(first).every((l) => l.alert), "and it stays up");
+});
+
+test("never-shown gated sites: 60 at once trip no freeze and no alert, and leave the weak allowance to visible sites", async () => {
+  const gated = Array.from({ length: 60 }, (_, i) => ({ url: `https://gated-${String(i).padStart(2, "0")}.example`, day: 1, gated: true }));
+  const visible = Array.from({ length: 5 }, (_, i) => ({ url: `https://visible-blank-${i}.example`, day: 1 }));
+  const { log } = await blankFault({ spread: [...gated, ...visible], until: 10 });
+  printLog("60 gated + 5 visible blank", log);
+  assert.ok(log.every((l) => !l.alert && !l.leak && l.frozenKinds === ""), "no freeze, no alert");
+  assert.equal(log[8].hiddenGated, 60, "the gated sites go to the pool on their confirming day");
+  assert.equal(log[8].hidden - log[8].hiddenGated, 5, "and the 5 visible ones still have the whole weak allowance");
+});
+
+test("release night with old weak rows that include never-shown blocked captures: no leak alert in week two from rows nobody can see", async () => {
+  const old = new Date(T0 - 20 * D).toISOString();
+  const gated = Array.from({ length: 60 }, (_, i) => ({ url: `https://gated-old-${String(i).padStart(2, "0")}.example`, day: 0, gated: true }));
+  const visible = Array.from({ length: 4 }, (_, i) => ({ url: `https://old-blank-${i}.example`, day: 0 }));
+  const all = [...gated, ...visible];
+  const { log } = await blankFault({
+    spread: all,
+    until: 16,
+    before: async (db) => {
+      await ensureReviewSchema(db);
+      for (const s of all) {
+        await db.execute({ sql: "UPDATE portfolios SET health = 'suspect', health_fails = 1, health_first_fail_at = ?, health_reason = 'renders blank' WHERE url = ?", args: [old, s.url] });
+        await db.execute({ sql: "DELETE FROM health_marks WHERE url = ?", args: [s.url] });
+      }
+    },
+  });
+  printLog("release night: 60 never-shown + 4 visible old weak rows", log);
+  assert.ok(log.every((l) => !l.alert && !l.leak), "no freeze and no leak alert, week one or week two");
+  assert.equal(log[16].hidden, 64, "all of them in the pool by the end");
+});
+
+test("8 genuinely blank sites over a week stay silent and are all hidden (fifth review)", async () => {
+  const sites = Array.from({ length: 8 }, (_, i) => ({ url: `https://still-blank-${i}.example`, day: 1 + Math.floor((i * 7) / 8) }));
+  const { log } = await blankFault({ spread: sites, until: 16 });
+  printLog("8 genuinely blank", log);
+  assert.equal(log[16].hidden, 8);
+  assert.ok(log.every((l) => !l.alert && !l.leak));
 });
 
 test("a weak freeze is per kind: a cluster of blank renders leaves another kind's verdicts moving", async () => {

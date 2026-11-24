@@ -160,6 +160,32 @@ export const WEAK_HOLD_MAX_MS = 14 * DAY;
  */
 export const WEAK_HIDES_ALERT = 15;
 export const WEAK_HIDES_WINDOW_MS = 7 * DAY;
+/**
+ * DEFAULT: the weak drain while the slow-leak alert is up (fifth review of
+ * #292): 1 a day instead of HIDE_WEAK_PER_DAY. Once up, the alert clears only
+ * when the week's weak hides fall to WEAK_HIDES_CLEAR or fewer, so the slowed
+ * drain (7 a week) keeps it up while the leak goes on (6 new blank a day for
+ * 30 days: about 40 hidden instead of 115).
+ */
+export const HIDE_WEAK_LEAKING_PER_DAY = 1;
+export const WEAK_HIDES_CLEAR = 5;
+/**
+ * DEFAULT: one fault showing as several kinds (fifth review of #292: 45 blank
+ * renders and 45 social redirects in 8 days): more than SPIKE_WEAK new weak
+ * first failures of all kinds together also freezes, then every kind with at
+ * least SPIKE_WEAK_KIND_MIN of them; each kind still lifts on its own count.
+ */
+export const SPIKE_WEAK_KIND_MIN = 10;
+/**
+ * SQL (never NULL): the portfolios row aliased `p` is already hidden from
+ * visitors and was never shown: its capture never showed the site (status
+ * 'error', a blocked-capture reason) and there is no screenshot (lib/hidden.mjs
+ * hides a failed capture unless the health check says live). Hiding it in the
+ * pool changes nothing anyone sees, so it is left out of the weak freeze, the
+ * slow-leak count and the weak drain's allowance (fifth review of #292): a
+ * release night or a burst of gated submissions raises no "reader failing" alarm.
+ */
+export const NEVER_SHOWN_SQL = (p = "p") => `(${p}.status = 'error' AND substr(COALESCE(${p}.reason, ''), 1, 17) = 'capture blocked: ' AND ${p}.shot_key IS NULL)`;
 /** Whether a failure reason is weak evidence (WEAK_VERDICT). */
 export const isWeakVerdict = (reason) => WEAK_VERDICT.test(String(reason ?? ""));
 /** The kind of a failure reason, for the spike's per-kind count. */

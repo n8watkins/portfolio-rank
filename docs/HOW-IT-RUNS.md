@@ -285,8 +285,10 @@ Nothing at any step writes a row to your review page.
    It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day) before it is hidden, at the same 20 a day.
    Weak verdicts are counted over 8 days instead: a fault in our reader can go on for a week at a steady pace.
    More than 50 new ones of one kind (blank pages, say) in 8 days holds that kind's weak verdicts, still shown and checked daily, with one alert; other kinds keep moving.
-   The hold lifts when fewer than 50 of its held sites still fail, and each still failing then needs a full week again; a site held 14 days and still failing is released anyway and hidden at 5 a day, so a hold never lasts forever.
-   A slower leak gets an alert without a hold: more than 15 sites hidden on weak evidence in a week.
+   More than 50 of all weak kinds together holds every kind with 10 or more, since one fault can show as several kinds.
+   The hold lifts when fewer than 50 of its held sites still fail, and each still failing then needs a full week again; a site held 14 days and still failing is released anyway into the weak drain, so a hold never lasts forever, and the alert stays up ("released, hiding N a day") until a week after the last of them is hidden.
+   A slower leak gets an alert without a hold: more than 15 sites hidden on weak evidence in a week; while it is up only 1 a day is hidden, and it clears once the week's count is down to 5.
+   Sites nobody could see anyway (a capture that never showed the site, no screenshot) never count toward any of this.
    On release night, the sites already failing under the old rule keep their first failure date, so only those that really started failing recently count toward a spike; `node pipeline/health-check.mjs --dry-run` counts them beforehand ("Restarted on the ladder"), with how many fall inside the 48-hour and 8-day windows.
 4. **Keep re-checking** (hourly, when due): daily for the first 7 days, weekly to day 30, then monthly.
    Every night one plain request also goes to each hidden site; if it answers with words, its full re-check comes within the hour.
