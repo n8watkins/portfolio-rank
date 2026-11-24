@@ -269,6 +269,17 @@ Nothing at any step writes a row to your review page.
 
 1. **Nightly health check** (`health.yml`, `pipeline/health-check.mjs`, started by the night).
    Every listed site is loaded.
+   A plain request comes first, and its whole page is read up to 2,000,000 characters (`pipeline/gate.mjs` `httpGate`).
+   When that page is nearly empty, failed or shows too few portfolio signals, a real browser reads the site too (`pipeline/render.mjs`).
+   It reads once the page's text has held still for 2 seconds, scrolling one screen at a time while it waits so sections that load on scroll appear, for at most 10 seconds.
+   A page with under 400 characters of text (an intro screen or a loader) is not taken as finished: it is watched for up to 15 seconds.
+   The browser only scrolls: it never clicks, presses or submits anything, so a site whose intro waits for a press reads as its intro.
+   It scrolls one screen per half second, so at most about 20 screens (30 on a page that began thin) before the limit, which bounds an infinite feed; the scrolling can fire a site's own analytics scroll events.
+   Known limits, accepted because the page is read once: typing slower than about 20 characters a second counts as text holding still, so such a line is read mid-typing; and on a very long page a late section of under about 1,000 characters is not waited for.
+   These only change the stored text and signals, which never hide a site.
+   Of the rendered page at most 400,000 characters are kept, after script and style bodies, image data and empty decorative elements are dropped, so the menu and text survive.
+   The six portfolio signals and the role the page's title or description states (`pipeline/signals.mjs` `statedRole`, stored with the signals, not shown anywhere yet) are read from that page.
+   Low signals never hide or remove a site.
    On a first failed check the site is `suspect`: it leaves all AI work at once, but stays visible.
 2. **Re-check after 1 hour** (`recheck.yml`, `pipeline/recheck-run.mjs`, started by the hourly task).
    Up to 120 due sites a run, with a 20 minute limit.
@@ -316,6 +327,14 @@ A bot wall: a site whose capture met one is never failed for it; the first time,
 It is asked about again only after it failed a real check (it did not load, was parked or blank) and came back.
 A parked domain counts as the wrong thing also when its home page is only a redirect made on load (a script or a meta refresh of a few seconds) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
 The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
+A short page that loads Sedo's lander images, or whose whole title is Sedo's ("abdulmomin.dev - abdulmomin Resources and Information." on its own domain), is parked the same way.
+So is a short page that stands where the site was (`pipeline/gate.mjs` `placeholderPage`), with the reason `not the site: <what>`: a web server's default page (nginx, Apache, IIS, Caddy, Plesk), HostGator's placeholder, an empty "Index of /", GitHub Pages' "there isn't a site here", a host's unpublished-site page, Streamlit's "Error running app", the WordPress maintenance page, or a page whose whole text is a removal notice or "not found".
+Each needs that page's own evidence: a sentence only it says (a server's default `<title>` alone is never enough), or its whole text; and a page that shows 2 or more portfolio signals is never one.
+A server's default page may come from one stale address among a domain's answers, so before failing on one the check tries the address's https and www forms once each, and passes if either shows the site.
+A listed domain that now forwards to another domain whose page carries none of the person's name, on a host without the listed address's handle, and a word only gambling sites use (togel, gacor, maxwin, nổ hũ, taruhan, sportsbook) fails with `redirects to <domain>, a gambling site` (`pipeline/health.mjs` `redirectVerdict`); any other move is only reported.
+A browser that shows only its own error page (`chrome-error://`) fails with `does not load (the browser's error page)` when the failed navigation's error code says the site is not there; a code that says nothing about the site (a reset or a timeout), or none, is a check that could not tell.
+Each of these is a failed check, counted like any other failure of its kind by the health check's ladder, whichever ladder runs; none is ever a removal by itself.
+The capture judges where its browser ended with the same `parkedPage`: a new site whose first capture is one of these pages is not stored, is retried like any failed capture, and is hidden until a health check passes it (`lib/hidden.mjs`); a re-capture of a listed site that meets one keeps its good capture and changes nothing that is shown.
 A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
 
 ### A live site that may not be a portfolio (suspicion flags, not wired yet)

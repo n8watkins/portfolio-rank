@@ -2,6 +2,7 @@
 // pipeline/health.mjs (the weekly health check): is a site up, parked or for
 // sale? Tables ported from pipeline/check_parking_redirects.py.
 import { firstTitle, removeElements, stripTags } from "./page-controls.mjs";
+import { portfolioSignals } from "./signals.mjs";
 
 // Hosts that serve only parked or for-sale domains. Not godaddysites.com:
 // that is GoDaddy's website builder, which hosts real sites.
@@ -14,6 +15,11 @@ export const PARKING_DOMAINS = new Set([
   "secureserver.net", "domaincontrol.com",
   "domainnamesales.com", "domainagents.com", "squadhelp.com",
   "flippa.com", "epik.com",
+  // 2026-11-23 benchmark: swaroop.codes and karrarnazim.space redirect to an
+  // expireddomains.com sale listing, www.saurabhdaware.in to inb.link's
+  // "Default Domain Lander Page", and abdulmomin.dev's Sedo lander forwards to
+  // findonlineresults.com (?dn=abdulmomin.dev), a parked domain's ad feed.
+  "expireddomains.com", "inb.link", "findonlineresults.com",
 ]);
 export const PARKING_PHRASES = [
   "domain for sale", "buy this domain", "this domain is for sale",
@@ -24,20 +30,118 @@ export const PARKING_PHRASES = [
   // GoDaddy's parking lander (nic-nguyen.com, 2026-11-23): "<domain> has
   // expired and is parked free, courtesy of GoDaddy.com."
   "has expired and is parked", "parked free, courtesy of",
+  // inb.link's lander and expireddomains.com's listing title (2026-11-23).
+  "default domain lander", "buy this expired domain",
 ];
 
 // What a parking service's own lander carries in its HTML, whatever its text:
 // the script that draws GoDaddy's lander (img1.wsimg.com/parking-lander,
 // window.LANDER_SYSTEM, its traffic tag "ap: parking"; nic-nguyen.com/lander,
 // 2026-11-23) and scripts loaded (a `src`, never a `data-src`) from the
-// parking hosts themselves. Like the phrases, a marker counts only on a page
-// with little visible text.
+// parking hosts themselves; and Sedo's lander, which loads its spinner and
+// icon from img.sedoparking.com (`<img src>`, `<link href>`; abdulmomin.dev,
+// 2026-11-23, served by "Parking/1.0"). Like the phrases, a marker counts only
+// on a page with little visible text.
 const PARKING_MARKERS = [
   [/\bwindow\.LANDER_SYSTEM\s*=/, "GoDaddy parking lander"],
   [/\/\/img\d*\.wsimg\.com\/parking-lander\//i, "GoDaddy parking lander"],
   [/_trfd\.push\([^)]*?["']?\bap["']?\s*:\s*["']parking["']/, "GoDaddy parking lander"],
+  [/<(?:img|link)\b[^>]*?\s(?:src|href)\s*=\s*["']?(?:https?:)?\/\/img\.sedoparking\.com\//i, "Sedo parking lander"],
   [/<script\b[^>]*?\ssrc\s*=\s*["']?(?:https?:)?\/\/(?:[\w-]+\.)*(sedoparking\.com|parkingcrew\.net|bodis\.com|parklogic\.com|above\.com|dan\.com|afternic\.com|hugedomains\.com)\//i, "a script from a parking service"],
 ];
+
+// The title of Sedo's lander: the domain itself, a dash, a keyword and
+// "Resources and Information." ("abdulmomin.dev - abdulmomin Resources and
+// Information.", 2026-11-23). The whole title must be that, and the domain
+// must be the page's own (www. aside), so a page that says "resources and
+// information" in a sentence, or a title naming another site, is not it.
+const SEDO_TITLE = /^((?:[a-z0-9-]+\.)+[a-z]{2,})\s+-\s+[^|]{1,80}?\s+resources and information\.?$/i;
+
+/** The parking lander a page's title says it is (SEDO_TITLE on the page's own domain), or undefined. */
+export function parkingTitle(title, finalUrl) {
+  const t = String(title ?? "").replace(/&nbsp;|&#160;| /gi, " ").replace(/\s+/g, " ").trim();
+  const m = t.match(SEDO_TITLE);
+  const own = netloc(finalUrl);
+  if (!m || !own) return undefined;
+  const named = m[1].toLowerCase().replace(/^www\./, "");
+  return named === own ? "Sedo parking lander" : undefined;
+}
+
+// Pages that stand where the site was, served with a 200: a web server's own
+// default page, a host's placeholder or error page, a maintenance page, a
+// notice that the site was removed. Found 2026-11-23: http://gianlucafiore.it
+// (nginx, from a stale address among the domain's DNS answers),
+// https://datasciencefolio.streamlit.app, https://iamharshdoshi.com
+// (maintenance), aditya113141.github.io (a removal notice), a muse.ai page
+// ("Content not found"). Each rule needs the evidence of that page itself:
+//   - `sentence`: a sentence only that page says (a server's own default
+//     page needs its sentence, never its <title> alone: a portfolio can keep
+//     the default title over its own body);
+//   - `title`, `html`: when given, must hold as well (IIS: its iisstart image);
+//   - `whole`: the page's whole text is that, and nothing else.
+// And only on a page with little visible text (PARKED_MAX_TEXT) that shows
+// fewer than PLACEHOLDER_MAX_SIGNALS portfolio signals (./signals.mjs): every
+// such page saved so far reads 0 or 1, a portfolio that says "the website is
+// not published yet (NDA)" or "shows a banner when maintenance mode is on"
+// reads 3 or more.
+const PLACEHOLDERS = [
+  { what: "nginx's default page", sentence: /\bthe nginx web server is successfully installed and working\b/ },
+  { what: "Apache's default page", sentence: /\bthis is the default welcome page used to test the correct operation of the apache2? server\b|\bthis page is used to test the proper operation of the apache http server\b/ },
+  { what: "Apache's default page", whole: /^it works!?$/i, title: /^(?:it works!?)?$/i },
+  { what: "IIS's default page", title: /^(?:iis windows server|iis\d*|internet information services)$/i, html: /<img\b[^>]*\ssrc\s*=\s*["']?[^"'>]*iisstart\.(?:png|jpg)/i },
+  { what: "Caddy's default page", sentence: /\byour web server is working\. now make it work for you\b/ },
+  { what: "Plesk's default page", sentence: /\bthis page (?:is|was) generated by plesk\b/, title: /^domain default page$/i },
+  // HostGator's placeholder for a new account.
+  { what: "a host's placeholder page", sentence: /\bfuture home of something quite cool\b/ },
+  // A platform's own page, with its own title: its header links (GitHub, "contact support") are the platform's, so the
+  // signals guard is not applied (`platform`).
+  { what: "GitHub Pages' page for no site", sentence: /\bthere isn['’]t a github pages site here\b/, title: /^site not found · github pages$/i, platform: true },
+  { what: "a host's page for an unpublished site", whole: /^(?:this|the) (?:site|website) (?:is not|isn['’]t|has not been|hasn['’]t been) (?:yet )?published\.?$/i },
+  { what: "Streamlit's error page", sentence: /\boh no\. error running app\b/, title: /^streamlit$/i, platform: true },
+  // The WordPress maintenance plugin's page: its title and its sentence.
+  { what: "a maintenance page", sentence: /\bmaintenance mode is on\b/, title: /^site is undergoing maintenance$/i },
+  { what: "a notice that the site was removed", whole: /^everything is removed[.!]?$/i },
+  { what: "a not-found page", whole: /^(?:404\s*[:|-]?\s*)?(?:content|page|site|file) not found\.?$|^404(?: not found)?\.?$|^not found\.?$/i },
+];
+/** At this many portfolio signals or more a page is the site, whatever placeholder words it carries. */
+export const PLACEHOLDER_MAX_SIGNALS = 2;
+
+/** The visible text of an HTML document's body (its title aside). */
+const bodyText = (html) => {
+  const h = String(html ?? "");
+  const at = h.search(/<body\b/i);
+  return visibleText(at >= 0 ? h.slice(at) : h.replace(/<title\b[\s\S]*?<\/title>/i, " "));
+};
+
+/**
+ * What stands where the site was (PLACEHOLDERS, or an empty "Index of /"),
+ * or undefined. Only on a page with little visible text and fewer than
+ * PLACEHOLDER_MAX_SIGNALS portfolio signals. `text`: the page's own visible
+ * text when the caller has it (the browser's, which leaves the title out).
+ */
+export function placeholderPage({ html = "", text, title } = {}) {
+  const own = String(text ?? bodyText(html)).replace(/\s+/g, " ").trim();
+  if (own.length > PARKED_MAX_TEXT) return undefined;
+  const fewSignals = portfolioSignals(html || own, "").score < PLACEHOLDER_MAX_SIGNALS;
+  const t = String(title ?? titleOf(html)).replace(/\s+/g, " ").trim();
+  const lower = own.toLowerCase();
+  const hit = PLACEHOLDERS.find(
+    (p) =>
+      (p.sentence || p.whole || p.html) &&
+      (p.platform || fewSignals) &&
+      (!p.sentence || p.sentence.test(lower)) &&
+      (!p.whole || p.whole.test(own)) &&
+      (!p.title || p.title.test(t)) &&
+      (!p.html || p.html.test(String(html)))
+  );
+  if (hit) return hit.what;
+  if (fewSignals && /^index of \//i.test(t)) {
+    // A directory listing with nothing in it: no link but the parent folder and the column sorts.
+    const entries = [...String(html).matchAll(/<a\b[^>]*?\shref\s*=\s*["']?([^"'\s>]+)/gi)].map((m) => m[1]).filter((h) => !/^(?:\?C=|\.\.\/?$|\/$)/i.test(h));
+    if (html && entries.length === 0) return "an empty directory listing";
+  }
+  return undefined;
+}
 // The User-Agent of the plain requests (and of the capture's browser, which
 // imports UA). It names a current Chrome, worked out from the date, so it
 // never goes stale: a pinned "Chrome/124" was 2.5 years old by 2026-11, and
@@ -128,7 +232,13 @@ export function parkingMarker(html, text) {
  * evidence counts, in order:
  *   - it ended on a parking host (isParkingDomain): "redirects to <host>";
  *   - a parking phrase in the title, or on a short page: "parking phrase: ...";
- *   - a parking service's lander (parkingMarker): "parking page: <service>".
+ *   - a parking service's lander (parkingMarker, or on a short page a lander's
+ *     own title, parkingTitle): "parking page: <service>";
+ *   - on a short page, a web server's default page, a host's placeholder or
+ *     error page, a maintenance or removal notice (placeholderPage):
+ *     "not the site: <what>" (a stable prefix other code matches on). The
+ *     health check counts it as a failed check of the parked kind on
+ *     whichever ladder runs; it is never a removal by itself.
  * A path, a short or empty page, or a page that could not be read is never
  * evidence: a single-page app's first HTML is nearly empty too.
  */
@@ -137,8 +247,10 @@ export function parkedPage({ finalUrl = "", html = "", text, title } = {}) {
   const visible = String(text ?? visibleText(html)).trim();
   const phrase = parkingPhrase({ html, text: visible, title });
   if (phrase) return `parking phrase: "${phrase}"`;
-  const marker = parkingMarker(html, visible);
+  const marker = parkingMarker(html, visible) ?? (visible.length <= PARKED_MAX_TEXT ? parkingTitle(title ?? titleOf(html), finalUrl) : undefined);
   if (marker) return `parking page: ${marker}`;
+  const placeholder = placeholderPage({ html, text, title });
+  if (placeholder) return `not the site: ${placeholder}`;
   return null;
 }
 
@@ -239,7 +351,7 @@ async function parkedAfterClientRedirect(from, to, { fetchImpl, timeoutMs, userA
     const landed = res.url || to;
     if (isParkingDomain(landed)) return { reason: `redirects to ${netloc(landed)}`, finalUrl: landed };
     if (!res.ok) return null;
-    const reason = parkedPage({ finalUrl: landed, html: await readBody(res, 262144) });
+    const reason = parkedPage({ finalUrl: landed, html: await readBody(res, PAGE_MAX_HTML) });
     return reason ? { reason, finalUrl: landed } : null;
   } catch {
     return null;
@@ -264,15 +376,30 @@ export function readRenderedPage() {
   // srcsets, style attributes, inline data: images, SVG path data), so the
   // cut no longer takes its footer's GitHub and email links (facts audit,
   // 2026-11-21: two of 70 listed sites lost them to inline images and
-  // srcsets).
+  // srcsets). Then, if it is still too long, the empty elements that carry
+  // nothing but classes go: singhshailendra.in (2026-11-23) drew its
+  // background grid from 4,700 empty Tailwind divs, 340,000 characters of
+  // class names before its menu and text, so the cut took all of them. An
+  // element goes only when it holds no text and no other element and its only
+  // attributes are class or style, and only a wrapper kind (div, span, i, p,
+  // li, ul, section, figure): never a link, button, image, an id or a label.
+  // Its wrapper then goes on the next of at most 12 passes if it is empty too.
+  // The cut stays the bound against a pathological page.
+  const MAX = 400000;
   let html = document.documentElement.outerHTML;
-  if (html.length > 400000) {
+  if (html.length > MAX) {
     html = html
       .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3")
       .replace(/\s(?:srcset|sizes|style|d|points)="[^"]*"/g, "")
       .replace(/data:[\w.+-]+\/[\w.+-]+[^"')\s]{64,}/g, "data:");
+    const empty = /<(div|span|i|p|li|ul|section|figure)((?:\s+(?:class|style)="[^"<>]*")*)\s*>\s*<\/\1>/gi;
+    for (let pass = 0; pass < 12 && html.length > MAX; pass++) {
+      const before = html.length;
+      html = html.replace(empty, "");
+      if (html.length === before) break;
+    }
   }
-  html = html.slice(0, 400000);
+  html = html.slice(0, MAX);
   return { text, media, html };
 }
 
@@ -316,8 +443,52 @@ function requestFailed(e) {
   return { status: "error", reason: msg.slice(0, 120) };
 }
 
+/** A parkedPage reason that is a web server's own default page. */
+const SERVER_DEFAULT = /^not the site: (?:nginx|Apache|IIS|Caddy|Plesk)'s default page$/;
+
+/**
+ * The same address in its https and www forms (same path): https://host,
+ * then https://www.host (or the host without www.), each one plain GET with
+ * the gate's headers. The first that answers 200 with a page that is not
+ * parked or a placeholder (parkedPage): { finalUrl, httpStatus, html }.
+ * Else null: the first answer stands.
+ */
+async function otherForm(address, { fetchImpl, timeoutMs, userAgent }) {
+  let u;
+  try {
+    u = new URL(address);
+  } catch {
+    return null;
+  }
+  const host = u.hostname;
+  const toggled = host.startsWith("www.") ? host.slice(4) : `www.${host}`;
+  const forms = [...new Set([`https://${host}${u.pathname}${u.search}`, `https://${toggled}${u.pathname}${u.search}`])].filter((f) => f !== address);
+  for (const form of forms) {
+    try {
+      const res = await fetchImpl(form, { redirect: "follow", headers: navigationHeaders(userAgent), signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) continue;
+      const landed = res.url || form;
+      const html = await readBody(res, PAGE_MAX_HTML);
+      if (isParkingDomain(landed) || parkedPage({ finalUrl: landed, html })) continue;
+      return { finalUrl: landed, httpStatus: res.status, html };
+    } catch {
+      // A form that cannot be reached (a certificate for another name, a refused connection) is no answer.
+    }
+  }
+  return null;
+}
+
 /** The body of an answer, read under the same deadline as the request; throws like the request does. */
 const readBody = async (res, limit) => String(await res.text()).slice(0, limit);
+
+/**
+ * The most of a page's HTML the gate keeps (the whole body is downloaded
+ * either way): a bound against a pathological page, the same as the
+ * signals' (./signals.mjs SIGNALS_MAX_HTML). It was 262,144, and singhshailendra.in's
+ * 591,613-character home page (2026-11-23) starts its menu and text at
+ * 533,000, after its background grid's class names.
+ */
+export const PAGE_MAX_HTML = 2000000;
 
 /**
  * The page-request headers of a desktop Chrome that Node's fetch carries as
@@ -379,11 +550,17 @@ export async function httpGate(url, { fetchImpl = globalThis.fetch, timeoutMs = 
     return { status: "parked", reason: `redirects to ${netloc(finalUrl)}`, finalUrl, httpStatus: res.status };
   let html;
   try {
-    html = await readBody(res, 262144);
+    html = await readBody(res, PAGE_MAX_HTML);
   } catch (e) {
     return { ...requestFailed(e), finalUrl, httpStatus: res.status };
   }
   const parked = parkedPage({ finalUrl, html });
+  if (parked && SERVER_DEFAULT.test(parked)) {
+    // A server's default page may come from one stale address among the domain's answers (gianlucafiore.it,
+    // 2026-11-23: nginx on one of three addresses, the site on https://www.): the other forms decide.
+    const other = await otherForm(finalUrl, { fetchImpl, timeoutMs, userAgent });
+    if (other) return { status: "live", reason: "", finalUrl: other.finalUrl, httpStatus: other.httpStatus, html: other.html };
+  }
   if (parked) return { status: "parked", reason: parked, finalUrl, httpStatus: res.status };
   // A home page that is only a redirect made in the page: where it sends the browser decides (one hop).
   const to = clientRedirect(html, finalUrl);

@@ -20,42 +20,91 @@ export function browserUserAgent(version) {
 
 /**
  * How often settleText samples the page's text, how long it must hold still,
- * the most it waits, and how much text counts as "the page has rendered".
+ * and the most it waits for a page that has text.
  */
 export const SETTLE_POLL_MS = 500;
 export const SETTLE_QUIET_MS = 2000;
 export const SETTLE_MAX_MS = 10000;
-export const SETTLE_MIN_CHARS = 30;
+/**
+ * Below this many characters of visible text (about 60 words) a page is thin:
+ * an intro screen, a loader or a page still drawing, not yet the site. Text
+ * that holds still on a thin page is no sign the page is finished, so it is
+ * watched up to SETTLE_THIN_MAX_MS. On 2026-11-23 four listed sites showed
+ * only an intro for 5 to 11 seconds after their HTML arrived (56 to 168
+ * characters: www.abhishekworks.com "There's a new Dev in town. Meet
+ * Abhishek!", thesoham2203.vercel.app, www.sachingoyal.me,
+ * ujjwalsoni-portfolio.vercel.app), then 800 to 33,000 characters.
+ */
+export const SETTLE_THIN_CHARS = 400;
+/** The most settleText waits on a page that has been thin: the overall limit of the wait. */
+export const SETTLE_THIN_MAX_MS = 15000;
+/**
+ * Text that changes by at most this much (characters, or this share of its
+ * length, whichever is more) holds still: a typing effect or a counter is not
+ * the page still arriving. lamine.cc, ciangoon.dev and rohit-raj.netlify.app
+ * (2026-11-23) showed a loader, then 2,000 to 5,000 characters that a typing
+ * line changed by 3 to 17 characters every half second, to the limit.
+ */
+export const SETTLE_JITTER_CHARS = 40;
+export const SETTLE_JITTER_SHARE = 0.02;
 
 /**
- * Waits until the page's visible text has rendered and stopped growing: at
- * least `minChars` characters, its length sampled every `pollMs` unchanged
- * for `quietMs`, at most `maxMs` in all. In the facts audit (2026-11-21,
+ * Runs in the page (page.evaluate): scrolls one screen further down, unless
+ * the bottom is already in view, and returns the visible text's length. Only
+ * scrolling: nothing is clicked, pressed or submitted, so an intro that waits
+ * for a press ("Press the button to begin.") stays as it is.
+ */
+export function scrollAndMeasure() {
+  const root = document.scrollingElement ?? document.documentElement;
+  if (root && window.innerHeight + window.scrollY < root.scrollHeight - 2) window.scrollBy(0, window.innerHeight);
+  return (document.body?.innerText ?? "").trim().length;
+}
+
+/**
+ * Waits until the page's visible text has rendered and stopped growing: its
+ * length, sampled every `pollMs`, unchanged for `quietMs` (give or take
+ * SETTLE_JITTER_CHARS or SETTLE_JITTER_SHARE), at most `maxMs` in all. A thin page (under `thinChars` characters) is not finished however
+ * long it holds still: it is watched until it grows past that, and once it
+ * has been thin the limit is `thinMaxMs`. Each sample scrolls one screen
+ * down (scrollAndMeasure), so content that loads as it scrolls into view
+ * appears too. In the facts audit (2026-11-21,
  * scripts/experiments/facts-audit/) 13 of 70 listed sites had under half
  * their words, most of them none, at network idle plus a second, the point
  * this renderer used to read at; the list's capture reads much later and
  * was not short. A page already rendered and still costs `quietMs`; a page
- * that never shows text costs `maxMs`. Returns { ms, grew }: the time spent
- * and how many characters appeared meanwhile.
+ * that stays thin (or never shows text) costs `thinMaxMs`; one that never
+ * stops changing costs `maxMs`. Returns { ms, grew }: the time spent and how
+ * many characters appeared meanwhile. A caller that sets its own `maxMs`
+ * and no `thinMaxMs` gets that one limit for every page.
  * @param {import("playwright").Page} page
  */
-export async function settleText(page, { pollMs = SETTLE_POLL_MS, quietMs = SETTLE_QUIET_MS, maxMs = SETTLE_MAX_MS, minChars = SETTLE_MIN_CHARS } = {}) {
+export async function settleText(page, opts = {}) {
+  const { pollMs = SETTLE_POLL_MS, quietMs = SETTLE_QUIET_MS, maxMs = SETTLE_MAX_MS, thinChars = SETTLE_THIN_CHARS } = opts;
+  const thinMaxMs = opts.thinMaxMs ?? ("maxMs" in opts ? maxMs : SETTLE_THIN_MAX_MS);
   // -1 while the page cannot be read (navigating); null when it answers no number at all (nothing to wait for).
   const len = async () => {
-    const n = await page.evaluate(() => (document.body?.innerText ?? "").trim().length).catch(() => -1);
+    const n = await page.evaluate(scrollAndMeasure).catch(() => -1);
     return typeof n === "number" ? n : null;
   };
   const t0 = Date.now();
   const first = await len();
   if (first == null) return { ms: 0, grew: 0 };
   let last = first;
+  // The length the text has held near since `stillSince`.
+  let held = first;
   let stillSince = t0;
-  while (Date.now() - t0 < maxMs && (last < minChars || Date.now() - stillSince < quietMs)) {
+  let wasThin = first < thinChars;
+  const limit = () => (wasThin ? Math.max(maxMs, thinMaxMs) : maxMs);
+  while (Date.now() - t0 < limit() && (last < thinChars || Date.now() - stillSince < quietMs)) {
     await page.waitForTimeout(pollMs);
     const n = await len();
     if (n == null) break;
-    if (n !== last) stillSince = Date.now();
+    if (Math.abs(n - held) > Math.max(SETTLE_JITTER_CHARS, held * SETTLE_JITTER_SHARE)) {
+      held = n;
+      stillSince = Date.now();
+    }
     last = n;
+    if (n < thinChars) wasThin = true;
   }
   return { ms: Date.now() - t0, grew: Math.max(0, last - first) };
 }
@@ -72,13 +121,16 @@ export class BrowserUnavailableError extends Error {
 
 /**
  * A lazy renderer. render(url) resolves to { status, finalUrl, title, text,
- * media, html } or throws; close() shuts the browser if one was started.
+ * media, html, navError? } (navError: the error of the page's last failed
+ * navigation, "net::ERR_..."), or throws; close() shuts the browser if one
+ * was started.
  * A failed launch throws BrowserUnavailableError and is not kept: the next
  * render tries to launch again.
  * The page counts as loaded once its HTML has arrived and parsed
  * (domcontentloaded); then it gets until `timeoutMs` for the load event and a
  * few seconds of network quiet, then until its text has rendered and holds
- * still (settleText, 10 seconds at most), but a slow image or script never
+ * still (settleText: 10 seconds at most, 15 for a page that has been thin,
+ * scrolling one screen per sample), but a slow image or script never
  * turns a page that answered into an error.
  */
 export function createRenderer({
@@ -108,6 +160,12 @@ export function createRenderer({
       const ctx = await b.newContext({ userAgent, viewport });
       try {
         const page = await ctx.newPage();
+        // The last navigation of the page's own frame that failed (a script's redirect to an address that does
+        // not answer): its error ("net::ERR_NAME_NOT_RESOLVED"), since the browser's error page shows no text.
+        let navError = "";
+        page.on?.("requestfailed", (r) => {
+          if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navError = r.failure()?.errorText ?? navError;
+        });
         const began = Date.now();
         const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
         await page.waitForLoadState("load", { timeout: Math.max(1000, timeoutMs - (Date.now() - began)) }).catch(() => {});
@@ -119,6 +177,7 @@ export function createRenderer({
           finalUrl: page.url(),
           title: await page.title().catch(() => ""),
           ...(await page.evaluate(readRenderedPage).catch(() => ({ text: "", media: false, html: "" }))),
+          ...(navError ? { navError } : {}),
         };
       } finally {
         await ctx.close().catch(() => {});
