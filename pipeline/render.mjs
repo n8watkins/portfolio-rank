@@ -121,7 +121,9 @@ export class BrowserUnavailableError extends Error {
 
 /**
  * A lazy renderer. render(url) resolves to { status, finalUrl, title, text,
- * media, html } or throws; close() shuts the browser if one was started.
+ * media, html, navError? } (navError: the error of the page's last failed
+ * navigation, "net::ERR_..."), or throws; close() shuts the browser if one
+ * was started.
  * A failed launch throws BrowserUnavailableError and is not kept: the next
  * render tries to launch again.
  * The page counts as loaded once its HTML has arrived and parsed
@@ -158,6 +160,12 @@ export function createRenderer({
       const ctx = await b.newContext({ userAgent, viewport });
       try {
         const page = await ctx.newPage();
+        // The last navigation of the page's own frame that failed (a script's redirect to an address that does
+        // not answer): its error ("net::ERR_NAME_NOT_RESOLVED"), since the browser's error page shows no text.
+        let navError = "";
+        page.on?.("requestfailed", (r) => {
+          if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navError = r.failure()?.errorText ?? navError;
+        });
         const began = Date.now();
         const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
         await page.waitForLoadState("load", { timeout: Math.max(1000, timeoutMs - (Date.now() - began)) }).catch(() => {});
@@ -169,6 +177,7 @@ export function createRenderer({
           finalUrl: page.url(),
           title: await page.title().catch(() => ""),
           ...(await page.evaluate(readRenderedPage).catch(() => ({ text: "", media: false, html: "" }))),
+          ...(navError ? { navError } : {}),
         };
       } finally {
         await ctx.close().catch(() => {});

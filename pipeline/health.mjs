@@ -255,6 +255,9 @@ const BROWSER_TRANSIENT =
 // threw (a TypeError and the like).
 const BROWSER_BROKE = /browserType\.launch|Executable doesn't exist|Page crashed|Target crashed|Target (page, context or browser )?(has been )?closed|browser has been closed|Browser closed|the browser could not start/i;
 
+/** The reason for a site the browser showed only its own error page for, with a definite error code. */
+export const BROWSER_ERROR_PAGE = "does not load (the browser's error page)";
+
 /** Whether a render error is the browser's (or the check's) own failure. `launch` when it never started. */
 export function browserFailure(e) {
   if (e?.name === "BrowserUnavailableError" || /browserType\.launch|Executable doesn't exist|the browser could not start/i.test(String(e?.message ?? e))) return { launch: true };
@@ -334,8 +337,17 @@ export async function checkSite(
       return unknown(`${gate.status === "error" ? gate.reason : "plain request answered"}; browser: ${browserSaid}`, finalUrl, broke?.launch ? { browserDown: true } : {});
     }
     // The browser showed its own error page in place of the site (a load that failed after the page began,
-    // collinskoechportfolio.web.app, 2026-11-23): the site does not load, whatever the plain request read.
-    if (String(page.finalUrl ?? "").startsWith("chrome-error://")) return { ok: false, reason: "does not load (the browser's error page)", finalUrl };
+    // as a single-page app's own redirect can). Its error code decides, as for an error the browser throws:
+    // a code that says nothing about the site (BROWSER_TRANSIENT) is inconclusive, any other is the site not
+    // loading, and a page without a code says nothing either.
+    if (String(page.finalUrl ?? "").startsWith("chrome-error://")) {
+      // render.mjs passes the failed navigation's error (navError); the page's own text is the fallback.
+      const code = `${page.navError ?? ""} ${page.text ?? ""}`.match(/\b(ERR_[A-Z0-9_]+)\b/)?.[1];
+      if (code && !BROWSER_TRANSIENT.test(`net::${code}`)) return { ok: false, reason: BROWSER_ERROR_PAGE, finalUrl };
+      if (wall) return blocked(gate.httpStatus, finalUrl);
+      if (gate.status === "error" && !gate.transient) return { ok: false, reason: `does not load (${gate.reason})`, finalUrl };
+      return unknown(`the browser's error page${code ? ` (${code})` : ""}`, finalUrl);
+    }
     finalUrl = page.finalUrl || finalUrl;
     if (BOT_WALL_STATUS.has(page.status) || isBotWallPage({ title: page.title, text: page.text })) {
       return blocked(page.status, finalUrl);
