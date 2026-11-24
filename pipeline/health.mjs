@@ -178,6 +178,26 @@ const fold = (s) =>
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "");
 
+// A listed domain that now forwards to a gambling site (expired and bought for
+// its links): www.abhisheksah.dev (angkasa338win.com, "togel"), indrajeet.me
+// (app.lunabet89.com, "nổ hũ") and vallarasuk.com (pika77terkuat.com,
+// "taruhan") in the 2026-11-23 benchmark. Only words that gambling sites use
+// and nothing else does: not "slot", "poker", "lottery", "jackpot", "betting"
+// or "judi" alone, which a developer's projects or a person's name can carry
+// ("Planning Poker", Vue's named slots, a "Decentralized Lottery" contract, a
+// designer named Judi). The verdict needs the hijack too (redirectVerdict):
+// a page with none of the person's name, on a host that is not their handle.
+const GAMBLING_ONLY = /(?<![a-z0-9])(togel|gacor|maxwin|no hu|taruhan|judi online|judi slot|sportsbook)(?![a-z0-9])/g;
+/** The words only gambling sites use found in a page's text (its first 20,000 characters), each once. */
+export const gamblingWords = (text) => [...new Set([...fold(String(text ?? "").slice(0, 20000)).matchAll(GAMBLING_ONLY)].map((m) => m[1]))];
+
+/**
+ * The handle in a listed address ("oyi77" in oyi77.github.io, "janedoe" in
+ * janedoe.dev): a move to a host that carries it ("oyi77.is-a.dev") is the
+ * person's own, whatever its page says.
+ */
+const handleOf = (url) => registrableDomain(url).split(".")[0].replace(/^www$/, "");
+
 /** Name words that must appear on a redirect target for it to count as the same person's site. */
 const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 
@@ -271,9 +291,12 @@ export function carriesName(name, { title = "", text = "", heading = "" } = {}) 
  * from a free host to their own domain (73 of 2,103 roster sites on
  * 2026-11-10), so a move is not a failure: it is reported so the stored URL
  * can be updated. Returns null (no cross-domain redirect),
- * { fail: reason } (a social profile, not a portfolio) or
+ * { fail: reason } (a social profile: "redirects to <domain>, not a
+ * portfolio"; or a hijack whose page has a word only gambling sites use:
+ * "redirects to <domain>, a gambling site", a failed check, never a removal) or
  * { moved: true, hijack, to } where hijack means the target carries none of
- * the person's name (flagged for a person to look at, never removed on its own).
+ * the person's name and its host not the listed address's handle (flagged
+ * for a person to look at, never removed on its own).
  */
 export function redirectVerdict(url, finalUrl, name, text) {
   if (!finalUrl) return null;
@@ -282,7 +305,17 @@ export function redirectVerdict(url, finalUrl, name, text) {
   if (!from || !to || from === to) return null;
   if (NOT_A_PORTFOLIO_HOSTS.includes(to)) return { fail: `redirects to ${to}, not a portfolio` };
   const haystack = fold(`${finalUrl} ${String(text ?? "").slice(0, 20000)}`);
-  const hijack = !nameTokens(name).some((t) => haystack.includes(t));
+  const handle = handleOf(url);
+  const toHost = (() => {
+    try {
+      return new URL(finalUrl).hostname;
+    } catch {
+      return to;
+    }
+  })();
+  const ownHandle = handle.length >= 3 && fold(toHost).includes(handle);
+  const hijack = !ownHandle && !nameTokens(name).some((t) => haystack.includes(t));
+  if (hijack && gamblingWords(text).length > 0) return { fail: `redirects to ${to}, a gambling site` };
   return { moved: true, hijack, to };
 }
 
@@ -319,6 +352,9 @@ const BROWSER_TRANSIENT =
 // exist"), the tab or the browser crashed or closed, or the check's own code
 // threw (a TypeError and the like).
 const BROWSER_BROKE = /browserType\.launch|Executable doesn't exist|Page crashed|Target crashed|Target (page, context or browser )?(has been )?closed|browser has been closed|Browser closed|the browser could not start/i;
+
+/** The reason for a site the browser showed only its own error page for, with a definite error code. */
+export const BROWSER_ERROR_PAGE = "does not load (the browser's error page)";
 
 /** Whether a render error is the browser's (or the check's) own failure. `launch` when it never started. */
 export function browserFailure(e) {
@@ -407,6 +443,18 @@ export async function checkSite(
       if (!broke && gate.status === "error" && !gate.transient) return { ok: false, reason: `does not load (${gate.reason})`, finalUrl };
       // Neither opinion learned anything about the site: inconclusive, never a failed check.
       return unknown(`${gate.status === "error" ? gate.reason : "plain request answered"}; browser: ${browserSaid}`, finalUrl, broke?.launch ? { browserDown: true } : {});
+    }
+    // The browser showed its own error page in place of the site (a load that failed after the page began,
+    // as a single-page app's own redirect can). Its error code decides, as for an error the browser throws:
+    // a code that says nothing about the site (BROWSER_TRANSIENT) is inconclusive, any other is the site not
+    // loading, and a page without a code says nothing either.
+    if (String(page.finalUrl ?? "").startsWith("chrome-error://")) {
+      // render.mjs passes the failed navigation's error (navError); the page's own text is the fallback.
+      const code = `${page.navError ?? ""} ${page.text ?? ""}`.match(/\b(ERR_[A-Z0-9_]+)\b/)?.[1];
+      if (code && !BROWSER_TRANSIENT.test(`net::${code}`)) return { ok: false, reason: BROWSER_ERROR_PAGE, finalUrl };
+      if (wall) return blocked(gate.httpStatus, finalUrl);
+      if (gate.status === "error" && !gate.transient) return { ok: false, reason: `does not load (${gate.reason})`, finalUrl };
+      return unknown(`the browser's error page${code ? ` (${code})` : ""}`, finalUrl);
     }
     finalUrl = page.finalUrl || finalUrl;
     if (BOT_WALL_STATUS.has(page.status) || isBotWallPage({ title: page.title, text: page.text })) {

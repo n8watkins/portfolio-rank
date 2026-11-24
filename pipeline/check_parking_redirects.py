@@ -41,6 +41,7 @@ PARKING_DOMAINS = {
     "secureserver.net", "domaincontrol.com",
     "domainnamesales.com", "domainagents.com", "squadhelp.com",
     "flippa.com", "epik.com",
+    "expireddomains.com", "inb.link", "findonlineresults.com",
 }
 
 PARKING_PHRASES = [
@@ -61,6 +62,8 @@ PARKING_PHRASES = [
     "domain registration expired",
     "has expired and is parked",
     "parked free, courtesy of",
+    "default domain lander",
+    "buy this expired domain",
 ]
 
 _USER_AGENT = (

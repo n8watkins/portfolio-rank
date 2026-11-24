@@ -32,6 +32,8 @@ test("a real portfolio scores every signal", () => {
     name: true,
     score: 6,
     needsReview: false,
+    // The role its title states ("Jane Doe | Frontend Engineer"), stored beside the signals and counting for none.
+    role: "Frontend Engineer",
   });
 });
 
