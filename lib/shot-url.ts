@@ -2,14 +2,37 @@
 
 export type Frame = "hero.jpg" | "mobile.jpg";
 
+// A capture with no phone frame (its phone view was missing, meta.phoneMissing:
+// pipeline/capture.mjs narrowView) carries this mark on its base, so every page
+// that already passes the base around knows it without another read. It never
+// reaches an image URL: frameOf drops it.
+const NO_PHONE = "nophone";
+
+/** The base marked as having no phone frame (lib/shots.ts shotBases, from meta.phoneMissing). */
+export function withoutPhone(base: string): string {
+  return hasPhoneFrame(base) ? `${base}${base.includes("?") ? "&" : "?"}${NO_PHONE}=1` : base;
+}
+
+/** Whether a capture base has a phone frame (mobile.jpg); false when it is marked withoutPhone. */
+export function hasPhoneFrame(base: string): boolean {
+  return !new URLSearchParams(base.split("?")[1] ?? "").has(NO_PHONE);
+}
+
 /**
  * One frame of a capture. `base` is `${SHOTS_BASE_URL}/${shot_key}`, optionally
  * with `?v=<version>` (lib/shots.ts), which goes after the file name so a
- * recapture gets a new URL and every version can be cached for good.
+ * recapture gets a new URL and every version can be cached for good. A
+ * capture with no phone frame (withoutPhone) answers its hero.jpg for
+ * mobile.jpg: the desktop's first screen, never a missing file. Callers that
+ * show a phone view as such check hasPhoneFrame first.
  */
 export function frameOf(base: string, frame: Frame): string {
-  const [path, query] = base.split("?");
-  return `${path}/${frame}${query ? `?${query}` : ""}`;
+  const [path, query = ""] = base.split("?");
+  const params = new URLSearchParams(query);
+  const file = frame === "mobile.jpg" && params.has(NO_PHONE) ? "hero.jpg" : frame;
+  params.delete(NO_PHONE);
+  const q = params.toString();
+  return `${path}/${file}${q ? `?${q}` : ""}`;
 }
 
 /** One view as stored in portfolios.meta.fullPage (pipeline/fullpage.mjs captureView). */

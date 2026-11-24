@@ -1,5 +1,5 @@
 import { db, ensureSchema } from "@/lib/db";
-import { frameOf, fullPageFrames, type FullPagePreview } from "@/lib/shot-url";
+import { frameOf, fullPageFrames, withoutPhone, type FullPagePreview } from "@/lib/shot-url";
 import { fullPagePreviewEnabled } from "@/lib/fullpage-flag";
 
 // Our own Playwright captures (pipeline/capture.mjs) are served from
@@ -41,6 +41,22 @@ export async function fullPagePreview(url: string, env = process.env): Promise<F
   return fullPageFrames(`${base}/${row.shot_key}`, meta?.fullPage);
 }
 
+/**
+ * Of these shot keys, the captures with no phone view (meta.phoneMissing,
+ * pipeline/capture.mjs narrowView): they have no phone frame of their own.
+ */
+export async function phoneMissingKeys(shotKeys: string[]): Promise<Set<string>> {
+  const keys = [...new Set(shotKeys.filter(Boolean))];
+  if (!keys.length) return new Set();
+  await ensureSchema();
+  const res = await db().execute({
+    sql: `SELECT shot_key FROM portfolios WHERE shot_key IN (${keys.map(() => "?").join(",")})
+            AND json_valid(meta) AND json_extract(meta, '$.phoneMissing') IS NOT NULL`,
+    args: keys,
+  });
+  return new Set(res.rows.map((r) => String(r.shot_key)));
+}
+
 /** A short version tag for a capture: its time, in base 36. */
 function versionOf(capturedAt: unknown): string | null {
   const ms = typeof capturedAt === "string" ? Date.parse(capturedAt.includes("T") ? capturedAt : `${capturedAt.replace(" ", "T")}Z`) : NaN;
@@ -60,13 +76,16 @@ export async function shotBases(urls: string[]): Promise<Map<string, string>> {
   await ensureSchema();
   const placeholders = urls.map(() => "?").join(",");
   const res = await db().execute({
-    sql: `SELECT url, shot_key, captured_at FROM portfolios
-          WHERE url IN (${placeholders}) AND shot_key IS NOT NULL`,
+    sql: `SELECT url, shot_key, captured_at,
+            CASE WHEN json_valid(meta) THEN json_extract(meta, '$.phoneMissing') END AS phone_missing
+          FROM portfolios WHERE url IN (${placeholders}) AND shot_key IS NOT NULL`,
     args: urls,
   });
   for (const r of res.rows) {
     const v = versionOf(r.captured_at);
-    out.set(String(r.url), `${base}/${r.shot_key}${v ? `?v=${v}` : ""}`);
+    const b = `${base}/${r.shot_key}${v ? `?v=${v}` : ""}`;
+    // No phone view in this capture: no mobile.jpg of it either (lib/shot-url.ts withoutPhone).
+    out.set(String(r.url), r.phone_missing == null ? b : withoutPhone(b));
   }
   return out;
 }

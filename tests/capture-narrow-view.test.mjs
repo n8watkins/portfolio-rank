@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
+import jpeg from "jpeg-js";
 import sharp from "sharp";
 import { captureSite, keyOf } from "../pipeline/capture.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
@@ -48,6 +49,9 @@ const NARROW = `<!doctype html><title>Jane Doe</title><style>@media (max-width: 
     ? '<section id=projects><h2>Projects</h2><a href="https://one.invalid/">One</a> <a href="https://two.invalid/">Two</a> <a href="https://three.invalid/">Three</a></section>' : ""; };
   draw(); mq.addEventListener("change", draw);</script></body>`;
 
+const LATE_GATE = `<!doctype html><title>Jane Doe</title><body style="margin:0"><div id=g style="height:100vh;display:grid;place-items:center">
+  <button style="font-size:24px" onclick="g.remove();document.body.style.cssText='margin:0;background:#102030;color:#fff;min-height:100vh';app.innerHTML=${JSON.stringify(SITE).replace(/"/g, "&quot;")}">CLICK TO ENTER</button></div><div id=app></div></body>`;
+
 const pages = {
   "/once": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
   "/cf-repeat": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
@@ -56,6 +60,17 @@ const pages = {
   "/cf-reload": `<!doctype html><title>Jane Doe</title><body>${SITE}<script>addEventListener("resize",()=>{if(innerWidth<500)location.reload()})</script></body>`,
   "/cf-reload-refresh": `<!doctype html><title>Jane Doe</title><body>${SITE}<script>addEventListener("resize",()=>{if(innerWidth<500)location.reload()})</script></body>`,
   "/narrow": NARROW,
+  // A canvas sized once at load from window.innerWidth (1440 on the desktop view), never resized.
+  "/canvas-at-load": `<!doctype html><title>Jane Doe</title><body style="margin:0">${SITE}<canvas id=c height=200 style="display:block"></canvas>
+    <script>c.width = innerWidth; c.getContext("2d").fillRect(0, 0, c.width, 200)</script></body>`,
+  // A resize handler that waits 2.5 s before it reloads (debounced): the reload opens on a gate (see the server).
+  "/late-reload": `<!doctype html><title>Jane Doe</title><body>${SITE}<script>
+    let t;addEventListener("resize",()=>{clearTimeout(t);t=setTimeout(()=>{if(innerWidth<500)location.reload()},2500)})</script></body>`,
+  // Sent to another site when the window narrows (127.0.0.1 to localhost); it links a projects page of its own.
+  "/leaves": `<!doctype html><title>Jane Doe</title><body>${SITE}<p><a href="/projects">Projects</a></p>
+    <script>addEventListener("resize",()=>{if(innerWidth<500)location.href="http://localhost:"+location.port+"/elsewhere"})</script></body>`,
+  "/elsewhere": `<!doctype html><title>Elsewhere</title><body>${SITE}</body>`,
+  "/projects": `<!doctype html><title>Projects</title><body>${SITE}</body>`,
 };
 /** The sites that challenge every repeat visit from the browser. */
 const REPEAT_CHALLENGED = new Set(["/cf-repeat", "/cf-repeat-refresh", "/cf-reload", "/cf-reload-refresh"]);
@@ -80,6 +95,8 @@ before(async () => {
     if (navigation && REPEAT_CHALLENGED.has(req.url) && loads[req.url] >= 2) {
       return res.writeHead(403, { ...html, "cf-mitigated": "challenge" }).end(CHALLENGE);
     }
+    // The late reload opens on a gate whose button shows the site (dark, so a frame of it is told from a white page).
+    if (navigation && req.url === "/late-reload" && loads[req.url] >= 2) return res.writeHead(200, html).end(LATE_GATE);
     res.writeHead(pages[req.url] ? 200 : 404, html).end(pages[req.url] ?? "not found");
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -102,6 +119,7 @@ before(async () => {
   // Three at a time: the machine is shared with other test files.
   await Promise.all([run("/once"), run("/cf-repeat"), run("/narrow")]);
   await Promise.all([run("/cf-repeat-refresh", { refresh: true }), run("/cf-reload"), run("/cf-reload-refresh", { refresh: true })]);
+  await Promise.all([run("/canvas-at-load"), run("/late-reload"), run("/leaves")]);
 }, { timeout: 600000 });
 
 after(async () => {
@@ -156,8 +174,10 @@ test("a narrow view that meets a bot check never discards a good desktop capture
   assert.ok(meta.fullPage.desktop.bytes > 0);
   assert.equal(meta.fullPage.phone.bytes, undefined);
   assert.match(String(meta.fullPage.phone.missing), /bot or security check/);
-  // A new site has no phone frame at all: its mobile.jpg is the desktop's first screen, so nothing shows a broken image.
-  assert.deepEqual(fs.readFileSync(fileOf("/cf-reload", "mobile.jpg")), fs.readFileSync(fileOf("/cf-reload", "hero.jpg")));
+  // No phone frame is written: the pages show hero.jpg for it (lib/shots.ts shotBases, from phoneMissing).
+  assert.equal(fs.existsSync(fileOf("/cf-reload", "mobile.jpg")), false);
+  assert.ok(fs.existsSync(fileOf("/cf-reload", "hero.jpg")));
+  assert.equal(meta.phoneReloaded, url("/cf-reload"), "the reload is recorded");
   // Its facts are the desktop's alone.
   assert.deepEqual(JSON.parse(String(row.facts)).views, ["desktop"]);
 
@@ -165,8 +185,40 @@ test("a narrow view that meets a bot check never discards a good desktop capture
   assert.notEqual((await rowOf("/cf-reload-refresh")).captured_at, OLD_AT);
   assert.equal(await refreshFailure("/cf-reload-refresh"), undefined, "no refresh failure");
   assert.match(String((await metaOf("/cf-reload-refresh")).phoneMissing), /bot or security check/);
-  // A site with a good capture keeps the phone frame it has: none is written over it.
-  assert.equal(fs.existsSync(fileOf("/cf-reload-refresh", "mobile.jpg")), false);
+  assert.equal(fs.existsSync(fileOf("/cf-reload-refresh", "mobile.jpg")), false, "no phone frame written on a refresh either");
+});
+
+test("a reload a debounced resize handler fires a moment later is still seen before the image", async () => {
+  assert.match(results["/late-reload"], /^live/, results["/late-reload"]);
+  assert.equal(loads["/late-reload"], 2);
+  const meta = await metaOf("/late-reload");
+  assert.match(String(meta.phoneReloaded), /\/late-reload$/);
+  // The reload was seen before the image: its gate was passed again, so the phone view is the site, read and photographed.
+  assert.equal(meta.phoneMissing, undefined);
+  assert.equal(meta.phoneBlocked, undefined, JSON.stringify(meta.phoneBlocked));  assert.ok(meta.fullPage.phone.bytes > 0);
+  assert.deepEqual(JSON.parse(String((await rowOf("/late-reload")).facts)).views, ["desktop", "phone"]);
+  // The phone frame is of the drawn site (dark), not of the reload's empty white page.
+  const { data } = jpeg.decode(fs.readFileSync(fileOf("/late-reload", "mobile.jpg")), { useTArray: true });
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 4) sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+  assert.ok(sum / (data.length / 4) < 100, `mobile.jpg is the drawn site, brightness ${Math.round(sum / (data.length / 4))}`);
+});
+
+test("a page that goes to another site when narrowed: no phone view, and the projects page step says why it was not read", async () => {
+  assert.match(results["/leaves"], /^live/, results["/leaves"]);
+  const meta = await metaOf("/leaves");
+  assert.match(String(meta.phoneMissing), /^the page went to localhost when the window narrowed$/);
+  assert.match(String(meta.phoneReloaded), /^http:\/\/localhost:\d+\/elsewhere$/);
+  assert.match(String(meta.projectsPageSkipped), /^the page was on localhost after the phone view$/);
+  assert.equal(loads["/projects"], undefined, "nothing read from the other site's page");
+});
+
+test("a width set once at load (a canvas sized from window.innerWidth) is unknown at 390, never an overflow", async () => {
+  assert.match(results["/canvas-at-load"], /^live/, results["/canvas-at-load"]);
+  const meta = await metaOf("/canvas-at-load");
+  assert.equal(meta.overflow390, null);
+  assert.match(String(meta.overflowUnknown), /^14\d\dpx wide at 390: a width set once at load/);
+  assert.equal(meta.phoneMissing, undefined, "the phone view itself was taken");
 });
 
 test("a real narrow layout is still measured: sideways overflow at 390 and projects only shown at 390", async () => {

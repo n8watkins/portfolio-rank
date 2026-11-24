@@ -38,7 +38,7 @@ import { IMMUTABLE, deleteAllShots, imageKey, imagesBucket, legacyFramesOn, notS
 import { SERVE_FILES, contentTypeOf } from "../pipeline/shot-files.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb } from "../pipeline/roster.mjs";
 import { SHOT_FILES, shotFor } from "../worker/shots.ts";
-import { fullPageFrames } from "../lib/shot-url.ts";
+import { frameOf, fullPageFrames, hasPhoneFrame, withoutPhone } from "../lib/shot-url.ts";
 import { fullPagePreviewEnabled } from "../lib/fullpage-flag.ts";
 
 const isAvif = (buf) => buf.subarray(4, 12).toString("ascii") === "ftypavif";
@@ -419,6 +419,26 @@ test("no images bucket yet: nothing stored and no version recorded, so the backf
   assert.equal(fp.notStored, true);
   assert.equal(fullPageComplete(fp), false, "stays due for the backfill");
   assert.equal(fullPageFrames("https://images.example/k", fp), null, "never linked");
+});
+
+test("a capture with no phone view: its base says so, and every page shows its hero.jpg in place of a phone frame", () => {
+  const base = "/shots/0123456789abcdef?v=k3x9";
+  assert.equal(hasPhoneFrame(base), true);
+  assert.equal(frameOf(base, "mobile.jpg"), "/shots/0123456789abcdef/mobile.jpg?v=k3x9");
+  const none = withoutPhone(base);
+  assert.equal(hasPhoneFrame(none), false);
+  assert.equal(withoutPhone(none), none, "marked once");
+  // The mark never reaches an image address: the hero's address is the same, cached once.
+  assert.equal(frameOf(none, "hero.jpg"), "/shots/0123456789abcdef/hero.jpg?v=k3x9");
+  assert.equal(frameOf(none, "mobile.jpg"), "/shots/0123456789abcdef/hero.jpg?v=k3x9", "no mobile.jpg is asked for");
+  assert.equal(frameOf(withoutPhone("/shots/0123456789abcdef"), "mobile.jpg"), "/shots/0123456789abcdef/hero.jpg");
+  // The face-off, the guessing game and the review queue read the mark (no <source> for phones, "No phone view").
+  const src = (f) => fs.readFileSync(path.join(import.meta.dirname, "..", f), "utf8");
+  for (const f of ["components/play/FaceOff.tsx", "components/play/GuessPercentile.tsx", "components/admin/ShotViewer.tsx", "components/admin/StatusReviewQueue.tsx"]) {
+    assert.match(src(f), /hasPhoneFrame\(/, `${f} checks for a phone frame`);
+  }
+  assert.match(src("components/admin/ShotViewer.tsx"), /No phone view/);
+  assert.match(src("lib/shots.ts"), /phoneMissing[\s\S]*withoutPhone\(b\)/, "shotBases marks the base from meta.phoneMissing");
 });
 
 test("preview URLs: versioned files, thumbnails and the top's height; the desktop's needed, the phone's only when stored; the switch is off by default", () => {

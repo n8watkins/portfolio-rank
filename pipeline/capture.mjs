@@ -437,16 +437,20 @@ const NEXT_PAINT = () =>
  * note, missing, navigated }: `missing` is the reason there is no narrow
  * view (the page reloaded itself into a bot check or an error status, or
  * could not be resized or photographed), and then `view` is a failed view
- * and `crop`, `seen` and `overflow390` are null. `navigated`: the page made
- * a new document load meanwhile (a site that reloads when the window
- * narrows), so it is no longer the page the desktop view read.
+ * and `crop`, `seen` and `overflow390` are null. `overflow390` is also null
+ * when the page kept the desktop's width (`widthNote` says so).
+ * `navigated`: the page made a new document load meanwhile (a site that
+ * reloads when the window narrows), so it is no longer the page the desktop
+ * view read; `endUrl` is where it ended.
  * @param {import("playwright").Page} page
  */
 export async function narrowView(page, doc) {
   const before = doc.navigations;
+  const startUrl = page.url();
   const navigated = () => doc.navigations > before;
   let passes = { splash: null, modal: null, mode: null };
-  const missing = (reason) => ({ view: { ok: false, meta: { missing: reason } }, crop: null, seen: null, overflow390: null, passes, note: null, missing: reason, navigated: navigated() });
+  const done = (fields) => ({ crop: null, seen: null, overflow390: null, widthNote: null, passes, note: null, missing: null, navigated: navigated(), endUrl: page.url(), ...fields });
+  const missing = (reason) => done({ view: { ok: false, meta: { missing: reason } }, missing: reason });
   try {
     await page.setViewportSize(NARROW);
   } catch {
@@ -454,8 +458,13 @@ export async function narrowView(page, doc) {
   }
   await page.evaluate(NEXT_PAINT).catch(() => {});
   await page.waitForLoadState("networkidle", { timeout: REFLOW_IDLE_MS }).catch(() => {});
-  if (navigated()) {
-    // The page loaded itself again at the new width: judged like a new visit, before the waits.
+  // A page that loads itself again at the new width (at once, or from a resize handler that waits a
+  // moment): judged like a new visit before the waits. Asked again after the passes and the settle,
+  // so a late reload is seen before the image is taken (at most twice: a page that keeps reloading
+  // is photographed as it then is).
+  let handled = before;
+  for (let round = 0; round < 2 && doc.navigations > handled; round++) {
+    handled = doc.navigations;
     await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
     if (doc.status >= 400) {
       const early = await judgeNarrow(page, doc, passes);
@@ -463,16 +472,36 @@ export async function narrowView(page, doc) {
     }
     await waitForContent(page);
   }
-  // A gate, a dialog or a picker the narrow layout shows (the desktop's were passed already).
-  passes = {
-    splash: await passSplashGate(page).catch(() => null),
-    modal: await passModal(page).catch(() => null),
-    mode: await passModePicker(page).catch(() => null),
+  const arrive = async () => {
+    // A gate, a dialog or a picker the narrow layout shows (the desktop's were passed already).
+    passes = {
+      splash: await passSplashGate(page).catch(() => null),
+      modal: await passModal(page).catch(() => null),
+      mode: await passModePicker(page).catch(() => null),
+    };
+    // Transitions and images the new width started: a short wait for a still first screen.
+    await settleFirstScreen(page, { polls: 4, diff: pngDiff }).catch(() => false);
   };
-  // Transitions and images the new width started: a short wait for a still first screen.
-  await settleFirstScreen(page, { polls: 4, diff: pngDiff }).catch(() => false);
-  // Sideways scrolling: the page is wider than the screen (5 px of slack, as before).
-  const overflow390 = await page.evaluate((px) => document.documentElement.scrollWidth > px, NARROW.width + 5).catch(() => null);
+  await arrive();
+  if (doc.navigations > handled) {
+    // A late reload (a debounced resize handler): the new load is judged and settled before the image.
+    await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
+    if (doc.status >= 400) {
+      const early = await judgeNarrow(page, doc, passes);
+      if (early.missing) return missing(early.missing);
+    }
+    await waitForContent(page);
+    await arrive();
+  }
+  // A page that went to another site when the window narrowed is not this site's phone view.
+  if (navigated() && !sameSite(startUrl, page.url())) return missing(`the page went to ${hostOf(page.url()) || "another address"} when the window narrowed`);
+  // Sideways scrolling: the page is wider than the screen (5 px of slack, as before). A page still
+  // about as wide as the desktop window (WIDE_KEPT_PX) kept a width set once at load (a canvas sized
+  // from window.innerWidth): what a phone would see is unknown, so it is not called an overflow.
+  const width = await page.evaluate(() => document.documentElement.scrollWidth).catch(() => null);
+  const keptWide = typeof width === "number" && width >= WIDE_KEPT_PX;
+  const overflow390 = typeof width !== "number" || keptWide ? null : width > NARROW.width + 5;
+  const widthNote = keptWide ? `${width}px wide at 390: a width set once at load, so whether it fits a phone is unknown` : null;
   const view = await captureViewAsSeen(page, "phone");
   const judged = await judgeNarrow(page, doc, passes);
   if (judged.missing) return missing(judged.missing);
@@ -481,8 +510,20 @@ export async function narrowView(page, doc) {
   // A narrow view that is blocked (the note) or cannot be read adds nothing to the facts.
   const read = judged.note ? null : await page.evaluate(readRenderedPage).catch(() => null);
   const seen = read ? { html: read.html, text: read.text, finalUrl: page.url() } : null;
-  return { view, crop, seen, overflow390, passes, note: judged.note, missing: null, navigated: navigated() };
+  return done({ view, crop, seen, overflow390, widthNote, note: judged.note });
 }
+
+/** A page this wide at 390 kept the desktop window's width (1440): an element sized once at load, not a phone layout. */
+const WIDE_KEPT_PX = 1400;
+
+const hostOf = (u) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+};
+const sameSite = (a, b) => hostOf(a) !== "" && hostOf(a) === hostOf(b);
 
 /**
  * Captures one site into `root`/captures/<key>/ and its `portfolios` row.
@@ -763,10 +804,10 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     const narrow = await narrowView(page, doc);
     const phoneView = narrow.view;
     const { splash: mobileSplash, modal: mobileModal, mode: mobileMode } = narrow.passes;
-    // Without a phone image, mobile.jpg is the desktop's first screen for a new
-    // site (the pages show it on a phone, never a broken image); a site that has
-    // a capture keeps the mobile.jpg it has (none is written).
-    const mobileJpg = narrow.crop ?? (stored.good ? null : heroJpg);
+    // Without a phone image no mobile.jpg is written: the pages read
+    // meta.phoneMissing (lib/shots.ts shotBases) and show hero.jpg on a phone
+    // instead, never a desktop crop passed off as a phone view.
+    const mobileJpg = narrow.crop;
     // Back to the desktop's size for the projects page below, which may press a link on this page;
     // not on a page that loaded itself again (a resize could reload it once more).
     if (!narrow.navigated) {
@@ -782,7 +823,10 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // time-limited; a failure adds nothing).
     const home = { html: seen.html, text: seen.text, url, finalUrl: homeUrl, phone: narrow.seen };
     const projectsUrl = projectsPageFor(homeProjectLinks(home), homeUrl);
-    const projectsPage = projectsUrl ? await readProjectsPage(page, projectsUrl).catch(() => null) : null;
+    // The step reads from this page's site; a page the phone view left on another site is not used, and the meta says so.
+    const pageOnSite = sameSite(homeUrl, page.url());
+    const projectsSkipped = projectsUrl && !pageOnSite ? `the page was on ${hostOf(page.url()) || "another address"} after the phone view` : null;
+    const projectsPage = projectsUrl && pageOnSite ? await readProjectsPage(page, projectsUrl).catch(() => null) : null;
     // homeText: the page text as stored, which the nightly link re-check compares own project pages against too.
     const facts = await measurePage({ ...home, name, motion, source: "rendered", projectsPage, homeText: pageText }, { userAgent: UA }).catch(() => null);
 
@@ -792,7 +836,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     if (run.aborted) return "aborted";
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "hero.jpg"), heroJpg);
+    // An older capture's mobile.jpg left in this folder is not this capture's phone view: it is not uploaded again.
     if (mobileJpg) fs.writeFileSync(path.join(dir, "mobile.jpg"), mobileJpg);
+    else fs.rmSync(path.join(dir, "mobile.jpg"), { force: true });
 
     // The stored images: a new version, or nothing when the page looks as it
     // did (pipeline/fullpage.mjs unchanged), so no write and every cached
@@ -823,8 +869,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
 
     const meta = {
       ...diagnostics,
-      // null when there is no narrow view (phoneMissing).
+      // null (unknown) when there is no narrow view (phoneMissing) or the page kept a width set once at load (overflowUnknown).
       overflow390: narrow.overflow390,
+      ...(narrow.widthNote ? { overflowUnknown: narrow.widthNote } : {}),
       darkMode,
       motion,
       heroSettled,
@@ -842,6 +889,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
       ...(narrow.note ? { phoneBlocked: narrow.note } : {}),
       // Why there is no narrow view, when there is none (narrowView): the desktop capture is stored without it.
       ...(narrow.missing ? { phoneMissing: narrow.missing } : {}),
+      // The page loaded itself again when narrowed, and where it ended; the projects page step was then not read from it when it was off the site.
+      ...(narrow.navigated ? { phoneReloaded: narrow.endUrl } : {}),
+      ...(projectsSkipped ? { projectsPageSkipped: projectsSkipped } : {}),
       fullPage,
     };
 
