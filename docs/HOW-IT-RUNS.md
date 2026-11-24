@@ -127,7 +127,7 @@ Whether the key is set is not confirmed.
 3. **Wait for the free checks**: it waits for `sync-upstream.yml` for up to 45 minutes (to about 21:15), and does not wait for `health.yml`.
 4. **Plan the AI work** (`planNight`), which does these free things first:
    1. makes sure this week's poll exists, and next week's when it starts before tomorrow's run;
-   2. writes review rows for bot-walled sites that were never captured, and for listed sites whose portfolio signals collapsed;
+   2. closes review rows whose reason no longer holds (every "signals collapsed" row, and a bot-wall or blocked re-capture row once a capture got through), then writes review rows for bot-walled sites that were never captured, asked once (`lib/reviews/door.mjs` `syncReviewRows`, `closeStaleReviews`);
    3. sets aside new sites whose stored screenshot does not show the site;
    4. counts what each stage has waiting.
 5. **Run the AI stages** below, in order, in batches of 20 requests.
@@ -236,7 +236,7 @@ Each chain is a list of steps in the order they happen.
    2. Gemini says portfolio: it is listed, unless its address is not a portfolio page (step 3).
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
-      So does an address whose host is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist; any Substack or Medium page, subdomains included; any Linktree page on `linktr.ee` or `linktree.com`; and the link-in-bio pages `bio.link` and `beacons.ai`), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page.", "any substack should never be considered a portfolio page." and "A link tree is not a portfolio page ... A medium page is not a portfolio page".
+      So does an address whose host, or the host it forwards to after its redirects (`addressNotPortfolio`), is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist; any Substack or Medium page, subdomains included; any Linktree page on `linktr.ee` or `linktree.com`; and the link-in-bio pages `bio.link` and `beacons.ai`), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page.", "any substack should never be considered a portfolio page." and "A link tree is not a portfolio page ... A medium page is not a portfolio page".
       A site on its own subdomain of a hosting place, such as `name.github.io`, `name.vercel.app` or `name.netlify.app`, is a real site and is never caught ("Vercel is different. Vercel is just a hosting place."). Notion pages are not decided and not caught.
       An admin or login path is a junk rule only beside Gemini's "not a portfolio", as before.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
@@ -261,6 +261,12 @@ Each chain is a list of steps in the order they happen.
 
 ### A site stops working
 
+Your rule (2026-11-23): "if something is failing a health check, it doesn't go to review by me, it gets checked, it gets put in a pool ... And after 90 days, it gets put into the archived section."
+Every kind of failed check takes these same steps: the site does not answer (paused hosting, a dead domain, an HTTP error), it is parked or for sale, it is blank, it redirects to a social profile, its capture was never anything but blocked, or it duplicates another entry.
+Never a failed check: a bot wall, a check that could not tell (a timeout, a dropped connection, a browser that did not start), a "not a portfolio" grade, and low portfolio signals (the code could not read the site; it stays listed).
+Nor a listed address that fails while the site answers at its own address with www or https, where it ended on an earlier good read (http://gianlucafiore.it has a stale server among its addresses; https://www.gianlucafiore.it serves the site): the site passes, and `/admin/health-pool` lists it as "listed address unreliable". Another domain is never tried this way.
+Nothing at any step writes a row to your review page.
+
 1. **Nightly health check** (`health.yml`, `pipeline/health-check.mjs`, started by the night).
    Every listed site is loaded.
    On a first failed check the site is `suspect`: it leaves all AI work at once, but stays visible.
@@ -268,25 +274,46 @@ Each chain is a list of steps in the order they happen.
    Up to 120 due sites a run, with a 20 minute limit.
    Five sites that were live are loaded beside them.
    If fewer than 3 of those load, the checker is at fault, nothing is recorded, and the run fails.
-3. **Re-check the next day.**
-   Still failing: the site is not working.
-   It is hidden from browse, search, the leaderboard, the games and the sitemap, and its profile page answers "not found" (`lib/hidden.mjs`).
-   Nothing is deleted.
+3. **Re-check the next day: the temporary pool.**
+   Still failing: the site goes into the temporary pool.
+   It is hidden from browse, search, the leaderboard, the tiers, the games and the sitemap, and its profile page answers "not found" (`lib/hidden.mjs`).
+   Nothing is deleted: its rank, votes, grade and captures stay.
+   Two failures on one day never hide a site: the hiding check comes at least a day after the first failure, and a week after it for a blank page, a blocked capture, a redirect to a social profile, a duplicate, a placeholder page or the browser's error page (weak evidence the checker itself can cause).
+   No more than 20 sites are hidden in any 24 hours, oldest first failure first, and no more than 5 of those weak verdicts; the rest wait their turn, still shown, and are hidden as places free (36 dead sites: 20 one day, 16 the next).
+   This is the ordinary pace and sends you nothing; `/admin/health-pool` shows who is waiting.
+   A spike is different: when more than 100 sites (about 5% of the list), or more than 50 for one kind of reason, start failing within 48 hours, the fault is most likely ours or a host-wide outage, so none of them is hidden while it lasts and you get one alert.
+   It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day) before it is hidden, at the same 20 a day.
+   Weak verdicts are counted over 8 days instead: a fault in our reader can go on for a week at a steady pace.
+   More than 50 new ones of one kind (blank pages, say) in 8 days holds that kind's weak verdicts, still shown and checked daily, with one alert; other kinds keep moving.
+   More than 50 of all weak kinds together holds every kind with 10 or more, since one fault can show as several kinds.
+   The hold lifts when fewer than 50 of its held sites still fail, and each still failing then needs a full week again; a site held 14 days and still failing is released anyway into the weak drain, so a hold never lasts forever, and the alert stays up ("released, hiding N a day") until a week after the last of them is hidden.
+   A slower leak gets an alert without a hold: more than 15 sites hidden on weak evidence in a week; while it is up only 1 a day is hidden, and it clears once the week's count is down to 5.
+   Sites nobody could see anyway (a capture that never showed the site, no screenshot) never count toward any of this.
+   On release night, the sites already failing under the old rule keep their first failure date, so only those that really started failing recently count toward a spike; `node pipeline/health-check.mjs --dry-run` counts them beforehand ("Restarted on the ladder"), with how many fall inside the 48-hour and 8-day windows.
 4. **Keep re-checking** (hourly, when due): daily for the first 7 days, weekly to day 30, then monthly.
-   A check that passes brings the site straight back.
+   Every night one plain request also goes to each hidden site; if it answers with words, its full re-check comes within the hour.
+   A check that passes brings the site straight back, exactly as it was, tier included.
 5. **Day 90.**
    One more check is made on day 90.
-   Only a check made on or after day 90 that fails takes the site off the list.
-6. **The weekly export** (`health.yml`, `pipeline/exclusions.mjs`, every 6 or more days).
-   The site is added to `data/excluded.json` and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
-   Removed sites are re-checked later (days 7, 14 and 21, then monthly) and come back when they pass.
-7. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
+   Only a check made on or after day 90 that fails sends the site to the archive.
+6. **The weekly export: the archive** (`health.yml`, `pipeline/exclusions.mjs`, every 6 or more days).
+   The site is added to `data/excluded.json` (kind `down`, or `duplicate` for a duplicate) and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
+7. **The archive check** (the same weekly export, `pipeline/not-working.mjs` `archiveCheckDue`): every `down` and `dead` entry is checked again on days 7, 14 and 21 after it was archived, then every 30 days; plain health checks only, no Gemini, at most 40 a run.
+   One that passes leaves the archive and is recorded in `data/additions.json`, so the next sync lists it again even when the community list dropped it.
+   It counts as back only when the page carries the listed person's whole name, together and in order, in its title or its opening text (not its address; a name in Chinese or Japanese as written; a one-word name in the title or the first heading), so a lapsed domain someone else bought does not come back under the old name; otherwise it stays archived and `/admin/health-pool` shows what was found.
+   It comes back as a new site, whenever that is, because we cannot know it is the same site (your rule, 2026-11-23: "It can't keep its own votes."): captured, measured and ranked from code like a site listed for the first time, with none of the old site's votes, rating, tier, grade, face-offs, likes, claim or review decisions.
+   The old site's rows are kept as history under a closed-off key, `archived:<day>:<address>`, which nothing lists (`pipeline/archive-return.mjs`); no other site's rating moves for it.
+   A site back from the temporary pool (step 4) is different: the same site after a bad spell, back exactly as it was.
+   Not-a-portfolio removals, owner requests and duplicates are never checked this way.
+8. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
    Any other delisted row is kept and counted in the run summary.
    Votes and ratings stay.
 
 No one is emailed at any step.
+You see the pool, the archive and what came back in the last 30 days on `/admin/health-pool`.
 A site the check could not tell about for 28 days gives you an alert on the alerts page.
-A different path exists for a site that answers with the wrong thing (parked, blank, a duplicate): 3 failed checks, a week apart, spanning at least 13 days.
+A bot wall: a site whose capture met one is never failed for it; the first time, a row asks you about it once, and once you have decided it no check asks again or pools it for the wall.
+It is asked about again only after it failed a real check (it did not load, was parked or blank) and came back.
 A parked domain counts as the wrong thing also when its home page is only a redirect made on load (a script or a meta refresh of a few seconds) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
 The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
 A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.

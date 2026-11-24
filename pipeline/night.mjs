@@ -476,22 +476,26 @@ export async function planNight(ctx, state) {
     s.polls = { error: msg(e) };
     ctx.log(`Polls: scheduling failed: ${msg(e)}`);
   }
-  // Free too: bot-walled sites, listed sites whose signals collapsed, and listed
-  // addresses that are not a portfolio page by the address alone go to the
-  // review queue (lib/reviews/door.mjs). A failure never stops the night.
+  // Free too: rows whose reason no longer holds close by themselves, and
+  // first-time bot-walled sites and listed addresses that are not a portfolio
+  // page by the address alone go to the review queue (lib/reviews/door.mjs).
+  // A failure never stops the night.
   try {
     // The sites tonight's grade will take go to the door in minutes: the roster pass leaves them to it, and
     // only them (a backlog beyond tonight's share still gets its row).
     const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()), skipUrls: await gradedTonight(ctx) });
     s.addressBrake = sent.addressBrake ?? null;
     if (sent.addressBrake) ctx.log(`Address rule: brake on, removals held for the owner (${sent.addressBrake.why})`);
+    const closed = sent.closed ?? { signals_collapsed: 0, bot_wall: 0, recapture_blocked: 0 };
+    if (closed.signals_collapsed || closed.bot_wall || closed.recapture_blocked) {
+      ctx.log(`Review queue: closed by themselves: ${closed.signals_collapsed} low-signal, ${closed.bot_wall} bot-wall and ${closed.recapture_blocked} blocked re-capture row(s) whose reason no longer holds`);
+    }
     await recordSites(ctx, s, "plan", [
       ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
-      ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
       ...sent.address.map((url) => ({ url, entries: [["review", { url, why: "its address is not a portfolio page (the address rule)" }]] })),
     ]);
-    if (sent.botWall.length || sent.collapsed.length || sent.address.length) {
-      ctx.log(`Review queue: ${sent.botWall.length} bot-walled, ${sent.collapsed.length} collapsed and ${sent.address.length} not-a-portfolio address(es) sent to the Removal rule or the owner`);
+    if (sent.botWall.length || sent.address.length) {
+      ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.address.length} not-a-portfolio address(es) sent to the Removal rule or the owner`);
     }
   } catch (e) {
     ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);

@@ -8,11 +8,13 @@
 //      which the hourly re-check looks at when they are due
 //      (pipeline/not-working.mjs, pipeline/recheck.mjs)
 //   3. --exclusions: planned once a week (exclusions.mjs EXPORT_EVERY_DAYS,
-//      weeklyExport): confirmed-down sites and sites not working for 90 days
-//      go into data/excluded.json and out of data/feed.json (the workflow
-//      opens the bot pull request), and removed entries due for their check
-//      are checked again; the plan is applied again every night until it
-//      lands on main.
+//      weeklyExport): sites in the temporary pool for 90 days go to the
+//      archive, data/excluded.json, and out of data/feed.json, with removals
+//      decided in the review queue (the workflow opens the bot pull request);
+//      archived entries due for their check are checked again, and one that
+//      passes leaves the archive (recorded in data/additions.json so the list
+//      takes it back); the plan is applied again every night until it lands
+//      on main.
 //
 // Rows delisted for 30+ days are purged by pipeline/purge-delisted.mjs.
 //
@@ -27,7 +29,7 @@
 import fs from "fs";
 import path from "path";
 import { healthSummary, runHealthCheck } from "./health.mjs";
-import { DEAD_RECHECK_DAYS, DOWN_RECHECK_DAYS, DOWN_RECHECK_FIRST_DAYS, EXPORT_EVERY_DAYS, readJson, weeklyExport } from "./exclusions.mjs";
+import { ARCHIVE_EVERY_DAYS, ARCHIVE_FIRST_DAYS, EXPORT_EVERY_DAYS, readJson, weeklyExport } from "./exclusions.mjs";
 import { loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { createRenderer } from "./render.mjs";
 import { LEAVE_AFTER_DAYS } from "./not-working.mjs";
@@ -76,10 +78,14 @@ try {
     const excludedPath = path.join(ROOT, "data", "excluded.json");
     // Planned once a week and applied every night until it lands on main (./exclusions.mjs weeklyExport):
     // the workflow rewrites its pull request from main whenever a data file changes.
-    const ex = await weeklyExport({ db, excluded: readJson(excludedPath, []), feed, render, dryRun: DRY, log: console.log });
+    const additionsPath = path.join(ROOT, "data", "additions.json");
+    const additions = readJson(additionsPath, []);
+    const ex = await weeklyExport({ db, excluded: readJson(excludedPath, []), feed, additions, render, dryRun: DRY, log: console.log });
     if (ex.files && !DRY) {
       fs.writeFileSync(excludedPath, `${JSON.stringify(ex.files.excluded, null, 2)}\n`);
       if (ex.plan.added.length) fs.writeFileSync(path.join(ROOT, "data", "feed.json"), `${JSON.stringify(ex.files.feed, null, 2)}\n`);
+      // Sites back from the archive: recorded so the next sync lists them again (exclusions.mjs applyExport).
+      if (ex.files.additions && ex.files.additions.length !== additions.length) fs.writeFileSync(additionsPath, `${JSON.stringify(ex.files.additions, null, 2)}\n`);
     }
     const p = ex.plan;
     const verb = (now, would) => (DRY ? would : now);
@@ -88,7 +94,7 @@ try {
         (ex.landed ? "Last week's export has landed on main.\n\n" : "") +
         (!p
           ? `Nothing to export${ex.planned ? "" : `; a new export is planned once every ${EXPORT_EVERY_DAYS}+ days`}.\n`
-          : `${ex.planned ? "Planned tonight" : "Planned earlier and not on main yet, applied again"}: ${p.added.length} site(s) confirmed down or not working for ${LEAVE_AFTER_DAYS}+ days ${verb("added to", "would be added to")} data/excluded.json; ${p.back.length} removed site(s) passed the full check and ${verb("leave", "would leave")} it${p.back.length ? ` (${p.back.join(", ")})` : ""}; ${p.still.length} still failing or unknown, checked again on days ${DOWN_RECHECK_FIRST_DAYS.join(", ")} after removal and then every ${DOWN_RECHECK_DAYS} days (down), or in ${DEAD_RECHECK_DAYS} days (dead).\n`) +
+          : `${ex.planned ? "Planned tonight" : "Planned earlier and not on main yet, applied again"}: ${p.added.length} site(s) in the temporary pool for ${LEAVE_AFTER_DAYS}+ days or removed by a review decision ${verb("added to", "would be added to")} data/excluded.json (archived sites are the "down" and "dead" kinds); ${p.back.length} archived site(s) passed the full check and ${verb("leave", "would leave")} it${p.back.length ? ` (${p.back.join(", ")})` : ""}; ${p.still.length} still failing or unknown, checked again on days ${ARCHIVE_FIRST_DAYS.join(", ")} after archiving and then every ${ARCHIVE_EVERY_DAYS} days.\n`) +
         (ex.held.length ? `\nHidden or down but still on the list: ${ex.held.map((h) => `${h.url} (${h.why})`).join("; ")}.\n` : "")
     );
   }

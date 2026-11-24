@@ -251,9 +251,10 @@ test("10: the night's review rows cost a fixed number of round trips, and the do
   }
   const { db, trips } = faulty(real);
   const r = await syncReviewRows(db, { now: new Date(T0) });
-  assert.equal(r.botWall.length + r.collapsed.length, 60);
-  assert.ok(trips.n <= 10, `${trips.n} round trips for 60 rows`);
-  assert.equal(Number((await real.execute("SELECT COUNT(*) AS n FROM status_reviews")).rows[0].n), 60);
+  // The 30 bot walls get their row; the 30 low-signal sites get none (owner's default, 2026-11-23).
+  assert.deepEqual([r.botWall.length, r.collapsed.length], [30, 0]);
+  assert.ok(trips.n <= 10, `${trips.n} round trips for 30 rows`);
+  assert.equal(Number((await real.execute("SELECT COUNT(*) AS n FROM status_reviews")).rows[0].n), 30);
   // The door: no read-back of the row it just wrote.
   const { db: real2 } = await freshDb();
   await site(real2, "https://no-readback.dev", { n: 2 });

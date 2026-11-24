@@ -2,8 +2,8 @@
 // the entries are well formed, every reader still matches them on the URL
 // alone (generate_feed.py, discovery), none is left on data/feed.json, the
 // feed sync's shrink guard isn't tripped, /removed has a label for every
-// kind, and "dead" entries are checked again every few months
-// (pipeline/exclusions.mjs planDeadRecheck).
+// kind, and "dead" entries, part of the archive, are checked again monthly
+// (pipeline/exclusions.mjs planDeadRecheck, pipeline/not-working.mjs archiveCheckDue).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -13,7 +13,7 @@ import path from "node:path";
 import { listedKeys } from "../pipeline/discovery/run.mjs";
 import { Known, PATH_SIGNIFICANT, PROJECT_PAGE_HOST } from "../pipeline/discovery/known.mjs";
 import { normalizeCandidate } from "../pipeline/discovery/normalize.mjs";
-import { DEAD_RECHECK_DAYS, planDeadRecheck } from "../pipeline/exclusions.mjs";
+import { ARCHIVE_EVERY_DAYS, planDeadRecheck, recheckDue } from "../pipeline/exclusions.mjs";
 import { normKey } from "../pipeline/health.mjs";
 import { EXCLUSION_KINDS, REMOVED_KINDS } from "../lib/removed-kinds.mjs";
 
@@ -86,7 +86,7 @@ test("discovery treats every excluded site as already known, also found at its r
   assert.ok(checked > 100, `${checked} entries probed`);
 });
 
-test("dead entries: due ones are checked; one that answers leaves, the others wait three months", async () => {
+test("dead entries: due ones are checked; one that answers leaves, the others wait a month (the archive)", async () => {
   const now = new Date("2027-02-20T00:00:00Z");
   const list = [
     { url: "https://back.dev", kind: "dead", recheck_after: "2027-02-13" },
@@ -99,9 +99,21 @@ test("dead entries: due ones are checked; one that answers leaves, the others wa
   assert.deepEqual(r.still, ["https://still.dev"]);
   assert.deepEqual(r.excluded.map((e) => e.url), ["https://still.dev", "https://later.dev", "https://np.dev"]);
   const still = r.excluded.find((e) => e.url === "https://still.dev");
-  assert.equal(still.recheck_after, new Date(now.getTime() + DEAD_RECHECK_DAYS * 86400000).toISOString().slice(0, 10));
+  assert.equal(still.recheck_after, new Date(now.getTime() + ARCHIVE_EVERY_DAYS * 86400000).toISOString().slice(0, 10));
   assert.equal(still.last_checked, "2027-02-20");
   // Not due: untouched; at most `limit` a run.
   const one = await planDeadRecheck({ excluded: list, now, answers: async () => false, limit: 1 });
   assert.equal(one.still.length, 1);
+});
+
+test("the archive on file: every dead entry is checked within a month of its archiving, whatever its older recheck_after says", () => {
+  for (const e of objects.filter((x) => x.kind === "dead")) {
+    const due = recheckDue(e);
+    assert.ok(due, `${e.url}: in the archive`);
+    const base = String(e.last_checked ?? e.removed).slice(0, 10);
+    const month = new Date(Date.parse(`${base}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
+    assert.ok(due <= month, `${e.url}: due ${due}, within a month of ${base}`);
+  }
+  // Never brought back by a health check: not a portfolio, an owner's request, a duplicate.
+  for (const e of objects.filter((x) => ["not_portfolio", "owner_request", "duplicate"].includes(x.kind))) assert.equal(recheckDue(e), null, e.url);
 });
