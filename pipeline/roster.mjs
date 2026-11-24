@@ -158,9 +158,9 @@ export const AI_WORK = (p = "portfolios") =>
 export const LISTED_NOT_DOWN = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'`;
 
-/** SQL condition (never NULL): the AI rubric said this is not a portfolio. */
+/** SQL condition (never NULL): the AI rubric said this is not a portfolio. A CASE, so json_extract never runs on text that is not JSON. */
 export const NOT_PORTFOLIO = (p = "portfolios") =>
-  `COALESCE(json_valid(${p}.ai_rubric) AND json_extract(${p}.ai_rubric, '$.is_portfolio') = 0, 0)`;
+  `(CASE WHEN json_valid(${p}.ai_rubric) THEN COALESCE(json_extract(${p}.ai_rubric, '$.is_portfolio') = 0, 0) ELSE 0 END)`;
 
 const chunks = (arr, n = 400) =>
   Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));

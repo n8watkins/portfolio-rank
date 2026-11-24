@@ -12,7 +12,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "PortfolioRank",
     short_name: "PortfolioRank",
-    description: "The best developer portfolios, ranked by people and AI. Vote in face-offs and see who's on top.",
+    description: "The best developer portfolios, ranked by code checks and people's votes. Vote in face-offs and see who's on top.",
     start_url: "/",
     scope: "/",
     display: "standalone",

@@ -114,7 +114,7 @@ test("capture problems: the four groups with counts and a row in each, at deskto
       assert.match((await a.locator("[data-reason]").textContent()) ?? "", /only on our second visit at phone size; the desktop view showed the site/);
       assert.equal(await a.locator("[data-phone-only]").count(), 1);
       assert.equal(await a.locator("[data-review]").getAttribute("data-review"), "no");
-      assert.equal(await a.locator("[data-grade]").textContent(), "Gemini: tier A");
+      assert.equal(await a.locator("[data-grade]").textContent(), "Gemini: portfolio", "an old grade's letter is not shown (rubric v3)");
       assert.equal(await a.locator("[data-capture-again]").count(), 1);
       assert.equal(await a.locator("[data-open-review]").count(), 0);
       const a2 = row("A", A2);

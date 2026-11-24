@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ArrowUpRight, Clock, Hourglass, ShieldCheck, Sparkles, Trophy } from "lucide-react";
+import { ArrowUpRight, Clock, ShieldCheck, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
@@ -40,8 +40,8 @@ function seoTitle(p: Profile) {
 
 /** What search engines read about this profile: its own grade (an added site's too), plus the health check and social links. */
 async function seoFactsOf(p: Profile): Promise<SeoFacts> {
-  const { hidden, socials } = await loadSeoExtras(p.url);
-  return { name: p.name, url: p.url, domain: p.domain, tagline: p.tagline, report: p.report, hidden, socials };
+  const { hidden, inLibrary, socials } = await loadSeoExtras(p.url);
+  return { name: p.name, url: p.url, domain: p.domain, tagline: p.tagline, report: p.report, hidden, inLibrary, socials };
 }
 
 export async function profileMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -50,7 +50,7 @@ export async function profileMetadata({ params }: { params: Promise<{ slug: stri
   if (!p || p.gone) return {};
   const canonical = `${SITE_URL}${p.path}`;
   const facts = await seoFactsOf(p);
-  // Graded, a real portfolio and not hidden by the health check: the only profiles search engines are asked to index.
+  // A real profile by code and not hidden by the health check: the only profiles search engines are asked to index.
   if (!indexable(facts)) {
     return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical } };
   }
@@ -112,53 +112,6 @@ function Rank({ p }: { p: Profile }) {
   );
 }
 
-function ReportCard({ p }: { p: Profile }) {
-  const r = p.report;
-  return (
-    <section aria-labelledby="report" className="card p-5 sm:p-6">
-      <SectionTitle id="report" kicker="Report card" title={r ? "How to improve, weakest first" : "Coming"} />
-      {r ? (
-        <>
-          <p className="-mt-2 mb-4 text-xs text-mute">
-            AI design review by Gemini{r.model ? ` (${r.model})` : ""}: an opinion, not a verdict ·{" "}
-            <a href="/grading" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
-              how grading works
-            </a>
-          </p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {[...r.axes]
-              .sort((a, b) => a.score - b.score)
-              .map((ax) => (
-                <div key={ax.key} className="rounded-lg border border-edge p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{ax.label}</span>
-                    <span className="text-sm font-bold tabular-nums">{ax.score}/5</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
-                    <div className="h-1.5 rounded-full bg-accent" style={{ width: `${(ax.score / 5) * 100}%` }} />
-                  </div>
-                  {ax.note && <p className="mt-1.5 text-xs text-mute">{ax.note}</p>}
-                </div>
-              ))}
-          </div>
-        </>
-      ) : (
-        <p className="flex items-start gap-3 text-sm text-mute">
-          {p.stage === "grading" ? <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden /> : <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />}
-          <span>
-            {p.stage === "grading"
-              ? "Being graded now: Gemini reads a screenshot and the page and scores design, writing and projects. This page fills in when it's done."
-              : p.hideGrade
-                ? "The owner hid the grade."
-                : "Waiting for its AI grade. We grade new portfolios when there's room in the day's free quota; this page fills in when it's done."}
-            {p.job?.reason ? ` ${p.job.reason}` : ""}
-          </span>
-        </p>
-      )}
-    </section>
-  );
-}
-
 export async function ProfileV2({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const p = await loadProfile(decodeURIComponent(slug));
@@ -179,7 +132,6 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
               {p.tagline ? `${p.tagline} · ` : ""}
               {p.domain}
             </p>
-            {p.report?.roles.length ? <p className="mt-2 text-xs font-medium uppercase tracking-wider text-mute">{p.report.roles.join(" · ")}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {p.listed && (
@@ -210,7 +162,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
       )}
 
       <Rank p={p} />
-      <ReportCard p={p} />
+      {/* No Gemini report card (owner, 2026-11-23): its answers are stored, not shown. */}
 
       <section aria-labelledby="fixes" className="card p-5 sm:p-6">
         <SectionTitle id="fixes" kicker="Fix list" title="What to fix, and how">

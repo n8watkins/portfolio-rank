@@ -36,7 +36,7 @@ export async function prewarmQueue(db, { active, limit = PREWARM_LIMIT, now = Da
     sql: `SELECT p.url FROM portfolios p
           LEFT JOIN cache c ON c.k = 'psi:' || p.url
           WHERE p.status = 'live' AND ${active("p")}
-            AND NOT COALESCE(json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.is_portfolio') = 0, 0)
+            AND NOT (CASE WHEN json_valid(p.ai_rubric) THEN COALESCE(json_extract(p.ai_rubric, '$.is_portfolio') = 0, 0) ELSE 0 END)
             AND (${GEMINI_YES_SQL("p")}
               OR (p.shot_key IS NOT NULL AND COALESCE(json_valid(p.facts), 0) AND ${SIGNALS_SQL("p")} >= ${STRONG_SIGNALS})
               ${member})

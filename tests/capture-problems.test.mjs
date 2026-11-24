@@ -179,7 +179,8 @@ test("group D: open same-version records, newest first, with the grade, health a
   const { D } = await captureProblems(db);
   const row = D.find((r) => r.url === "https://d-worse.dev");
   assert.equal(row.reason.text, "The new capture lost its résumé and contact links and kept 300 of 3,000 characters of text.");
-  assert.deepEqual(row.grade, { state: "portfolio", tier: "B" });
+  // An older grade's letter is never shown (rubric v3, owner 2026-11-22).
+  assert.deepEqual(row.grade, { state: "portfolio" });
   assert.equal(row.health, "suspect");
   assert.equal(row.onReview, true);
   assert.ok(row.reviewId > 0);

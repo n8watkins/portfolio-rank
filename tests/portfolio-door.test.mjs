@@ -51,6 +51,7 @@ const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await owner
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 const DAY = 86400000;
 const answer = (isPortfolio, over = {}) => ({
+  portfolio_reason: isPortfolio ? "Shows projects the person built" : "no work shown on the page",
   is_portfolio: isPortfolio,
   tier: isPortfolio ? "B" : "D",
   ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: isPortfolio ? 3 : 1, note: isPortfolio ? "fine" : `no work shown (${c.id})` }])),
@@ -395,7 +396,7 @@ test("one night over a mixed set of new sites: every outcome, the summary lists 
   assert.equal(await hidden(db, S.no3), true, "no, 3 signals: removed");
   assert.equal(await hidden(db, S.junk), true, "junk: removed despite 6 signals");
   assert.equal(await hidden(db, S.no5), false, "no, 5 signals: kept for the owner");
-  assert.equal((await grade(db, S.recaptured)).tier, "B", "a newer capture clears the missing-screenshot marker");
+  assert.equal((await grade(db, S.recaptured)).rubric_version, 3, "a newer capture clears the missing-screenshot marker: a real v3 grade");
   assert.equal((await grade(db, S.waiting)).error, "no_usable_captures", "still waiting for a newer capture");
   assert.equal((await grade(db, S.missing)).error, "no_usable_captures");
   assert.equal(await grade(db, S.bad), null);

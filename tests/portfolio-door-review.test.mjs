@@ -36,6 +36,7 @@ const ROOT = path.join(import.meta.dirname, "..");
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 const DAY = 86400000;
 const answer = (isPortfolio) => ({
+  portfolio_reason: isPortfolio ? "Shows projects the person built" : "no work shown on the page",
   is_portfolio: isPortfolio,
   tier: isPortfolio ? "B" : "D",
   ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: isPortfolio ? 3 : 1, note: isPortfolio ? "fine" : `no work shown (${c.id})` }])),

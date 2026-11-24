@@ -10,7 +10,9 @@ import { tiersShown } from "@/lib/tiers-view";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
-import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
+// A person's own grade report (/me) still compares the v2 axes: their grade runs on the frozen v2 prompt
+// (pipeline/rubric-v2.mjs) until the owner decides what it shows under rubric v3.
+import { V2_AI_CRITERIA as AI_CRITERIA } from "@/pipeline/rubric-v2.mjs";
 import { domainOf, reportPath } from "@/lib/home";
 import { NO_LONGER_LISTED, isArchivedKey } from "@/lib/archived-key.mjs";
 

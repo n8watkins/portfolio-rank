@@ -134,10 +134,10 @@ async function freshDb() {
   return db;
 }
 const sqlTime = (ms) => new Date(ms).toISOString().replace("T", " ").slice(0, 19);
-async function addSite(db, url, { tier = "A", captured = NOW - 10 * DAY, factsAt = NOW - 10 * DAY, health = null, delisted = null, status = "live" } = {}) {
+async function addSite(db, url, { tier = "A", rubric = null, captured = NOW - 10 * DAY, factsAt = NOW - 10 * DAY, health = null, delisted = null, status = "live" } = {}) {
   await db.execute({
     sql: "INSERT INTO portfolios (url, status, shot_key, captured_at, facts, facts_at, ai_rubric, health, delisted_at) VALUES (?, ?, 'k', ?, '{}', ?, ?, ?, ?)",
-    args: [url, status, sqlTime(captured), new Date(factsAt).toISOString(), JSON.stringify({ tier }), health, delisted],
+    args: [url, status, sqlTime(captured), new Date(factsAt).toISOString(), JSON.stringify(rubric ?? { tier }), health, delisted],
   });
 }
 /** A site_freshness row as the removed hourly fingerprints left it: a recent change. */
@@ -160,16 +160,21 @@ test("Lighthouse prewarm picks due results: never measured, asked for, failed pa
     failedNow: [["psi", NOW - 10 * 60000, false], ["inspect", NOW - DAY]],
     polishOld: [["psi", NOW - DAY], ["inspect", NOW - 31 * DAY]],
     tierC: [],
+    v3: [],
+    notPortfolio: [],
   };
+  // Gemini's letter is never read (rubric v3): a C counts like any graded portfolio, a v3 grade with no letter too,
+  // and only "not a portfolio" is left out.
+  const rubricOf = { tierC: { tier: "C" }, v3: { rubric_version: 3, is_portfolio: true }, notPortfolio: { rubric_version: 3, is_portfolio: false } };
   for (const [name, rows] of Object.entries(sites)) {
-    await addSite(db, `https://${name}.dev`, { tier: name === "tierC" ? "C" : "A" });
+    await addSite(db, `https://${name}.dev`, { rubric: rubricOf[name] ?? null });
     for (const [kind, at, ok] of rows) await store(kind, `https://${name}.dev`, at, ok);
   }
   await oldChangeRow(db, "https://changed.dev", NOW - 5 * DAY);
   await markForced(db, "https://forced.dev", { now: NOW - HOUR });
   const due = await lighthouseDue(db, { now: NOW, limit: 20, active: ACTIVE });
-  // Never measured, then asked for, then the oldest Lighthouse result first: the 91-day one, the day-old one whose polish is due, the failure.
-  assert.deepEqual(due, ["https://never.dev", "https://forced.dev", "https://old.dev", "https://polishOld.dev", "https://failedLong.dev"]);
+  // Never measured (by address), then asked for, then the oldest Lighthouse result first: the 91-day one, the day-old one whose polish is due, the failure.
+  assert.deepEqual(due, ["https://never.dev", "https://tierC.dev", "https://v3.dev", "https://forced.dev", "https://old.dev", "https://polishOld.dev", "https://failedLong.dev"]);
 });
 
 test("screenshots: asked for first, then captures past 90 days; links: the same at 30 days; an old change is not a reason", async () => {

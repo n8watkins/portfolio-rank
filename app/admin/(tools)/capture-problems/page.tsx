@@ -54,7 +54,7 @@ function gradeTag(g: Row["grade"]) {
   if (g.state === "none") return { text: "Not graded", cls: tagWrap };
   if (g.state === "failed") return { text: "Grade failed", cls: tagDown };
   if (g.state === "not_portfolio") return { text: "Gemini: not a portfolio", cls: tagDown };
-  return { text: g.tier ? `Gemini: tier ${g.tier}` : "Gemini: portfolio", cls: tagWrap };
+  return { text: "Gemini: portfolio", cls: tagWrap };
 }
 
 function healthTag(h: string | null) {

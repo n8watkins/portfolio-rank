@@ -51,12 +51,12 @@ test("with RANKING_V2 off, no page shows tiers by ELO, though the tier data is t
   });
   await writeTierMeta(db, { n: 1, cutoffs: [{ tier: "SSS", min: null }], hist: [[0, 1]], perPoint: 4, at: new Date().toISOString() });
 
-  // The profile: the plain ELO, Gemini's report card under a neutral mark (never its letter B, owner 2026-11-22), no tier card.
+  // The profile: the plain ELO, no Gemini report card (owner, 2026-11-23) and never its letter B, no tier card.
   const profile = await get(`/p/${encodeURIComponent(SITE)}`);
   assert.equal(profile.status, 200);
-  // The profile in production (ELO · votes, "Gemini report card"), or the new profile the test run turns on with TOOLS_ENABLED (#191).
+  // The profile in production (ELO · votes), or the new profile the test run turns on with TOOLS_ENABLED (#191).
   assert.match(profile.html, /ELO · \d+ votes?|ELO <span[^>]*>\d+<\/span> from /);
-  assert.match(profile.html, /Gemini report card|AI design review/);
+  assert.doesNotMatch(profile.html, /Gemini report card|AI design review/);
   assert.doesNotMatch(profile.html, /aria-label="Tier B"/);
   for (const m of TIER_MARKERS) assert.ok(!profile.html.includes(m), `profile shows "${m}"`);
 

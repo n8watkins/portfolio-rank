@@ -22,7 +22,8 @@ const rows = (await db.execute("SELECT url, delisted_at, ai_rubric, shot_key FRO
 const byUrl = new Map(rows.map((r) => [String(r.url), r]));
 const { splits, unclear } = splitSites(rows.map((r) => ({ url: String(r.url), delistedAt: r.delisted_at })));
 
-const graded = (url) => Boolean(parseRubric(byUrl.get(url)?.ai_rubric)?.tier);
+// parseRubric returns only a real Gemini answer, any rubric version (pipeline/rubric.mjs geminiAnswered).
+const graded = (url) => Boolean(parseRubric(byUrl.get(url)?.ai_rubric));
 const captured = (url) => Boolean(byUrl.get(url)?.shot_key);
 const count = (f) => splits.filter(f).length;
 

@@ -24,6 +24,7 @@ import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
 import { prunePolls } from "../lib/polls/store.mjs";
 import { AI_WORK, NOT_PORTFOLIO } from "./roster.mjs";
 import { PRIMARY_MODEL } from "./gemini.mjs";
+import { GEMINI_ANSWERED_SQL } from "./rubric.mjs";
 
 export { ensurePollsSchema };
 
@@ -283,7 +284,7 @@ export async function dataDigest(db) {
               SUM(COALESCE(json_extract(facts, '$.motion'), 0) = 1) AS motion,
               SUM(json_valid(facts)) AS measured
        FROM portfolios p
-       WHERE p.status = 'live' AND ${AI_WORK("p")} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IS NOT NULL`
+       WHERE p.status = 'live' AND ${AI_WORK("p")} AND ${GEMINI_ANSWERED_SQL("p.ai_rubric")}`
     )
   ).rows[0];
   const n = (k) => Number(r?.[k] ?? 0);

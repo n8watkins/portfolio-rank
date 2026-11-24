@@ -2,7 +2,6 @@ import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { FAQ } from "@/components/FAQ";
-import { AI_JUDGES } from "@/lib/rubric-copy";
 import { hiddenUrls } from "@/lib/roster";
 
 // Every listed portfolio, searchable and filterable (the grid that used to
@@ -25,7 +24,7 @@ export default async function BrowsePage() {
         Browse {portfolios.length.toLocaleString("en-US")} portfolios
       </h1>
       <PortfolioGrid portfolios={portfolios} />
-      <FAQ aiJudges={AI_JUDGES} />
+      <FAQ />
     </div>
   );
 }

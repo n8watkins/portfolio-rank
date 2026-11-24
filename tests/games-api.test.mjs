@@ -80,6 +80,7 @@ const grade = JSON.stringify({
   quality_score: 4.1,
   checks_score: 71,
   visual_design: { score: 4, note: "Clean type and spacing" },
+  five_second_test: { score: 4, note: "Name and role clear at the top" },
   writing: { score: 3, note: "Short project blurbs" },
   checks: { resume: true, github: false },
   model: "gemini-3.5-flash-lite",
@@ -366,7 +367,8 @@ test("report download: signed in, or a one-time link sent through the email gate
   const page = await call(me, "GET", path);
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-type"), /text\/html/);
-  assert.ok(page.text.includes("Clean type and spacing") && page.text.includes("@media print"));
+  assert.ok(page.text.includes("Checks by code") && page.text.includes("@media print"));
+  assert.ok(!page.text.includes("Clean type and spacing") && !page.text.includes("Name and role clear at the top"), "no Gemini note is shown (owner, 2026-11-23)");
   assert.equal((await call(me, "GET", `/report/print?url=${encodeURIComponent("https://not-listed.example")}`)).status, 404);
 
   const j = jar();

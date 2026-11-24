@@ -4,17 +4,18 @@
 
 import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { guardedForReview } from "./portfolio-guard.mjs";
+import { geminiAnswered } from "./rubric.mjs";
 
 export async function ensureRubricHistory(db) {
   await applyTables(db, RUBRIC_HISTORY_TABLES);
 }
 
-/** Parse a stored rubric; null for missing, unparseable or error sentinels. */
+/** Parse a stored rubric; null for missing, unparseable, error sentinels and anything that is not a Gemini answer. */
 export function parseRubric(json) {
   if (json == null) return null;
   try {
     const r = JSON.parse(String(json));
-    return r && typeof r === "object" && !r.error && r.tier ? r : null;
+    return geminiAnswered(r) ? r : null;
   } catch {
     return null;
   }

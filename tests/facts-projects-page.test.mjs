@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { homeProjectLinks, measurePage, pageLinks, projectCandidates, projectLinksShare, projectLinksText, projectsPageFor } from "../pipeline/facts.mjs";
+import { homeProjectLinks, hostKey, measurePage, pageLinks, projectCandidates, projectLinksShare, projectLinksText, projectsPageFor } from "../pipeline/facts.mjs";
 import { codeChecks } from "../pipeline/rubric.mjs";
 
 const fixture = (name) => fs.readFileSync(path.join(import.meta.dirname, "fixtures", "facts", name), "utf8");
@@ -24,12 +24,14 @@ const withProjectsPage = (site, url) => {
 };
 const ok = async (u) => ({ status: 200, body: null, url: u });
 
-test("shreyanshportfolio.in: a home page with no projects leads to its /projects page, whose 8 projects are checked", () => {
+test("shreyanshportfolio.in: a home page with no projects leads to its /projects page, whose projects are checked, one link per repository", () => {
   const url = "https://shreyanshportfolio.in/";
   assert.deepEqual(projectCandidates(homeOf("shreyanshportfolio.in", url), url), []);
   assert.equal(projectsPageFor(homeOf("shreyanshportfolio.in", url), url), "https://shreyanshportfolio.in/projects");
   const got = projectCandidates(withProjectsPage("shreyanshportfolio.in", url), url);
-  assert.equal(got.length, 8);
+  // Version 4: several notebooks in one repository ("PROJECTS/blob/main/a.py", ".../b.py") are one project.
+  assert.equal(got.length, 6);
+  assert.equal(new Set(got.map((c) => hostKey(c.url))).size, 6);
   assert.ok(got.every((c) => c.from === "projects_page" && c.kind === "outbound"));
   // The whole main content of the projects page is its projects: the featured card's live site (no projects
   // class, under the page's h1), then its repositories and notebooks.

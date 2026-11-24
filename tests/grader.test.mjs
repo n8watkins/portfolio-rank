@@ -26,7 +26,8 @@ import { enqueueFreeGrade } from "../lib/grader/queue.mjs";
 import { publicJob } from "../lib/grader/view.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
-import { AI_CRITERIA, gradeRecord, parseRubricResponse } from "../pipeline/rubric.mjs";
+// A person's own grade still runs on the frozen v2 prompt (pipeline/rubric-v2.mjs) until the owner decides.
+import { V2_AI_CRITERIA as AI_CRITERIA, gradeRecordV2 as gradeRecord, parseRubricResponseV2 as parseRubricResponse } from "../pipeline/rubric-v2.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 
 const SECRET = "test-secret-not-real";
