@@ -166,15 +166,24 @@ const fold = (s) =>
     .replace(/[̀-ͯ]/g, "");
 
 // A listed domain that now forwards to a gambling site (expired and bought for
-// its links): www.abhisheksah.dev (angkasa338win.com), indrajeet.me
-// (app.lunabet89.com) and vallarasuk.com (pika77terkuat.com) in the
-// 2026-11-23 benchmark. Only after a move to another domain, and only with
-// GAMBLING_MIN different words from this list; on the 312 saved benchmark
-// sites no page without a move had two of them, and no real portfolio one.
-const GAMBLING = /(?<![a-z0-9])(slots?|casinos?|togel|judi|gacor|maxwin|jackpot|poker|betting|sportsbook|lottery|baccarat|roulette|no hu|taruhan|toto|bandar|gambling)(?![a-z0-9])/g;
-export const GAMBLING_MIN = 2;
-/** The different gambling words in a page's text (its first 20,000 characters). */
-export const gamblingWords = (text) => [...new Set([...fold(String(text ?? "").slice(0, 20000)).matchAll(GAMBLING)].map((m) => m[1].replace(/s$/, "")))];
+// its links): www.abhisheksah.dev (angkasa338win.com, "togel"), indrajeet.me
+// (app.lunabet89.com, "nổ hũ") and vallarasuk.com (pika77terkuat.com,
+// "taruhan") in the 2026-11-23 benchmark. Only words that gambling sites use
+// and nothing else does: not "slot", "poker", "lottery", "jackpot", "betting"
+// or "judi" alone, which a developer's projects or a person's name can carry
+// ("Planning Poker", Vue's named slots, a "Decentralized Lottery" contract, a
+// designer named Judi). The verdict needs the hijack too (redirectVerdict):
+// a page with none of the person's name, on a host that is not their handle.
+const GAMBLING_ONLY = /(?<![a-z0-9])(togel|gacor|maxwin|no hu|taruhan|judi online|judi slot|sportsbook)(?![a-z0-9])/g;
+/** The words only gambling sites use found in a page's text (its first 20,000 characters), each once. */
+export const gamblingWords = (text) => [...new Set([...fold(String(text ?? "").slice(0, 20000)).matchAll(GAMBLING_ONLY)].map((m) => m[1]))];
+
+/**
+ * The handle in a listed address ("oyi77" in oyi77.github.io, "janedoe" in
+ * janedoe.dev): a move to a host that carries it ("oyi77.is-a.dev") is the
+ * person's own, whatever its page says.
+ */
+const handleOf = (url) => registrableDomain(url).split(".")[0].replace(/^www$/, "");
 
 /** Name words that must appear on a redirect target for it to count as the same person's site. */
 const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
@@ -184,10 +193,12 @@ const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.leng
  * from a free host to their own domain (73 of 2,103 roster sites on
  * 2026-11-10), so a move is not a failure: it is reported so the stored URL
  * can be updated. Returns null (no cross-domain redirect),
- * { fail: reason } (a social profile, not a portfolio, or a gambling site:
- * gamblingWords; a failed check on the weekly-counted rule, never a removal) or
+ * { fail: reason } (a social profile: "redirects to <domain>, not a
+ * portfolio"; or a hijack whose page has a word only gambling sites use:
+ * "redirects to <domain>, a gambling site", a failed check, never a removal) or
  * { moved: true, hijack, to } where hijack means the target carries none of
- * the person's name (flagged for a person to look at, never removed on its own).
+ * the person's name and its host not the listed address's handle (flagged
+ * for a person to look at, never removed on its own).
  */
 export function redirectVerdict(url, finalUrl, name, text) {
   if (!finalUrl) return null;
@@ -195,9 +206,18 @@ export function redirectVerdict(url, finalUrl, name, text) {
   const to = registrableDomain(finalUrl);
   if (!from || !to || from === to) return null;
   if (NOT_A_PORTFOLIO_HOSTS.includes(to)) return { fail: `redirects to ${to}, not a portfolio` };
-  if (gamblingWords(text).length >= GAMBLING_MIN) return { fail: `redirects to ${to}, a gambling site` };
   const haystack = fold(`${finalUrl} ${String(text ?? "").slice(0, 20000)}`);
-  const hijack = !nameTokens(name).some((t) => haystack.includes(t));
+  const handle = handleOf(url);
+  const toHost = (() => {
+    try {
+      return new URL(finalUrl).hostname;
+    } catch {
+      return to;
+    }
+  })();
+  const ownHandle = handle.length >= 3 && fold(toHost).includes(handle);
+  const hijack = !ownHandle && !nameTokens(name).some((t) => haystack.includes(t));
+  if (hijack && gamblingWords(text).length > 0) return { fail: `redirects to ${to}, a gambling site` };
   return { moved: true, hijack, to };
 }
 

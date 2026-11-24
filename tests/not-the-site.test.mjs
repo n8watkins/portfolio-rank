@@ -37,7 +37,7 @@ test("host and server pages that stand in for the site, each from its saved page
   // Streamlit: the plain request loops on redirects, so the browser's reading decides.
   assert.equal(parkedPage({ finalUrl: "https://datasciencefolio.streamlit.app/", text: fixture("datasciencefolio.streamlit.app.rendered.txt"), title: "Streamlit" }), "not the site: Streamlit's error page");
   const muse = "https://muse.ai/s/neel-patel-portfolio-tomas-style-xzxx6m5xtl3huxh/44rs8uC9gN1nl-HjxoLSA9T-gfn27ZKRX8RhxAimXuw";
-  assert.equal(parkedPage({ finalUrl: muse, text: fixture("muse.ai.rendered.txt"), title: "Muse — Your Personal AI Agent" }), "not the site: a not-found page");
+  assert.equal(parkedPage({ finalUrl: muse, text: fixture("muse.ai.rendered.txt"), title: "Muse \u2014 Your Personal AI Agent" }), "not the site: a not-found page");
   assert.equal(parkedPage({ finalUrl: muse, html: fixture("muse.ai.plain.html") }), "not the site: a not-found page", "its plain answer too");
   for (const [title, body, what] of [
     ["Apache2 Ubuntu Default Page: It works", "<h1>Apache2 Ubuntu Default Page</h1><p>It works!</p>", "Apache's default page"],
@@ -52,7 +52,7 @@ test("host and server pages that stand in for the site, each from its saved page
 
 test("sale and parking landers on hosts and in words found by the benchmark", async () => {
   assert.equal(parkedPage({ finalUrl: "https://expireddomains.com/domain/swaroop.codes?utm_source=redi", text: fixture("swaroop.codes.rendered.txt") }), "redirects to expireddomains.com");
-  const gate = await httpGate("https://swaroop.codes", { fetchImpl: page("https://expireddomains.com/domain/swaroop.codes?utm_source=redi", "<title>swaroop.codes — Buy this expired domain | ED.com</title>") });
+  const gate = await httpGate("https://swaroop.codes", { fetchImpl: page("https://expireddomains.com/domain/swaroop.codes?utm_source=redi", "<title>swaroop.codes \u2014 Buy this expired domain | ED.com</title>") });
   assert.deepEqual([gate.status, gate.reason], ["parked", "redirects to expireddomains.com"]);
   const inb = fixture("saurabhdaware.in.inb-link.html");
   assert.equal(parkedPage({ finalUrl: "https://inb.link/saurabhdaware.in", html: inb }), "redirects to inb.link");
@@ -89,20 +89,40 @@ test("a real page that mentions a server, a host or an error in a sentence is th
 });
 
 test("a listed domain that now forwards to a gambling site fails the check; a move to the person's new site does not", () => {
-  for (const [url, to, file] of [
-    ["https://www.abhisheksah.dev", "https://angkasa338win.com/", "abhisheksah.dev.rendered.txt"],
-    ["https://indrajeet.me", "https://app.lunabet89.com/", "indrajeet.me.rendered.txt"],
-    ["https://vallarasuk.com", "https://pika77terkuat.com/game/pgr/3", "vallarasuk.com.rendered.txt"],
+  for (const [url, to, file, name] of [
+    ["https://www.abhisheksah.dev", "https://angkasa338win.com/", "abhisheksah.dev.rendered.txt", "Abhishek Sah"],
+    ["https://indrajeet.me", "https://app.lunabet89.com/", "indrajeet.me.rendered.txt", "Indrajeet Nikam"],
+    ["https://vallarasuk.com", "https://pika77terkuat.com/game/pgr/3", "vallarasuk.com.rendered.txt", "Vallarasu"],
   ]) {
-    const v = redirectVerdict(url, to, "Some One", fixture(file));
+    const v = redirectVerdict(url, to, name, fixture(file));
     assert.equal(v?.fail, `redirects to ${new URL(to).hostname.split(".").slice(-2).join(".")}, a gambling site`, url);
   }
-  // Moves to the person's own site whose projects mention games: one word, or none of the list.
-  const mine = "Jane Doe. Projects: a poker hand evaluator in Rust; a scheduling app. GitHub, contact.";
-  assert.deepEqual(redirectVerdict("https://jane.github.io", "https://janedoe.dev/", "Jane Doe", mine), { moved: true, hijack: false, to: "janedoe.dev" });
-  // Without a move, gambling words never count (a page about a lottery simulator and slot machines).
-  assert.equal(redirectVerdict("https://jane.dev", "https://jane.dev/", "Jane Doe", "A lottery simulator and a slot machine game, built in Unity."), null);
-  assert.deepEqual(gamblingWords("SLOT gacor, Nổ Hũ and casinos"), ["slot", "gacor", "no hu", "casino"]);
+  assert.deepEqual(gamblingWords("SLOT GACOR maxwin, Nổ Hũ, casinos and poker"), ["gacor", "maxwin", "no hu"], "only words gambling sites alone use");
+});
+
+// The review of #291 (2026-11-23): each of these read "a gambling site" when Jane moved from jane.github.io to janedoe.dev.
+const DEVELOPERS = [
+  "Solidity developer. Projects: Decentralized Lottery (Chainlink VRF), a booking app with time slots.",
+  "Projects: Planning Poker for remote teams; a Vue component library with named slots.",
+  "Game developer. A slot-machine demo in Unity with a jackpot animation and a roulette wheel shader.",
+  "Data scientist. A sports betting odds model; a poker equity calculator.",
+  "Frontend developer from Bandar Lampung. Projects: toto, a todo app; a casino-themed CSS art piece.",
+  "Judi Park, product designer. Case studies: onboarding, payments.",
+];
+
+test("a developer's new site that mentions games, slots or betting is a move, with the name or without", () => {
+  for (const text of DEVELOPERS) {
+    const named = `Jane Doe. ${text}`;
+    assert.deepEqual(redirectVerdict("https://jane.github.io", "https://janedoe.dev/", "Jane Doe", named), { moved: true, hijack: false, to: "janedoe.dev" }, named);
+    // Even on a page that does not carry the name, everyday words are no gambling verdict: the move is reported for a look.
+    assert.deepEqual(redirectVerdict("https://jane.github.io", "https://studio-nine.dev/", "Jane Doe", text), { moved: true, hijack: true, to: "studio-nine.dev" }, text);
+  }
+  // A move to the person's own site that does name a gambling word in a project ("a togel results scraper") is still theirs.
+  assert.equal(redirectVerdict("https://jane.github.io", "https://janedoe.dev/", "Jane Doe", "Jane Doe. A togel results scraper and a gacor-slot meme generator.").fail, undefined);
+  // A forward that keeps the listed address's handle is the person's own site, whatever its page says.
+  assert.deepEqual(redirectVerdict("https://oyi77.github.io", "https://oyi77.is-a.dev/", "Paijo Oyi", "Projects. Contact."), { moved: true, hijack: false, to: "oyi77.is-a.dev" });
+  // Without a move, gambling words never count.
+  assert.equal(redirectVerdict("https://jane.dev", "https://jane.dev/", "Jane Doe", "Situs togel gacor maxwin."), null);
 });
 
 test("a site the browser shows only its own error page for does not load", async () => {
