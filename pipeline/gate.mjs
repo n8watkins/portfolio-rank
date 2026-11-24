@@ -233,8 +233,9 @@ export function parkingMarker(html, text) {
  *     own title, parkingTitle): "parking page: <service>";
  *   - on a short page, a web server's default page, a host's placeholder or
  *     error page, a maintenance or removal notice (placeholderPage):
- *     "not the site: <what>". The health check counts it like a parked page
- *     (a failed check on the weekly-counted rule), never a removal.
+ *     "not the site: <what>" (a stable prefix other code matches on). The
+ *     health check counts it as a failed check of the parked kind on
+ *     whichever ladder runs; it is never a removal by itself.
  * A path, a short or empty page, or a page that could not be read is never
  * evidence: a single-page app's first HTML is nearly empty too.
  */

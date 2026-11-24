@@ -2,10 +2,11 @@
 // lander, a web server's default page, a host's error or placeholder page, a
 // maintenance or removal notice, a gambling site the domain now forwards to,
 // and the browser's own error page. Each is a failed check on the health
-// check's existing weekly-counted rule (pipeline/health.mjs nextHealth), never
-// a removal, and only on positive evidence. The fixtures in
+// check's ladder (pipeline/health.mjs nextHealth, or the temporary pool when
+// it runs), never a removal, and only on positive evidence. The fixtures in
 // tests/fixtures/reading/ are the pages saved by the 2026-11-23 benchmark
-// (emails and phone numbers replaced). Deterministic; no network.
+// (emails and phone numbers replaced; the removal notice is synthetic).
+// Deterministic; no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
