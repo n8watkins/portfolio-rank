@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 - 2026-11-23
+
+### New
+
+- Report a problem with a site's screenshot or measurements ([#285](https://github.com/n8watkins/portfolio-rank/pull/285))
+- Gemini is asked only whether a page is a portfolio and its roles ([#289](https://github.com/n8watkins/portfolio-rank/pull/289))
+
+### Fixed
+
+- Honest check scores, and blog or link-in-bio hosts are never portfolios ([#286](https://github.com/n8watkins/portfolio-rank/pull/286))
+- Count project links right on the five sites the version 3 trial got wrong ([#287](https://github.com/n8watkins/portfolio-rank/pull/287))
+
 ## 0.8.0 - 2026-11-23
 
 ### New
