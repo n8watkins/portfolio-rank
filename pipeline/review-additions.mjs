@@ -6,7 +6,8 @@
 // data/feed.json, and out of data/excluded.json when a "down" or
 // "not_portfolio" entry keeps it out (the owner saw it working and judged it
 // a portfolio). Owner requests and duplicates always stay excluded: a site its
-// owner removed is never relisted here, and neither is a copy. An entry this
+// owner removed is never relisted here, and neither is a copy; nor is a site
+// the owner ruled out on a later day than the relist (ownerRuledLater). An entry this
 // script added whose relist was undone comes back out.
 // Removals taken back (a "remove" row undone, such as the door's automatic
 // removal, lib/reviews/door.mjs) count as relists too: when the weekly export
@@ -29,6 +30,21 @@ import { confirmedRelists, undoneRemovals } from "../lib/reviews/store.mjs";
 
 /** Exclusion kinds a confirmed relist overrides. */
 export const OVERRIDABLE = new Set(["down", "not_portfolio"]);
+
+/**
+ * True when the owner ruled the site out on a later day than the relist was
+ * decided: an exclusion with decided_by "owner" and a `removed` day after the
+ * relist's day. The newer ruling stands, so an old confirmed relist never
+ * brings back a site the owner has since taken off the list (trixum.net and
+ * michellebrenner.com, 2026-11-24). A removal on the same day as the relist,
+ * or a relist with no date, keeps the old behaviour: the relist wins.
+ */
+export function ownerRuledLater(exclusion, relist) {
+  if (typeof exclusion !== "object" || exclusion?.decided_by !== "owner") return false;
+  const removed = String(exclusion.removed ?? "").slice(0, 10);
+  const decided = String(relist?.decidedAt ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(removed) && /^\d{4}-\d{2}-\d{2}$/.test(decided) && removed > decided;
+}
 
 /**
  * Pure: { added, unexcluded, blocked, additions, excluded, feed } without
@@ -66,6 +82,10 @@ export function planReviewAdditions({ relists: confirmed, undone = [], additions
       const kind = typeof ex === "string" ? "down" : ex.kind ?? "down";
       if (!OVERRIDABLE.has(kind)) {
         blocked.push({ url: r.url, kind });
+        continue;
+      }
+      if (ownerRuledLater(ex, r)) {
+        blocked.push({ url: r.url, kind: "owner_ruling" });
         continue;
       }
       lift.add(key);
