@@ -133,10 +133,16 @@ function mainLinks() {
  * drawn from data fetched after the page opened, alestor123.is-a.dev's repositories from a cold serverless
  * API): the links in the main content unchanged for SETTLE_STABLE_MS and no data request in flight, by
  * `until` at the latest. The usual waits are part of that window, so a page that has already settled is read
- * as soon as before.
+ * as soon as before. `report`, when given (tests), is filled with what the settling did: `changes`, how many times
+ * the link count changed after the first reading; `polls`, how many polls it ran after the usual waits;
+ * `busyPolls`, how many of those found a data request in flight. The reading is the same with or without it.
  */
-export async function settleAndRead(p, net, { until = Date.now() + SETTLE_MAX_MS } = {}) {
+export async function settleAndRead(p, net, { until = Date.now() + SETTLE_MAX_MS, report = null } = {}) {
   const left = () => until - Date.now();
+  const stats = report ?? {};
+  stats.changes = 0;
+  stats.polls = 0;
+  stats.busyPolls = 0;
   await p.waitForLoadState("networkidle", { timeout: Math.max(1, Math.min(5000, left())) }).catch(() => {});
   let count = await p.evaluate(mainLinks).catch(() => -1);
   let changed = Date.now();
@@ -145,6 +151,7 @@ export async function settleAndRead(p, net, { until = Date.now() + SETTLE_MAX_MS
     if (n !== count) {
       count = n;
       changed = Date.now();
+      stats.changes++;
     }
   };
   await p.waitForTimeout(Math.max(0, Math.min(1000, left())));
@@ -155,6 +162,8 @@ export async function settleAndRead(p, net, { until = Date.now() + SETTLE_MAX_MS
     await sample();
   }
   while (left() > 0 && (Date.now() - changed < SETTLE_STABLE_MS || !net.quiet())) {
+    stats.polls++;
+    if (!net.quiet()) stats.busyPolls++;
     await p.waitForTimeout(Math.min(POLL_MS, Math.max(1, left())));
     await sample();
   }
