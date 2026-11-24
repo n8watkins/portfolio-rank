@@ -262,3 +262,33 @@ test("a blocked capture's 'review' row: Mark checked records only, and is never 
   assert.deepEqual(await withOwnerVerdict(db, url, GRADE()), GRADE(), "no verdict from a review row");
   assert.deepEqual(await confirmedRelists(db), []);
 });
+
+test("an old confirmed relist never brings back a site the owner later ruled out", () => {
+  const url = "https://www.trixum.net";
+  const ownerOut = { url, name: "Naveed Ahmed", removed: "2026-11-23", kind: "not_portfolio", decided_by: "owner" };
+  const plan = (relist, exclusion) =>
+    planReviewAdditions({ relists: [relist], additions: [], excluded: [exclusion], feed: [{ name: "Other", url: "https://other.example" }] });
+
+  // The production case: relist confirmed 14 November, the owner's ruling on 23 November.
+  const later = plan({ url, name: "Naveed Ahmed", decidedAt: "2026-11-14T01:33:49.392Z" }, ownerOut);
+  assert.deepEqual(later.added, []);
+  assert.deepEqual(later.unexcluded, []);
+  assert.deepEqual(later.blocked, [{ url, kind: "owner_ruling" }]);
+  assert.deepEqual(later.excluded, [ownerOut], "still excluded");
+  assert.equal(later.feed.length, 1, "not back on the feed");
+
+  // A relist decided after the ruling is the owner changing their mind: it wins, as before.
+  const changed = plan({ url, name: "Naveed Ahmed", decidedAt: "2026-11-25T10:00:00.000Z" }, ownerOut);
+  assert.deepEqual(changed.unexcluded, [url]);
+  assert.equal(changed.added.length, 1);
+
+  // The same day keeps the old behaviour (an automatic removal undone that day).
+  const sameDay = plan({ url, name: "Naveed Ahmed", decidedAt: "2026-11-23T20:00:00.000Z" }, ownerOut);
+  assert.deepEqual(sameDay.unexcluded, [url]);
+
+  // A removal by a rule or the AI, or one with no decider, is still overridden by an owner's relist.
+  for (const decided_by of ["rule:blocked-host", "ai:gemini-3.1+haiku-5.5", undefined]) {
+    const byRule = plan({ url, name: "Naveed Ahmed", decidedAt: "2026-11-14T01:33:49.392Z" }, { ...ownerOut, decided_by });
+    assert.deepEqual(byRule.unexcluded, [url], String(decided_by));
+  }
+});
