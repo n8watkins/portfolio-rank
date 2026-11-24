@@ -10,7 +10,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
-import { PROJECTS_PAGE_MS, SETTLE_STABLE_MS, readProjectsPage, settleAndRead, swapped, watchRequests } from "../pipeline/capture-projects.mjs";
+import { PROJECTS_PAGE_MS, readProjectsPage, settleAndRead, swapped, watchRequests } from "../pipeline/capture-projects.mjs";
 
 const page = (body) => `<!doctype html><title>t</title><body>${body}</body>`;
 // Everything a script on a page might do that is not a plain read.
@@ -151,30 +151,28 @@ test("a page that has already settled is read as soon as before: the settling ad
   const p = await open("/");
   const got = await readProjectsPage(p, `${base}/settled`);
   assert.match(got?.html ?? "", /demo5\.example/);
-  // The settling against the waits it replaced (main's: the network quiet for up to 5 s, 1 s, six scrolls of
-  // 250 ms), each on a fresh load of the same settled page in the same browser, so a busy machine slows both alike.
-  const oldWaits = async (tab) => {
-    await tab.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
-    await tab.waitForTimeout(1000);
-    for (let i = 0; i < 6; i++) {
-      await tab.mouse.wheel(0, 1200).catch(() => {});
-      await tab.waitForTimeout(250);
-    }
-  };
-  const timed = async (fn) => {
+  // What the settling did, counted rather than timed (a wall-clock comparison failed on a busy machine): on a page
+  // that had settled before the usual waits ended (1 s, then six scrolls of 250 ms), its links never changed and it
+  // ran at most one poll after those waits, so it read the page as soon as the old waits would have.
+  const settle = async (path) => {
     const tab = await p.context().newPage();
     const net = watchRequests(tab);
-    await tab.goto(`${base}/settled`);
-    const t0 = Date.now();
-    await fn(tab, net);
-    const ms = Date.now() - t0;
+    await tab.goto(`${base}${path}`);
+    const report = {};
+    const seen = await settleAndRead(tab, net, { report, until: Date.now() + 12000 });
     net.stop();
     await tab.close();
-    return ms;
+    return { report, seen };
   };
-  const before = await timed(oldWaits);
-  const now = await timed((tab, net) => settleAndRead(tab, net));
-  assert.ok(now - before < SETTLE_STABLE_MS / 2, `settling ${now} ms, the old waits ${before} ms`);
+  const settled = await settle("/settled");
+  assert.match(settled.seen.html, /demo5\.example/);
+  assert.equal(settled.report.changes, 0, JSON.stringify(settled.report));
+  assert.ok(settled.report.polls <= 1, `polls after the usual waits: ${JSON.stringify(settled.report)}`);
+  // The other way round, the same counters see a page that had not settled: its list arrived late, so its link
+  // count changed and the settling polled past the usual waits until the list held still.
+  const late = await settle("/late-list");
+  assert.match(late.seen.html, /github\.com\/ana\/cascade-heal/);
+  assert.ok(late.report.changes >= 1 && late.report.polls > 1, JSON.stringify(late.report));
   await p.context().close();
 });
 
