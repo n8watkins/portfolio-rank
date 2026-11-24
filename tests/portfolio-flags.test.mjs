@@ -214,6 +214,50 @@ test("blog-only: a site that calls itself a blog and has none of a portfolio's o
   }
 });
 
+test("blog-only: 'blog' counts only as the site's name, as the six real blogs use it", () => {
+  const dated = `<p><time>March 3, 2026</time> <a href="/2026/03/03/hello.html">Hello</a></p>`;
+  // The names the six blogs the owner confirmed give themselves (title, og:site_name or first h1).
+  for (const name of [
+    "Patrick's Blog",
+    "Devrim Mehmet | Kişisel Blog | Devrim Mehmet",
+    "Abdul Rauf's Blog",
+    "Kevinbkdev Blog",
+    "Prem S Gangadharan (Prem S G) | Software Engineer, AI, RAG & GraphDB Blog",
+    "bouwe.io, a blog by Bouwe Westerdijk",
+    "Blog",
+    "The blog of Ana Ruiz",
+    "Bitácora de Ana",
+  ]) {
+    assert.equal(blogOnly(page(`<h1>Hello</h1>${dated}`, { title: name }))?.flag, "blog-only", name);
+  }
+  // A blog mentioned, not named.
+  for (const name of ["Ana Ruiz - Code & Blog", "Ana Ruiz | Design and blog", "Hi, I'm Ana. I build things and blog about them", "Ana writes a blog about Rust", "Blogging tips by Ana"]) {
+    assert.equal(blogOnly(page(`<h1>Hello</h1>${dated}`, { title: name })), null, name);
+  }
+});
+
+test("blog-only: project links under the person's own section protect a page; links inside posts do not", () => {
+  // (A) A first heading that mentions blogging, projects under "Things I've made", menu Home/About/Blog.
+  const a = page(`<nav><a href="/">Home</a><a href="/about">About</a><a href="/blog">Blog</a></nav>
+    <h1>Hi, I'm Ana. I build things and blog about them</h1>
+    <h2>Things I've made</h2><ul><li><a href="https://github.com/ana/tidy">Tidy</a></li><li><a href="https://github.com/ana/plot">Plot</a></li>
+    <li><a href="https://plot-demo.example.com">Live demo</a></li></ul>
+    <h2>Latest posts</h2>${posts(6)}`);
+  assert.equal(blogOnly(a), null);
+  assert.deepEqual(flagNames(a), []);
+  // (B) A title with "Code & Blog", projects under "Apps I shipped".
+  const b = page(`<h1>Ana Ruiz</h1><h2>Apps I shipped</h2><p><a href="https://github.com/ana/tidy">Tidy</a> <a href="https://tidy.example.com">Tidy, live</a></p>
+    <h2>Writing</h2>${posts(6)}`, { title: "Ana Ruiz - Code & Blog" });
+  assert.equal(blogOnly(b), null);
+  assert.deepEqual(flagNames(b), []);
+  // The same links inside a pure blog's posts protect nothing: a post's heading does not say "I made".
+  const inPosts = page(`<h1>Patrick</h1><article><h2>New Project</h2><time>March 3, 2026</time><p>I put <a href="https://github.com/x/y">y</a> online.</p></article>`, { title: "Patrick's Blog" });
+  assert.equal(blogOnly(inPosts)?.flag, "blog-only");
+  // A post titled with "I made" is a sentence, not a section of the person's work.
+  const sentence = page(`<h1>Patrick</h1><article><h2>I made the web better today, you can too</h2><time>March 3, 2026</time><p><a href="https://github.com/x/y">y</a></p></article>`, { title: "Patrick's Blog" });
+  assert.equal(blogOnly(sentence)?.flag, "blog-only");
+});
+
 test("blog-only: 'read more' links alone are not posts (testimonials have them)", () => {
   const recs = page(`<h1>Andrew Smith</h1>${"<blockquote>Great engineer. <a href='/r'>Read more</a></blockquote>".repeat(6)}`);
   assert.equal(blogOnly(recs), null);

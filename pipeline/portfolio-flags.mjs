@@ -376,7 +376,26 @@ const POST_SLUG = /^\/[a-z0-9]+(?:-[a-z0-9]+){4,}$/;
 // & skills"; a post titled "... an exceptional user experience in retail" is not one.
 const RESUME_HEADING = /\b(?:experience|work history|employment|career|resume|résumé|curriculum|cv|education|skills|deneyim|experiencia|experiência|expérience|berufserfahrung|werkervaring)\b/i;
 // A site that calls itself a blog, in the languages the list has; and the words that make it more than one.
-const SELF_BLOG = /\b(?:blog|weblog|dev ?blog|tech ?blog|digital garden|bit[aá]cora|ki[şs]isel blog)\b/i;
+const BLOG_WORD = String.raw`(?:blog|weblog|dev ?blog|tech ?blog|digital garden|bit[aá]cora|ki[şs]isel blog)`;
+// The blog word as the site's NAME, in one part of a name split at "|", "-", ":", "," and the like: "Patrick's
+// Blog", "Kevinbkdev Blog", "Kişisel Blog", "a blog by Bouwe", "blog of Ana", "Blog" alone. Never "Code & Blog",
+// "Portfolio and blog" or "I build things and blog about them".
+const BLOG_NAME_OWNED = new RegExp(String.raw`^(?:.+['’]s\s+|my\s+|the\s+)?${BLOG_WORD}$`, "iu");
+const BLOG_NAME_BY = new RegExp(String.raw`^(?:a\s+|the\s+)?${BLOG_WORD}\s+(?:by|of|de|von|van|di)\s+\S`, "iu");
+const BLOG_NAME_END = new RegExp(String.raw`(?:^|\s)(\S+)\s+${BLOG_WORD}$`, "iu");
+/** Whether a name the site gives itself (title, og:site_name, first h1) names it as a blog. */
+function namesItselfBlog(name) {
+  return name.split(/\s*[|·:,/\p{Pd}]\s+|\s+[|·:/\p{Pd}]\s*/u).some((part) => {
+    const s = part.trim().replace(/[.!]+$/, "");
+    if (BLOG_NAME_OWNED.test(s) || BLOG_NAME_BY.test(s)) return true;
+    const end = s.match(BLOG_NAME_END);
+    return Boolean(end) && !/^(?:&|and|und|et|e|y|en|\+|or)$/i.test(end[1]);
+  });
+}
+// A heading for work the person made, in their own words ("Things I've made", "Apps I shipped", "What I built"):
+// project links under such a heading, or a plural projects section, protect a page that calls itself a blog. A
+// post's singular "New Project" is not one.
+const OWN_MAKING = /\b(?:i|i've|i’ve|i have|we|we've)\s+(?:made|built|build|shipped|ship|created|designed|launched|crafted|coded|wrote|written|released)\b|\b(?:made|built|shipped|created) by me\b/i;
 const SELF_PORTFOLIO = /\b(?:portf[oó]lio|portafolio|projects?|works?|case stud(?:y|ies)|resume|résumé|cv)\b/i;
 // A heading that names projects as a section: the plural, or the projects family's section words.
 const PROJECTS_SECTION = /\b(?:projects|portfolio|works|(?:my|selected|recent|featured|side|client|our|personal|open[- ]source) work|case studies|things i(?:'ve| have)? built|projets|proyectos|projekte|projetos|progetti|projecten|projeler|projelerim|r[eé]alisations|trabajos|trabalhos)\b/i;
@@ -427,8 +446,12 @@ export function blogFacts(site) {
   // no projects menu entry, no links to its own project pages, no heading that names projects in the plural or
   // as a section, no resume heading. Project or repository links inside the posts do not protect it, and a
   // singular "New Project" heading is a post's, not a section.
-  const calls = selfNames(p).find((n) => SELF_BLOG.test(n) && !SELF_PORTFOLIO.test(n));
-  if (calls && dated >= 1 && !p.projects.nav.length && !p.projects.ownPages.length && !p.headings.some(isProjectsSection) && !p.headings.some(isResumeHeading)) {
+  const calls = selfNames(p).find((n) => namesItselfBlog(n) && !SELF_PORTFOLIO.test(n));
+  // Project links shown on the page under a short section title the person wrote for their work ("Things I've
+  // made", "Apps I shipped") protect it. Links inside posts do not: a post's title is a sentence ("I made the web
+  // better today, you can too", www.patrickhyatt.com), not a section title of five words or fewer.
+  const ownWork = p.headings.some((h) => h.level >= 2 && OWN_MAKING.test(h.words) && h.words.split(/\s+/).length <= 5) && p.projects.shown + p.projects.repos > 0;
+  if (calls && dated >= 1 && !ownWork && !p.projects.nav.length && !p.projects.ownPages.length && !p.headings.some(isProjectsSection) && !p.headings.some(isResumeHeading)) {
     return { ...base, hasBlog: true, verdict: "blog-only", calls };
   }
   if (posts < BLOG_MIN_POSTS) {
