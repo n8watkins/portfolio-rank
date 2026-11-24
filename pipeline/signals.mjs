@@ -25,12 +25,18 @@ const ROLE_NOUN = String.raw`(?:developer|engineer|designer|programmer|architect
 const WORD = String.raw`[\p{L}\d+#.&/-]+`;
 // In a title's part: everything up to its last role word ("Frontend Team Lead and Senior Javascript/Typescript Engineer").
 const ROLE_IN_PART = new RegExp(String.raw`^(.*\b${ROLE_NOUN})(?![\p{L}\d])`, "iu");
-// In the description: "I'm a web developer", "Jane Doe, a web developer", "is a Sydney-based data and AI engineer",
-// "as a full-stack developer", or a description that starts with the role ("Design engineer in Warsaw.").
+// In the description, only after a subject that names the person: "I'm a web developer", "I am an engineer",
+// "I'm Shailendra Singh, a web developer", "Vinay is a Sydney-based data and AI engineer".
 const ROLE_IN_DESCRIPTION = new RegExp(
-  String.raw`(?:\b(?:i am|i['’]m)\s+(?:an?\s+)?|(?:\b(?:is|as)|,)\s+an?\s+|^)((?:${WORD}\s+){0,4}?${ROLE_NOUN})(?![\p{L}\d])`,
+  String.raw`(?:\b(?:i am|i['’]m)\s+(?:[\p{L}.' -]{2,40},\s+)?an?\s+|\bis\s+an?\s+)((?:${WORD}\s+){0,4}?${ROLE_NOUN})(?![\p{L}\d])(?!\s+of\b)`,
   "iu"
 );
+// A part that offers, teaches or looks for the role is not the person's own ("Hire a React Developer",
+// "Tips for Developer", "Looking for a designer"), nor one that denies it ("not a developer").
+const NOT_OWN_ROLE = /\b(?:hire|hiring|tips?|for|guide|how to|become|looking|jobs?|not|n['’]t|never|no longer)\b/i;
+// A role the person had before ("Previously Senior Engineer at Google, now Founder", "Ex-Developer turned Designer").
+const PAST_ROLE = /^\s*(?:previously|formerly|former|ex-|ex\s|used to be|retired)/i;
+const NOW_SPLIT = /\s*\b(?:now|currently|turned)\b\s*|,\s*|;\s*/i;
 // Praise a person gives themselves, not part of the role ("a driven software developer").
 const PUFFERY = /^(?:(?:passionate|driven|curious|dedicated|motivated|enthusiastic|creative|results-driven|detail-oriented|highly|very|self-taught|friendly|hardworking|hard-working|skilled|talented)\s+)+/i;
 // Between a title's parts: "|", "·", "•", a spaced hyphen, an en or em dash (–, \u2014), or ": ".
@@ -38,28 +44,43 @@ const TITLE_SPLIT = /\s+[|·•–\u2014-]\s+|\s*[|·•]\s*|\s+[–\u2014]\s*|:
 const ROLE_MAX_WORDS = 8;
 
 const tidy = (s) => decodeEntities(String(s ?? "")).replace(/\s+/g, " ").trim();
-/** The role a piece of text ends in, or null: at most ROLE_MAX_WORDS words, without self-praise. */
+/** The role a piece of text ends in, or null: at most ROLE_MAX_WORDS words, without self-praise or a past role. */
 const roleFrom = (s, re) => {
-  const m = tidy(s).slice(0, 500).match(re);
-  if (!m) return null;
+  const m = tidy(s).match(re);
+  if (!m || PAST_ROLE.test(m[1])) return null;
   const role = m[1].replace(PUFFERY, "").replace(/^(?:an?|the)\s+/i, "").replace(/^[\s,;&+-]+/, "").trim();
   return role && role.split(" ").length <= ROLE_MAX_WORDS ? role : null;
 };
 
+/** The person's current role in one part of a title: the last clause that names one, never a past one. */
+const roleInPart = (part) => {
+  if (NOT_OWN_ROLE.test(part)) return null;
+  const clauses = part.split(NOW_SPLIT).filter(Boolean);
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const role = roleFrom(clauses[i], ROLE_IN_PART);
+    if (role) return role;
+  }
+  return null;
+};
+
 /**
  * The role the page states in its own head, or null when it states none:
- * from the <title> first (the first part of "Name | Role | Tagline" that ends
- * in a role word), then from the meta description's "I'm a ... developer".
- * Words only as the page writes them, never guessed. Stored with the site's
- * signals (portfolios.signals.role); nothing reads it yet.
+ * from the <title> first (the first part of "Name | Role | Tagline" that
+ * names the person's current role), then from the meta description's "I'm
+ * a ... developer" or "<name> is a ... engineer". Words only as the page
+ * writes them, never guessed. Stored with the site's signals
+ * (portfolios.signals.role); nothing reads it yet.
  * @param {string} title @param {string} [description]
  */
 export function statedRole(title, description = "") {
   for (const part of tidy(title).slice(0, 500).split(TITLE_SPLIT)) {
-    const role = roleFrom(part, ROLE_IN_PART);
+    const role = roleInPart(part);
     if (role) return role;
   }
-  return roleFrom(description, ROLE_IN_DESCRIPTION);
+  const d = tidy(description).slice(0, 500);
+  const m = d.match(ROLE_IN_DESCRIPTION);
+  // "I'm not a developer" never matches (the article follows the subject); a past role ("is a former engineer") is no role.
+  return m ? roleFrom(m[1], ROLE_IN_PART) : null;
 }
 
 /** The content of the page's <meta name="description">, or "". */
