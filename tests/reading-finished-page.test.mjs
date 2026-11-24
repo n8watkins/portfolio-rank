@@ -153,6 +153,16 @@ test("settleText: a thin page that holds still is watched to the thin limit; a p
   const section = await run([2183, 2185, 2190, 2700, 2702, 2700]);
   assert.ok(section.ms >= 3500, `real growth restarts the quiet time (${section.ms} ms)`);
   assert.equal(section.grew, 2700 - 2183);
+  // An infinite feed (every scroll loads more) is scrolled at most once per sample to the limit: about 20 screens,
+  // 30 on a page that was thin when the wait began.
+  const feed = await run(Array.from({ length: 200 }, (_, n) => 1000 + 800 * n));
+  assert.ok(feed.ran.length <= 22, `${feed.ran.length} screens on a page with text`);
+  const thinFeed = await run([50, ...Array.from({ length: 200 }, (_, n) => 1000 + 800 * n)]);
+  assert.ok(thinFeed.ran.length <= 32, `${thinFeed.ran.length} screens on a page that began thin`);
+  // Known limit: typing slower than the tolerance (40 characters, or 2%, per 2 seconds) reads as holding still, so the
+  // page is read mid-typing; one read of the page is the rule.
+  const slowTyping = await run(Array.from({ length: 40 }, (_, n) => 3000 + 5 * n));
+  assert.ok(slowTyping.ms <= 2500 && slowTyping.grew < 40, `read mid-typing after ${slowTyping.ms} ms`);
 });
 
 // --- 2. A size cap throws the content away -------------------------------------------------------
