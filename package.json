@@ -22,11 +22,11 @@
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
-    "@sentry/browser": "11.12.0",
-    "@sentry/cloudflare": "11.12.0",
-    "@sentry/core": "11.12.0",
+    "@sentry/browser": "11.16.0",
+    "@sentry/cloudflare": "11.16.0",
+    "@sentry/core": "11.16.0",
     "jpeg-js": "0.4.4",
-    "lucide-react": "^1.73.0",
+    "lucide-react": "^1.77.0",
     "next": "^16.4.6",
     "next-auth": "^5.0.0-beta.32",
     "openskill": "5.0.1",
@@ -34,8 +34,8 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1169.0",
-    "@opennextjs/cloudflare": "1.20.17",
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@opennextjs/cloudflare": "1.20.18",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^26.6.6",
     "@types/react": "^19.1.0",
@@ -49,8 +49,8 @@
     "sharp": "0.35.5",
     "tailwindcss": "^4.1.8",
     "typescript": "^7.0.2",
-    "undici": "8.12.4",
-    "wrangler": "4.162.0"
+    "undici": "8.13.1",
+    "wrangler": "4.166.0"
   },
   "overrides": {
     "postcss": "^8.5.32",
