@@ -4,6 +4,64 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.9.0",
+      "tag": "v0.9.0",
+      "date": "2026-11-23",
+      "time": "2026-11-24T00:35:58Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.9.0",
+      "previous": "v0.8.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "profile",
+          "text": "Report a problem with a site's screenshot or measurements",
+          "breaking": false,
+          "pr": 285,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/285",
+          "commit": "3a0e933b8531d2a778c7671ad1b7bcb425aebee4",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/3a0e933b8531d2a778c7671ad1b7bcb425aebee4"
+        },
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "grading",
+          "text": "Gemini is asked only whether a page is a portfolio and its roles",
+          "breaking": false,
+          "pr": 289,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/289",
+          "commit": "af45ecd18508fd00c2c95c3e8c28e4f7bafc872e",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/af45ecd18508fd00c2c95c3e8c28e4f7bafc872e"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": null,
+          "text": "Honest check scores, and blog or link-in-bio hosts are never portfolios",
+          "breaking": false,
+          "pr": 286,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/286",
+          "commit": "2d43c1b3b64700ec42f6c88d286ee5fb5953f4a3",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/2d43c1b3b64700ec42f6c88d286ee5fb5953f4a3"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "facts",
+          "text": "Count project links right on the five sites the version 3 trial got wrong",
+          "breaking": false,
+          "pr": 287,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/287",
+          "commit": "c32413abf6d561868ce1e792fb1dc38a616d5c1e",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/c32413abf6d561868ce1e792fb1dc38a616d5c1e"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.8.0",
       "tag": "v0.8.0",
       "date": "2026-11-23",
