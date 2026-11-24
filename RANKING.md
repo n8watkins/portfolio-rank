@@ -35,6 +35,7 @@ When a site's page changes, its uncertainty resets so it can move fast again.
 - Tiers are 4 points apart, about one beta: once settled, a site one tier up wins a one-on-one about 62% of the time, and an S beats a D about 88% of the time at the starting uncertainty.
 - The quality score (1 to 5, `quality_score` in rubric v2, the weighted mean of the AI axes for older grades) nudges the mean within the tier: 2 points per quality point away from what that tier usually scores (S 4.8, A 4.45, B 3.6, C 2.7, D 1.55, measured on the June grade export), at most 1.5 either way, so tiers never overlap.
 - Starting uncertainty: 4 for a rubric v2 grade by gemini-3.5-flash-lite, 4.5 for an older grade or one by 3.1, and 8.33 ("unsure") for a site with no grade.
+- Rubric v3 grades (from 2026-11-23) have no letter and no quality score, so in these views (`lib/ranking/engine.mjs` `seedFromGrade`) they seed like a site with no grade; older grades still seed from their letter here. These views are not shown while `RANKING_V2` is false, and the tiers (`lib/tiers.mjs`) never read a Gemini output.
 - Sites graded "not a portfolio", delisted or confirmed down are rated but not shown.
 
 ## Three views

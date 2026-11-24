@@ -32,6 +32,7 @@ import { peopleAllowance, usageToday } from "./budget.mjs";
 import { createGemini, createLimiter, GeminiAuthError, GeminiUnavailableError, PRIMARY_MODEL } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { gradeFromEvidence } from "./night.mjs";
+import { RUBRIC_V2 } from "./rubric-v2.mjs";
 import { syncFromPeople } from "../lib/grader/finish.mjs";
 import { ensurePeopleSchema, enqueueRequest, readRequest } from "./people-store.mjs";
 
@@ -152,7 +153,8 @@ async function attempt(ctx, id, req) {
     log: ctx.log,
   });
   try {
-    const rubric = await gradeFromEvidence(gemini, { row: req, image, now: new Date(ctx.now()) });
+    // A person's report still reads the five v2 scores and the letter: the frozen v2 prompt until the owner decides.
+    const rubric = await gradeFromEvidence(gemini, { row: req, image, now: new Date(ctx.now()), rubric: RUBRIC_V2 });
     await setStatus(db, id, { status: "done", done_at: iso(ctx.now()), result: JSON.stringify(rubric), reason: null, attempts: Number(req.attempts) + 1 }, ctx.now());
     await notifyPerson(ctx, id);
     return "done";

@@ -53,6 +53,8 @@ function merge(total, s) {
     if (typeof v === "number" && typeof total[k] === "number" && k !== "ladderUnknown") out[k] = total[k] + v;
     else if (Array.isArray(v) && Array.isArray(total[k]) && k !== "ladderUnknown") out[k] = [...total[k], ...v];
   }
+  // The day's pace and the spike freeze: the counts are the latest batch's (read from the marks), the sites held add up.
+  if (s.pace && total.pace) out.pace = { ...s.pace, frozenHeld: [...total.pace.frozenHeld, ...s.pace.frozenHeld], drained: [...total.pace.drained, ...s.pace.drained] };
   return out;
 }
 
@@ -79,6 +81,8 @@ export async function runRecheck({
   limit = RECHECK_LIMIT,
   budgetMs = RECHECK_BUDGET_MS,
   dryRun = false,
+  // The day's pace and the spike freeze's limits, passed on (./health.mjs runHealthCheck); a test may set its own.
+  pace = {},
 }) {
   const now = nowIn ?? new Date();
   const time = clock ?? Date.now;
@@ -112,6 +116,7 @@ export async function runRecheck({
       alerts: false,
       dryRun,
       schemaReady: true,
+      ...pace,
     });
     if (s.aborted) return { ...merge(total, s), due: allDue.length, left: allDue.length - done, aborted: true, message: s.message };
     total = merge(total, s);

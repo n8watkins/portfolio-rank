@@ -14,20 +14,14 @@ import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { RUBRIC_VERSION, THINKING_LEVEL } from "../pipeline/rubric.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
-// A v2 answer (pipeline/rubric.mjs RESPONSE_SCHEMA).
-const rubric = (over = {}) => {
-  const axis = { score: 3, note: "fine" };
-  return {
-    is_portfolio: true,
-    tier: "B",
-    visual_design: axis,
-    five_second_test: axis,
-    storytelling: axis,
-    writing: axis,
-    memorability: axis,
-    ...over,
-  };
-};
+// A v3 answer (pipeline/rubric.mjs RESPONSE_SCHEMA).
+const rubric = (over = {}) => ({
+  portfolio_reason: "Shows web apps the person built",
+  is_portfolio: true,
+  five_second_test: { score: 3, note: "fine" },
+  roles: [],
+  ...over,
+});
 
 async function setup(rows) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "judge-"));
@@ -182,7 +176,7 @@ const urlOf = (req) => req.text.match(/url: (.*)/)[1];
 const gradeOf = async (db, url) =>
   JSON.parse(String((await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0].ai_rubric));
 
-test("a v2 grade sends one image plus the facts and page text as delimited data, and stores version, model, usage, facts and checks", async () => {
+test("a v3 grade sends one image plus the facts and page text as delimited data, and stores version, model, usage, facts and checks", async () => {
   const [a] = feed;
   const { dir, dbFile, db } = await setup([
     {
@@ -195,6 +189,7 @@ test("a v2 grade sends one image plus the facts and page text as delimited data,
   const r = await runJudge(dir, dbFile, ["rubric"], {
     MOCK_GEMINI: JSON.stringify([
       {
+        // A letter and a dropped axis in the answer are ignored, never stored.
         json: rubric({ tier: "A", visual_design: { score: 4, note: "strong type" } }),
         usage: { promptTokenCount: 2100, candidatesTokenCount: 120, thoughtsTokenCount: 30 },
       },
@@ -214,13 +209,16 @@ test("a v2 grade sends one image plus the facts and page text as delimited data,
   const g = await gradeOf(db, a.url);
   assert.equal(g.rubric_version, RUBRIC_VERSION);
   assert.equal(g.model, PRIMARY_MODEL);
-  assert.equal(g.tier, "A");
+  assert.equal(g.tier, undefined);
+  assert.equal(g.visual_design, undefined);
+  assert.equal(g.portfolio_reason, "Shows web apps the person built");
+  assert.equal(r.requests[0].system.includes("tier:"), false, "no letter is asked for");
   assert.deepEqual(g.usage, { input_tokens: 2100, output_tokens: 120, thoughts_tokens: 30 });
   assert.equal(g.facts.motion, true);
   assert.equal(g.checks.project_links, false, "facts of version 1 keep their rule: one of 4 broken is a fail");
   assert.equal(g.checks.fresh_footer, false);
   assert.equal(typeof g.checks_score, "number");
-  assert.equal(g.quality_score, 3.3);
+  assert.equal(g.quality_score, undefined);
   assert.equal(g.motion, undefined, "motion is a fact now, not an AI axis");
   const logged = (await db.execute("SELECT thoughts_tokens FROM gemini_requests")).rows[0];
   assert.equal(logged.thoughts_tokens, 30);
@@ -253,7 +251,7 @@ test("a malformed answer is an error, never a stored grade", async () => {
   const { dir, dbFile, db } = await setup([{ url: a.url, page_text: "hello", facts: FACTS }]);
   const r = await runJudge(dir, dbFile, ["rubric"], { MOCK_GEMINI: JSON.stringify([{ json: { is_portfolio: true, tier: "B" } }]) });
   assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /visual_design missing/);
+  assert.match(r.out, /portfolio_reason missing/);
   const row = (await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [a.url] })).rows[0];
   assert.equal(row.ai_rubric, null);
 });

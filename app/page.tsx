@@ -42,7 +42,7 @@ export default async function Home() {
           <section aria-labelledby="hero" className="grid grid-cols-1 items-center gap-10 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14 lg:py-24">
             <div className="text-center lg:text-left">
               <p className="rise mb-5 inline-flex items-center gap-2 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-balance text-mute shadow-[var(--card-hi)]">
-                <span className="attn-dot" aria-hidden /> {total} portfolios ranked by people and AI
+                <span className="attn-dot" aria-hidden /> {total} portfolios ranked by code checks and votes
               </p>
               {grading ? (
                 <>
@@ -72,7 +72,7 @@ export default async function Home() {
                     <span className="bg-gradient-to-r from-[#fcd34d] via-[#f59e0b] to-[#ea7a0c] bg-clip-text text-transparent">ranked</span>.
                   </h1>
                   <p className="rise mx-auto mt-5 max-w-xl text-[15px] text-mute text-pretty sm:text-lg lg:mx-0" style={d(120)}>
-                    {total} community-curated portfolios, graded by AI on design, first impression and writing. Your votes in face-offs decide who rises.
+                    {total} community-curated portfolios, ranked by checks our code measures. Your votes in face-offs decide who rises.
                   </p>
                   <div className="rise mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start" style={d(180)}>
                     {ROUTES.faceoff && (

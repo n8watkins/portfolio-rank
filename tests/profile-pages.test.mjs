@@ -40,6 +40,7 @@ const rubric = JSON.stringify({
   is_portfolio: true,
   roles: ["frontend developer"],
   visual_design: { score: 5, note: "Clean." },
+  five_second_test: { score: 5, note: "Clear." },
   writing: { score: 3, note: "Fine." },
 });
 async function seedGrade(url, status = "live") {
@@ -82,7 +83,10 @@ test("a graded profile: a ProfilePage about the person with their socials, a bre
   assert.equal(crumbs.itemListElement[2].item, profile.url);
   const description = unescape(html.match(/<meta name="description" content="([^"]+)"/)?.[1] ?? "");
   assert.ok(description.startsWith(`${graded.name}'s frontend developer portfolio at `), description);
-  assert.ok(description.includes("visual design (5/5)"), description);
+  // No Gemini score is named (owner, 2026-11-23), not even the five-second test.
+  assert.ok(!/five-second|visual design|\/5/.test(description), description);
+  // No Gemini report card on the page.
+  assert.ok(!html.includes("Gemini report card") && !html.includes("Five-second test"), "no report card");
   assert.equal(profile.description, description);
 });
 

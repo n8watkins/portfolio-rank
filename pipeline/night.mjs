@@ -66,7 +66,7 @@ import {
 } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
-import { RESPONSE_SCHEMA, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
+import { RUBRIC_V3 } from "./rubric.mjs";
 import { ensureRubricHistory, parseRubric, replaceGradeStatements } from "./rubric-history.mjs";
 import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
@@ -162,15 +162,17 @@ const GRADE_COLS = "p.url, p.name, p.shot_key, p.meta, p.ai_rubric, p.page_text,
 // A new site's screenshot was missing when its grade was tried: the marker
 // (gradeItem) keeps it from being asked for every night, and a capture newer
 // than the marker makes it eligible again (audit F4, 2026-11-16).
+// CASE forms, so json_extract never runs on text that is not JSON (an AND is not guaranteed to stop early).
 const MISSING_IMAGE = (p = "p") =>
-  `(json_valid(${p}.ai_rubric) AND json_extract(${p}.ai_rubric, '$.error') = 'no_usable_captures')`;
-const RECAPTURED = (p = "p") => `COALESCE(datetime(${p}.captured_at) > datetime(json_extract(${p}.ai_rubric, '$.judged_at')), 0)`;
+  `(CASE WHEN json_valid(${p}.ai_rubric) THEN COALESCE(json_extract(${p}.ai_rubric, '$.error') = 'no_usable_captures', 0) ELSE 0 END)`;
+const RECAPTURED = (p = "p") =>
+  `(CASE WHEN json_valid(${p}.ai_rubric) THEN COALESCE(datetime(${p}.captured_at) > datetime(json_extract(${p}.ai_rubric, '$.judged_at')), 0) ELSE 0 END)`;
 /**
  * Not graded yet: no grade, or a marker older than the site's latest capture: a missing screenshot,
  * or the one fresh grade due after the owner undid or rejected a removal (lib/reviews/store.mjs
  * FRESH_GRADE_DUE), which the bad capture's scores never were.
  */
-const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
+export const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
 /**
  * A person asked for a re-grade (regrade_requests, the owner's "Re-grade" action, lib/games/claims.mjs), and
  * the site has been captured again since: the request asks for that capture (site_freshness.forced_at, the
@@ -257,22 +259,24 @@ async function gradeItem(ctx, gemini, item) {
   });
   // A re-grade someone asked for is answered: they may ask again later.
   await closeRegradeRequest(ctx.db, url, "done", now);
-  return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
+  return { status: "ok", door };
 }
 
 /**
- * A rubric v2 grade from stored evidence (row: url, name, page_text, facts,
- * meta) and the hero image, on 3.5 only. Shared with people's requests
- * (pipeline/people.mjs). Throws Gemini errors and malformed answers.
+ * A grade from stored evidence (row: url, name, page_text, facts, meta) and
+ * the hero image, on 3.5 only. `rubric` is the prompt to ask: rubric v3 for a
+ * listed site (./rubric.mjs RUBRIC_V3); a person's own request passes the
+ * frozen v2 (./rubric-v2.mjs RUBRIC_V2, pipeline/people.mjs). Throws Gemini
+ * errors and malformed answers.
  */
-export async function gradeFromEvidence(gemini, { row, image, now }) {
+export async function gradeFromEvidence(gemini, { row, image, now, rubric = RUBRIC_V3 }) {
   const stored = parseJson(row.facts);
   const motion = parseJson(row.meta)?.motion;
   const facts = stored && stored.motion == null && typeof motion === "boolean" ? { ...stored, motion } : stored;
-  const request = buildRubricRequest({ name: String(row.name ?? ""), url: String(row.url), pageText: String(row.page_text ?? ""), facts, image, now });
-  const { result, model, usage } = await gemini.generate(request.parts, RESPONSE_SCHEMA, request.options);
+  const request = rubric.build({ name: String(row.name ?? ""), url: String(row.url), pageText: String(row.page_text ?? ""), facts, image, now });
+  const { result, model, usage } = await gemini.generate(request.parts, rubric.schema, request.options);
   if (model !== PRIMARY_MODEL) throw new Error(`answered by ${model}, not ${PRIMARY_MODEL}`);
-  return gradeRecord({ parsed: parseRubricResponse(result), model, usage, facts, source: "r2", now });
+  return rubric.record({ parsed: rubric.parse(result), model, usage, facts, source: "r2", now });
 }
 
 // ---------------------------------------------------------------------------
@@ -472,22 +476,26 @@ export async function planNight(ctx, state) {
     s.polls = { error: msg(e) };
     ctx.log(`Polls: scheduling failed: ${msg(e)}`);
   }
-  // Free too: bot-walled sites, listed sites whose signals collapsed, and listed
-  // addresses that are not a portfolio page by the address alone go to the
-  // review queue (lib/reviews/door.mjs). A failure never stops the night.
+  // Free too: rows whose reason no longer holds close by themselves, and
+  // first-time bot-walled sites and listed addresses that are not a portfolio
+  // page by the address alone go to the review queue (lib/reviews/door.mjs).
+  // A failure never stops the night.
   try {
     // The sites tonight's grade will take go to the door in minutes: the roster pass leaves them to it, and
     // only them (a backlog beyond tonight's share still gets its row).
     const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()), skipUrls: await gradedTonight(ctx) });
     s.addressBrake = sent.addressBrake ?? null;
     if (sent.addressBrake) ctx.log(`Address rule: brake on, removals held for the owner (${sent.addressBrake.why})`);
+    const closed = sent.closed ?? { signals_collapsed: 0, bot_wall: 0, recapture_blocked: 0 };
+    if (closed.signals_collapsed || closed.bot_wall || closed.recapture_blocked) {
+      ctx.log(`Review queue: closed by themselves: ${closed.signals_collapsed} low-signal, ${closed.bot_wall} bot-wall and ${closed.recapture_blocked} blocked re-capture row(s) whose reason no longer holds`);
+    }
     await recordSites(ctx, s, "plan", [
       ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
-      ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
       ...sent.address.map((url) => ({ url, entries: [["review", { url, why: "its address is not a portfolio page (the address rule)" }]] })),
     ]);
-    if (sent.botWall.length || sent.collapsed.length || sent.address.length) {
-      ctx.log(`Review queue: ${sent.botWall.length} bot-walled, ${sent.collapsed.length} collapsed and ${sent.address.length} not-a-portfolio address(es) sent to the Removal rule or the owner`);
+    if (sent.botWall.length || sent.address.length) {
+      ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.address.length} not-a-portfolio address(es) sent to the Removal rule or the owner`);
     }
   } catch (e) {
     ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);
@@ -900,7 +908,7 @@ export async function runBatch(ctx, state) {
           if (h.parkable) await clearItemFailure(db, stage.job, item.id);
           const door = res && typeof res === "object" ? res.door : null;
           if (door) {
-            notes = [["graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome, tier: door.tier ?? null }]];
+            notes = [["graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome }]];
             if (door.outcome === "remove") notes.push(["removed", { url: item.id, reviewId: door.reviewId }]);
             else if (["review", "strong_signals", "held"].includes(door.outcome)) {
               notes.push(["review", { url: item.id, why: VERDICT_WORDS[door.outcome], reviewId: door.reviewId }]);
@@ -1104,7 +1112,7 @@ export async function finishNight(ctx, state) {
       ? `**The check of stored captures did not finish** (${summary.unusableCapture.error}); each grade still checked its own site before any request.\n`
       : "",
     summary.unrecorded ? `${summary.unrecorded} site outcome(s) could not be recorded; the lists below may miss them.\n` : "",
-    ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.tier ? ` (tier ${x.tier})` : ""}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
+    ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
     ...siteLines("Removed automatically", "removed", (x) => `${x.url}${x.reviewId ? ` (review ${x.reviewId})` : ""}`, "Each one has Undo on /admin/review."),
     ...siteLines("Sent to review", "review", (x) => `${x.url}: ${x.why}`),
     ...siteLines("Failed", "failed", (x) => `${x.url}: ${x.reason}`),

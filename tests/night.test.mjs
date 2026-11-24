@@ -20,6 +20,7 @@ import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const answer = (over = {}) => ({
+  portfolio_reason: "Shows projects the person built",
   is_portfolio: true,
   tier: "B",
   ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: 3, note: "fine" }])),

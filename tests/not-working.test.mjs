@@ -133,7 +133,7 @@ test("a site's journey: first failure out of AI work, hidden after the next day'
   assert.deepEqual(await standing(db, url), NOT_WORKING);
   assert.equal(await col(db, url, "health"), "down");
   assert.equal((await marks(db, url)).pool_since, at(S).toISOString());
-  assert.match(recheckSummary(s), /1 re-checked, 0 back, 0 failing for the first time \(out of AI work\), 1 newly hidden, 0 not working 90\+ days/);
+  assert.match(recheckSummary(s), /1 re-checked, 0 back, 0 failing for the first time \(out of AI work\), 1 newly hidden, 0 in the pool 90\+ days/);
 
   // P4: daily for the first week, weekly to day 30, then monthly; never before.
   const dueAt = async (t) => (await dueForRecheck(db, at(t))).map((x) => x.url).includes(url);
@@ -150,7 +150,7 @@ test("a site's journey: first failure out of AI work, hidden after the next day'
   // The weekly export holds it: not 90 days yet.
   const plan = await planExclusions({ db, excluded: [], feed: [{ url, name: "Ann Lee" }, ...fillers], now: at(S + 65 * D) });
   assert.deepEqual(plan.added, []);
-  assert.match(plan.held.map((h) => h.why).join(), /leaves the list only when a check on or after day 90 fails/);
+  assert.match(plan.held.map((h) => h.why).join(), /archived only when a check on or after day 90 fails/);
   assert.equal((await marks(db, url)).pool_next_at, at(S + 90 * D).toISOString(), "after day 65, the next check is on day 90, not day 95");
 
   // It works again on day 70 (its next check is day 90; the owner's paused project came back).
@@ -256,19 +256,42 @@ test("a site set back to live by hand (an Undo, the owner) is the nightly run's 
   assert.equal(Number((await marks(db, url)).pool_stage), pool.FAILING);
 });
 
-test("a bot-walled site never enters the pool, whatever its answers", async () => {
+test("a bot wall alone never puts a site in the pool; a real failure of a bot-walled site does, and a pass brings it back", async () => {
   const url = "https://walled.example";
   const { db, w, hourly } = await setup([]);
   await site(db, url, { status: "error", reason: BOT_WALL_REASON, needsReview: 1, captured: false });
   const feed = [{ url, name: "Ann Lee" }, ...fillers];
-  w.mode.set(url, "paused");
-  for (const d of [0, 1, 2, 3]) await health.runHealthCheck({ db, feed, fetchImpl: w.fetchImpl, render: w.render, now: at(T0 + d * D), log: quiet });
-  assert.equal((await marks(db, url)).pool_stage, null);
+  const nightly = (t, fetchImpl = w.fetchImpl, render = w.render) => health.runHealthCheck({ db, feed, fetchImpl, render, now: at(t), log: quiet });
+  // The check meets the wall itself (403 and the challenge page), or passes: inconclusive every time.
+  const wall = async (u) => (u.startsWith(url) ? response(403, "<title>Just a moment...</title>", u) : w.fetchImpl(u));
+  const wallPage = async (u) => (u.startsWith(url) ? { status: 403, finalUrl: u, title: "Just a moment...", text: "Checking your browser", media: false, html: "" } : w.render(u));
+  for (const d of [0, 1, 2]) await nightly(T0 + d * D, wall, wallPage);
+  for (const d of [3, 4]) await nightly(T0 + d * D);
+  assert.equal((await marks(db, url))?.pool_stage ?? null, null, "a wall or a pass never pools it");
   assert.notEqual(await col(db, url, "health"), "down");
-  assert.equal((await hourly(T0 + 3 * D + H)).due, 0);
+  assert.equal(await col(db, url, "needs_review"), 1, "its mark for the owner stays");
+  assert.equal((await hourly(T0 + 4 * D + H)).due, 0);
+  // A real failure (a paused deployment) counts like any site's (owner, 2026-11-23): the ladder, hidden the next day.
+  w.mode.set(url, "paused");
+  const F = T0 + 5 * D;
+  await nightly(F);
+  assert.equal(Number((await marks(db, url)).pool_stage), pool.FAILING);
+  await hourly(F + H);
+  await hourly(F + D);
+  assert.equal(await col(db, url, "health"), "down");
+  // It answers again: a pass on the ladder brings it back to where it was before the failure, unchecked, so
+  // it stays hidden until a capture gets through, never shown with no screenshot (#292 review, F5).
+  w.mode.set(url, "ok");
+  await db.execute({ sql: "UPDATE health_marks SET pool_next_at = ? WHERE url = ?", args: [at(F + 2 * D).toISOString(), url] });
+  const s = await hourly(F + 2 * D);
+  assert.deepEqual(s.returned.map((r) => r.url), [url]);
+  assert.equal(await col(db, url, "health"), null);
+  assert.deepEqual(await standing(db, url), { ai: true, capture: true, hidden: true, gone: false }, "not shown with no screenshot; its capture keeps trying");
+  assert.equal((await marks(db, url)).pool_stage, null, "off the ladder");
+  assert.equal(Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM health_returns WHERE url = ? AND from_where = 'pool'", args: [url] })).rows[0].n), 1, "the return is recorded");
 });
 
-test("two failures on one bad day never skip a stage", () => {
+test("two failures on one bad day never skip a stage", async () => {
   const fail = { ok: false, reason: "HTTP 402: deployment paused" };
   const F = T0;
   let s = health.nextHealth(null, fail, at(F));
@@ -283,13 +306,39 @@ test("two failures on one bad day never skip a stage", () => {
   assert.deepEqual([s.pool.stage, s.health], [pool.RECHECKED, "suspect"]);
   s = health.nextHealth(s, fail, at(F + D));
   assert.deepEqual([s.pool.stage, s.health], [pool.NOT_WORKING, "down"]);
-  // Every cause is the same ladder (P8); a page that answers with the wrong thing is not on it (P7).
+  // Every cause is the same ladder (owner, 2026-11-23): a site that does not answer, and one that answers
+  // with the wrong thing or duplicates another entry. notAnswering only names the kind.
   for (const reason of ["HTTP 402: payment required (hosting paused)", "HTTP 404: deployment not found", "DNS resolution failed", "does not load (net::ERR_CONNECTION_REFUSED at x)", "connect timeout (nothing answers at the address)", "HTTP 503"]) {
     assert.equal(pool.notAnswering(reason), true, reason);
+    assert.equal(health.nextHealth(null, { ok: false, reason }, at(F)).pool.stage, pool.FAILING, reason);
   }
   for (const reason of ['parking phrase: "domain for sale"', "renders blank", "redirects to linkedin.com, not a portfolio", "duplicate of https://a.dev", "capture blocked: still a gate"]) {
     assert.equal(pool.notAnswering(reason), false, reason);
-    assert.equal(health.nextHealth(null, { ok: false, reason }, at(F)).pool, null, reason);
+    let w = health.nextHealth(null, { ok: false, reason }, at(F));
+    assert.deepEqual([w.pool.stage, w.health], [pool.FAILING, "suspect"], reason);
+    // Two failures on one bad day never skip a stage, for these too.
+    w = health.nextHealth(w, { ok: false, reason }, at(F + 10 * 60000));
+    w = health.nextHealth(w, { ok: false, reason }, at(F + H));
+    w = health.nextHealth(w, { ok: false, reason }, at(F + 3 * H));
+    assert.deepEqual([w.pool.stage, w.health], [pool.RECHECKED, "suspect"], `${reason}: not hidden the same day`);
+    w = health.nextHealth(w, { ok: false, reason }, at(F + D));
+    if (pool.WEAK_VERDICT.test(reason)) {
+      // A weak verdict (#292 review, F1): its confirming check is a week after the first failure.
+      assert.deepEqual([w.pool.stage, w.health], [pool.RECHECKED, "suspect"], `${reason}: not hidden on day 2`);
+      assert.equal(w.pool.nextAt, at(F + 7 * D).toISOString());
+      w = health.nextHealth(w, { ok: false, reason }, at(F + 7 * D));
+    }
+    assert.deepEqual([w.pool.stage, w.health], [pool.NOT_WORKING, "down"], `${reason}: hidden on its confirming day`);
+  }
+  assert.ok(!pool.WEAK_VERDICT.test('parking phrase: "domain for sale"'), "a parked page is positive evidence: the next day");
+  // A removal decided in the review queue stays down with its reason, off the ladder.
+  const decided = health.nextHealth({ health: "down", fails: 3, reason: "x", pool: null }, { ok: false, reason: "AI grading says this is not a portfolio", decided: true }, at(F));
+  assert.deepEqual([decided.health, decided.pool], ["down", null]);
+  // NOT_ANSWERING_SQL is the same rule as notAnswering.
+  const { db } = await freshDb();
+  for (const reason of ["HTTP 402: x", "HTTP 503", "does not load (x)", "DNS resolution failed", "connect timeout", "TLS failed", "timeout", "connection dropped", "renders blank", "duplicate of x", "capture blocked: x", "HTTP", "", null]) {
+    const sql = Number((await db.execute({ sql: `SELECT ${pool.NOT_ANSWERING_SQL("?1")} AS v`, args: [reason] })).rows[0].v) === 1;
+    assert.equal(sql, pool.notAnswering(reason), String(reason));
   }
 });
 
@@ -434,11 +483,11 @@ test("migration: rows failing when the pool ships need no adoption: a 'suspect' 
   await setHealth(db, down, "down", "HTTP 402: deployment paused", now - 20 * D, 3);
   await setHealth(db, blank, "down", "renders blank", now - 20 * D, 3);
   await setHealth(db, blankSuspect, "suspect", "renders blank", now - 10 * D, 1);
-  // Before any run of the new code: the content-ladder "down" goes at the weekly export as before; the
-  // not-answering one waits for a check.
+  // Before any run of the new code: no "down" row is archived without the ladder (the old weekly-counted
+  // "down" included): each waits for a check, which puts it in the temporary pool.
   let plan = await planExclusions({ db, excluded: [], feed, now: at(now) });
-  assert.deepEqual(plan.added.map((a) => a.url), [blank]);
-  assert.match(plan.held.find((h) => h.url === down).why, /its next check puts it on the not-working ladder/);
+  assert.deepEqual(plan.added.map((a) => a.url), []);
+  for (const u of [down, blank]) assert.match(plan.held.find((h) => h.url === u).why, /its next check puts it in the temporary pool/);
 
   w.mode.set(suspect, "paused");
   w.mode.set(down, "paused");
@@ -490,9 +539,9 @@ test("a wrong-content suspect site that blips once is not backdated: the ladder 
   assert.equal((await marks(db, url)).pool_next_at, at(T0 + D).toISOString(), "the next day, as for any first failure");
 });
 
-test("review 2.1: a failing site that starts answering with the wrong thing leaves the ladder for the wrong-content rule, from that failure, and is never stuck", async () => {
+test("a failing site that starts answering with a blank page stays on the one ladder: hidden on its confirming day, captures still try it", async () => {
   const url = "https://now-parked.example";
-  const { db, feed, w, nightly } = await setup([url]);
+  const { db, w, nightly } = await setup([url]);
   await nightly(T0 - D);
   w.mode.set(url, "paused");
   await nightly(T0);
@@ -501,17 +550,14 @@ test("review 2.1: a failing site that starts answering with the wrong thing leav
   const blank = async (u) => (u.startsWith(url) ? response(200, "<div id=root></div>", u) : response(200, PORTFOLIO_HTML, u));
   const blankRender = async (u) => (u.startsWith(url) ? { status: 200, finalUrl: u, title: "", text: "", media: false, html: "" } : w.render(u));
   await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + H), log: quiet });
-  assert.equal((await marks(db, url)).pool_stage, null, "off the not-answering ladder");
-  assert.deepEqual([await col(db, url, "health"), Number(await col(db, url, "health_fails")), await col(db, url, "health_first_fail_at")], ["suspect", 1, at(T0 + H).toISOString()], "the wrong-content rule, counting from now");
+  assert.equal(Number((await marks(db, url)).pool_stage), pool.RECHECKED, "the same ladder, its next stage");
+  assert.equal(await col(db, url, "health_reason"), "renders blank");
   assert.deepEqual(await standing(db, url), { ...FAILING, capture: true }, "still shown; it answers, so captures may try it");
-  // The nightly run takes it back and the weekly-counted rule runs its course: down within about two weeks.
-  let t = T0 + D;
-  while (t <= T0 + 20 * D && (await col(db, url, "health")) !== "down") {
-    await health.runHealthCheck({ db, feed, fetchImpl: blank, render: blankRender, now: at(t), log: quiet });
-    t += D;
-  }
-  assert.equal(await col(db, url, "health"), "down");
-  assert.ok(t - T0 <= 16 * D, `down by day 15 (took ${(t - T0) / D - 1} days)`);
+  // Blank is a weak verdict: not hidden the next day, but a week after the first failure.
+  await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + D), log: quiet });
+  assert.deepEqual(await standing(db, url), { ...FAILING, capture: true }, "not hidden on day 2");
+  await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + 7 * D), log: quiet });
+  assert.deepEqual(await standing(db, url), NOT_WORKING, "hidden in the temporary pool on day 8");
 });
 
 test("review 2.4: a down row stays down on a failure of any kind; only a pass restores it", async () => {
@@ -652,10 +698,13 @@ test("one shared definition: no background job writes its own health condition",
   }
   // Evidence: the page text for a grade is AI work, its link checks are not.
   assert.match(fs.readFileSync("pipeline/evidence.mjs", "utf8"), /\$\{AI_WORK\(\)\}[\s\S]*active: ACTIVE/);
-  // Every free job (captures, refresh, measurements, the door's review rows) uses ACTIVE, or is handed it.
-  for (const f of ["pipeline/roster.mjs", "pipeline/capture.mjs", "pipeline/fullpage-backfill.mjs","scripts/prewarm-metrics.mjs", "lib/reviews/door.mjs"]) {
+  // Every free job (captures, refresh, measurements) uses ACTIVE, or is handed it.
+  for (const f of ["pipeline/roster.mjs", "pipeline/capture.mjs", "pipeline/fullpage-backfill.mjs","scripts/prewarm-metrics.mjs"]) {
     assert.match(fs.readFileSync(f, "utf8"), /\bACTIVE\b/, f);
   }
+  // The door's bot-wall rows go only to a listed site that is not failing its checks (AI_WORK's rule): a
+  // failing site is the temporary pool's, never the owner's (owner, 2026-11-23).
+  assert.match(fs.readFileSync("lib/reviews/door.mjs", "utf8"), /\$\{AI_WORK\("p"\)\}/);
   // The library and its tiers count a failing site (still shown) and drop a not-working one, as the trigger does.
   assert.match(fs.readFileSync("lib/tiers-store.mjs", "utf8"), /LISTED_NOT_DOWN\(("p")?\)/);
   // So does the comparison pool every reader of which shows it to visitors (lib/grader/report.mjs gradedPool).
@@ -762,7 +811,7 @@ test("review 5: marks a foreign writer leaves behind never steer the site (the r
   assert.equal((await dueForRecheck(db, at(T0 + 400 * D))).length, 0);
 });
 
-test("review 5: a removed site that passes its monthly re-check is due at once when the list takes it back", async () => {
+test("review 5 (owner, 2026-11-23): an archived site that passes its check comes back as a new site, its old row moved out of its way", async () => {
   const url = "https://back-after-90.example";
   const { db, feed, w, nightly, hourly } = await setup([url]);
   await failingSince(nightly, w, [url], T0);
@@ -784,12 +833,14 @@ test("review 5: a removed site that passes its monthly re-check is due at once w
   const excluded = [{ ...entry, removed: at(S + 90 * D).toISOString().slice(0, 10) }];
   ex = await weeklyExport({ db, excluded, feed: landedFiles.feed, now: at(later), answers: async (u) => u === url });
   assert.deepEqual(ex.plan.back, [url]);
-  assert.equal((await marks(db, url)).pool_next_at, at(later).toISOString());
-  // The daily sync lists it again: the next hour's re-check brings it back.
-  await db.execute({ sql: "UPDATE portfolios SET delisted_at = NULL WHERE url = ?", args: [url] });
-  const s = await hourly(later + H);
-  assert.deepEqual(s.returned.map((r) => r.url), [url]);
-  assert.deepEqual(await standing(db, url), LIVE);
+  // The old site is not this one any more: no row, no marks under its address; nothing for the hourly re-check.
+  assert.equal(await col(db, url, "ai_rubric"), undefined);
+  assert.equal(await marks(db, url), undefined);
+  assert.equal((await hourly(later + H)).due, 0);
+  // Its old row is kept as history under the closed key, off the list.
+  const old = (await db.execute({ sql: "SELECT url, delisted_at FROM portfolios WHERE url LIKE 'archived:%'" })).rows;
+  assert.deepEqual(old.map((r) => String(r.url)), [`archived:${at(later).toISOString().slice(0, 10)}:${url}`]);
+  assert.ok(old[0].delisted_at);
 });
 
 test("review 6: a profile the check takes away is marked for the edge purge when written, whatever the hour, and stays marked until a purge works", async () => {
@@ -1059,13 +1110,13 @@ test("review 3.1: a site that fails its day-90 check leaves the list", async () 
 });
 
 test("review 3.2: a removed site is re-checked on days 7, 14 and 21 (before its row is purged), and its marks go with its row", async () => {
-  const { nextDownCheck, recheckDue, DOWN_RECHECK_FIRST_DAYS } = await import("../pipeline/exclusions.mjs");
-  assert.deepEqual(DOWN_RECHECK_FIRST_DAYS, [7, 14, 21]);
+  const { recheckDue, ARCHIVE_FIRST_DAYS } = await import("../pipeline/exclusions.mjs");
+  assert.deepEqual(ARCHIVE_FIRST_DAYS, [7, 14, 21]);
   const e = { url: "https://x.example", kind: "down", reason: "HTTP 402: deployment paused", removed: "2026-12-01" };
   assert.equal(recheckDue(e), "2026-12-08");
-  assert.equal(nextDownCheck("2026-12-01", "2026-12-09"), "2026-12-15");
-  assert.equal(nextDownCheck("2026-12-01", "2026-12-16"), "2026-12-22");
-  assert.equal(nextDownCheck("2026-12-01", "2026-12-23"), "2027-01-22", "then monthly");
+  assert.equal(pool.nextArchiveCheck("2026-12-01", "2026-12-09"), "2026-12-15");
+  assert.equal(pool.nextArchiveCheck("2026-12-01", "2026-12-16"), "2026-12-22");
+  assert.equal(pool.nextArchiveCheck("2026-12-01", "2026-12-23"), "2027-01-22", "then monthly");
   // The 30-day purge deletes the row; its marks go too, so a site listed again starts clean.
   const url = "https://purged.example";
   const { db } = await notWorkingSite(url);

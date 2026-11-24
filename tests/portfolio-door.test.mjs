@@ -51,6 +51,7 @@ const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await owner
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 const DAY = 86400000;
 const answer = (isPortfolio, over = {}) => ({
+  portfolio_reason: isPortfolio ? "Shows projects the person built" : "no work shown on the page",
   is_portfolio: isPortfolio,
   tier: isPortfolio ? "B" : "D",
   ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: isPortfolio ? 3 : 1, note: isPortfolio ? "fine" : `no work shown (${c.id})` }])),
@@ -395,7 +396,7 @@ test("one night over a mixed set of new sites: every outcome, the summary lists 
   assert.equal(await hidden(db, S.no3), true, "no, 3 signals: removed");
   assert.equal(await hidden(db, S.junk), true, "junk: removed despite 6 signals");
   assert.equal(await hidden(db, S.no5), false, "no, 5 signals: kept for the owner");
-  assert.equal((await grade(db, S.recaptured)).tier, "B", "a newer capture clears the missing-screenshot marker");
+  assert.equal((await grade(db, S.recaptured)).rubric_version, 3, "a newer capture clears the missing-screenshot marker: a real v3 grade");
   assert.equal((await grade(db, S.waiting)).error, "no_usable_captures", "still waiting for a newer capture");
   assert.equal((await grade(db, S.missing)).error, "no_usable_captures");
   assert.equal(await grade(db, S.bad), null);
@@ -404,13 +405,12 @@ test("one night over a mixed set of new sites: every outcome, the summary lists 
   const q = await listReviews(db);
   assert.deepEqual(q.autoApplied.map((x) => x.url).sort(), [S.junk, S.no3].sort());
   const pending = Object.fromEntries(q.pending.map((x) => [x.url, x]));
-  assert.deepEqual(Object.keys(pending).sort(), [S.collapsed, S.no5, S.walled].sort());
+  // Low signals on a listed site write no row (owner's default, 2026-11-23): only the judgment calls wait.
+  assert.deepEqual(Object.keys(pending).sort(), [S.no5, S.walled].sort());
   assert.equal(pending[S.no5].group, "door_strong_signals");
   assert.equal(pending[S.walled].group, "bot_wall");
   assert.equal(pending[S.walled].proposed, "review");
-  assert.equal(pending[S.collapsed].group, "signals_collapsed");
-  assert.equal(pending[S.collapsed].proposed, "remove");
-  assert.match(pending[S.collapsed].reason, /signals collapsed/);
+  assert.equal(await hidden(db, S.collapsed), false, "low signals: still listed");
   // Nothing is written twice: tomorrow's free part finds the open cases.
   const again = await planNight(ctx, { ...r.state, estimate: null, sites: undefined });
   assert.equal(again.sites, undefined, "no new rows the next time");
@@ -420,12 +420,12 @@ test("one night over a mixed set of new sites: every outcome, the summary lists 
   assert.deepEqual(s.graded.map((x) => x.url).sort(), [S.junk, S.no3, S.no5, S.recaptured, S.yes].sort());
   assert.match(s.graded.find((x) => x.url === S.no3).verdict, /removed automatically/);
   assert.deepEqual(s.removed.map((x) => x.url).sort(), [S.junk, S.no3].sort());
-  assert.deepEqual(s.review.map((x) => x.url).sort(), [S.collapsed, S.no5, S.walled].sort());
+  assert.deepEqual(s.review.map((x) => x.url).sort(), [S.no5, S.walled].sort());
   assert.deepEqual(s.failed.map((x) => x.url), [S.bad]);
   assert.deepEqual(s.setAside.map((x) => x.url), [S.missing]);
-  assert.deepEqual(s.counts, { graded: 5, removed: 2, review: 3, failed: 1, setAside: 1 });
+  assert.deepEqual(s.counts, { graded: 5, removed: 2, review: 2, failed: 1, setAside: 1 });
   assert.deepEqual(r.summary.missingImage, { waiting: 1, retried: 1 });
-  for (const h of ["Sites graded \\(5\\)", "Removed automatically", "Sent to review \\(3\\)", "Failed \\(1\\)", "Set aside \\(1\\)"]) assert.match(r.markdown, new RegExp(h));
+  for (const h of ["Sites graded \\(5\\)", "Removed automatically", "Sent to review \\(2\\)", "Failed \\(1\\)", "Set aside \\(1\\)"]) assert.match(r.markdown, new RegExp(h));
   assert.match(r.markdown, /1 waiting for a newer capture, 1 captured again/);
   const stored = JSON.parse(String((await db.execute("SELECT summary FROM night_runs")).rows[0].summary));
   assert.deepEqual(stored.sites.counts, s.counts, "night_runs.summary carries the lists");

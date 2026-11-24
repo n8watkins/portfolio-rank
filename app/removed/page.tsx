@@ -5,7 +5,7 @@ import { SITE } from "@/lib/site";
 export const metadata = {
   title: "Removed portfolios - PortfolioRank",
   description:
-    "Portfolios PortfolioRank took off its list, with the reason and the date: sites confirmed down over two weeks of checks, duplicates and removal requests.",
+    "Portfolios PortfolioRank took off its list, with the reason and the date: sites that failed their checks for 90 days, duplicates, sites that are not a portfolio, and removal requests.",
 };
 
 type Removal = {
@@ -46,17 +46,25 @@ export default function RemovedPage() {
           <h1 className="text-3xl font-bold tracking-tight">Removed portfolios</h1>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
-              Every week PortfolioRank checks each site on its list. A site is only
-              removed after it fails three checks in a row spanning at least two
-              weeks, so a short outage never takes anyone off. Bot checks that block
-              automated visitors don&apos;t count as failures.
+              PortfolioRank checks the sites on its list every night. A site that
+              fails is checked again an hour later and once more the next day, and
+              is hidden only if it still fails then. When the failure could be our
+              own checker&apos;s mistake (the page looks empty, our screenshot never
+              showed the site, it sends visitors to a social profile, or it repeats
+              another site on the list), that last check comes a week later
+              instead. A hidden site keeps being checked and comes back as soon as
+              it works. It is taken off the list only after 90 days of failing
+              checks, so a short outage never takes anyone off. Bot checks that
+              block automated visitors don&apos;t count as failures.
             </p>
             <p>
-              A site whose domain is gone, or that only shows an error page, is
-              checked again every few months and comes back when it works.
+              A site taken off because it was down or gone is checked again at least
+              once a month. When it works again and still shows the same person (their
+              name, or clearly a portfolio), it comes back as a new site and starts
+              fresh: its old votes, rank and grade do not come with it.
             </p>
             <p>
-              Is your site back up, or was it removed by mistake?{" "}
+              Was your site removed by mistake?{" "}
               <a
                 href={SITE.submit}
                 target="_blank"
@@ -65,7 +73,9 @@ export default function RemovedPage() {
               >
                 Submit it again
               </a>{" "}
-              and it returns on the next sync.
+              and a person will look at it. A site taken off for being down or gone
+              usually needs nothing: it comes back by itself once one of those
+              checks passes.
             </p>
           </div>
         </div>

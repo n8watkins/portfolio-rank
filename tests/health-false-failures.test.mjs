@@ -182,7 +182,7 @@ test("c: a wall the capture recognises is a wall here too, whatever its status (
   assert.equal(blind.ok, null, blind.reason);
 });
 
-test("c: a site whose capture met a bot wall is never counted down or excluded, whatever the check sees", async () => {
+test("c: a site whose capture met a bot wall is never failed for the wall, nor excluded; a real failure of one counts (owner, 2026-11-23)", async () => {
   const { db } = await freshDb();
   const walled = "https://walled.example";
   const gone = "https://walled-404.example";
@@ -196,11 +196,12 @@ test("c: a site whose capture met a bot wall is never counted down or excluded, 
   };
   const render = async (u) => (u.startsWith(walled) ? { status: 406, finalUrl: `${walled}/`, title: "Verifying you are human", text: "Verifying you are human.", media: false, html: "" } : goodPage(u));
   for (const w of weeks) await health.runHealthCheck({ db, feed, fetchImpl, render, now: at(w), log: quiet });
-  for (const u of [walled, gone]) {
-    assert.notEqual(await col(db, u, "health"), "down", u);
-    assert.equal(Number(await col(db, u, "health_fails") ?? 0), 0, u);
-    assert.equal(Number(await col(db, u, "needs_review")), 1, `${u} keeps its mark for the owner`);
-  }
+  // The wall the check meets itself: never a failure.
+  assert.notEqual(await col(db, walled, "health"), "down", walled);
+  assert.equal(Number((await col(db, walled, "health_fails")) ?? 0), 0, walled);
+  // A 404 is a real failure, bot-walled capture or not: the one ladder (the hourly re-check takes it from there).
+  assert.deepEqual([await col(db, gone, "health"), Number(await col(db, gone, "health_fails"))], ["suspect", 1], gone);
+  for (const u of [walled, gone]) assert.equal(Number(await col(db, u, "needs_review")), 1, `${u} keeps its mark for the owner`);
   // Even a row marked down by an older run is never exported.
   await db.execute({ sql: "UPDATE portfolios SET health = 'down', health_reason = 'HTTP 406', health_fails = 3 WHERE url = ?", args: [walled] });
   const plan = await exclusions.planExclusions({ db, excluded: [], feed, now: at(15) });
@@ -345,24 +346,25 @@ test("f: a temporary DNS failure (EAI_AGAIN) is retried and inconclusive, not de
   assert.equal(nx.status, "dead");
 });
 
-test("f: failed checks count on distinct weeks: two runs on one bad day and one 13 days later are two, not three", () => {
-  // A page that answers with the wrong thing (one that does not answer has the not-working pool's ladder).
+test("f: a blank page takes the one ladder: never hidden the same day nor the next (a weak verdict), hidden a week on", () => {
   const fail = { ok: false, reason: "renders blank" };
   let s = health.nextHealth(null, fail, at(0));
-  s = health.nextHealth(s, fail, at(0.4));
-  s = health.nextHealth(s, fail, at(13));
-  assert.deepEqual([s.health, s.fails], ["suspect", 2]);
-  // The weekly cadence, even a run that starts a day early, still confirms in three weeks.
-  let w = health.nextHealth(null, fail, at(0));
-  w = health.nextHealth(w, fail, at(6.5));
-  w = health.nextHealth(w, fail, at(13.1));
-  assert.deepEqual([w.health, w.fails], ["down", 3]);
+  s = health.nextHealth(s, fail, at(0.04));
+  s = health.nextHealth(s, fail, at(0.1));
+  assert.equal(s.health, "suspect", "not hidden the same day");
+  s = health.nextHealth(s, fail, at(1));
+  assert.equal(s.health, "suspect", "not hidden on day 2");
+  s = health.nextHealth(s, fail, at(7));
+  assert.equal(s.health, "down", "hidden on day 8");
+  // A pass at any point brings it straight back.
+  assert.equal(health.nextHealth(s, { ok: true, reason: "" }, at(2)).health, "live");
 });
 
-test("f: the summary says needs-review sites go to the owner, not the grading queue", () => {
+test("f: the summary says low-signal sites stay listed and go nowhere: not to the owner's review, not to the grading queue", () => {
   const md = health.healthSummary({ aborted: false, checked: 1, live: 1, suspect: 0, down: 0, recovered: 0, inconclusive: [], newlyDown: [], moved: [], needsReview: [{ url: "https://x.example", score: 1 }] });
   assert.doesNotMatch(md, /grading queue/);
-  assert.match(md, /owner/);
+  assert.match(md, /could not read/);
+  assert.match(md, /Not removed, hidden, pooled or sent to the owner's review queue/);
 });
 
 // ---------------------------------------------------------------------------
@@ -437,7 +439,7 @@ test("review 1: a connect timeout is a real failure, and a definite browser answ
   assert.equal(refused.ok, false, refused.reason);
 });
 
-test("review 2: a removed site comes back only by passing the same full check, and only when it was removed for not answering", async () => {
+test("review 2: an archived site comes back only by passing the same full check, whatever health failure archived it", async () => {
   const now = new Date("2026-12-30T00:00:00Z");
   const removed = "2026-11-16";
   const list = [
@@ -462,17 +464,18 @@ test("review 2: a removed site comes back only by passing the same full check, a
   const fetchImpl = async (u) => (checked.push(u.replace(/\/$/, "")), response(200, pages[u.replace(/\/$/, "")] ?? "", u));
   const render = async (u) => ({ status: 200, finalUrl: u, title: "", text: "", media: false, html: "" });
   const r = await exclusions.planDeadRecheck({ excluded: list, now, answers: exclusions.passesFullCheck({ render, fetchImpl }) });
-  assert.deepEqual(r.back, ["https://back.example"]);
-  assert.deepEqual(r.still.sort(), ["https://empty.example", "https://parked.example"]);
-  for (const u of ["https://blank.example", "https://gated.example", "https://linked.example"]) assert.ok(!checked.includes(u), `${u} is never re-checked`);
+  // The archive (owner, 2026-11-23): every "down" entry gets its check. A page that shows a portfolio now is
+  // back (a blocked capture's site then goes through the capture again); blank, parked or blank-in-the-browser is not.
+  assert.deepEqual(r.back.sort(), ["https://back.example", "https://gated.example", "https://linked.example"]);
+  assert.deepEqual(r.still.sort(), ["https://blank.example", "https://empty.example", "https://parked.example"]);
+  for (const u of list.map((e) => e.url)) assert.ok(checked.includes(u), `${u} is checked`);
 });
 
-test("review 3: failures count a week after the last counted one, not on a ladder from the first", async () => {
+test("review 3: a blank page's failure and a check that could not tell, on the one ladder: the unclear check neither advances nor clears it", async () => {
   const { db } = await freshDb();
   const url = "https://flaky.example";
   await site(db, url);
   const feed = [{ url, name: "Ann Lee" }, ...filler];
-  // A page that answers blank: the weekly-counted ladder (a site that does not answer has the not-working pool's).
   const fail = async (u) => (u.startsWith(url) ? response(200, "<div id=root></div>", u) : response(200, PORTFOLIO_HTML, u));
   const unsure = async (u) => (u.startsWith(url) ? slowBody(u) : response(200, PORTFOLIO_HTML, u));
   const render = async (u) => (u.startsWith(url) ? { status: 200, finalUrl: `${url}/`, title: "", text: "", media: false, html: "" } : goodPage(u));
@@ -480,11 +483,14 @@ test("review 3: failures count a week after the last counted one, not on a ladde
     if (u.startsWith(url)) throw new Error("page.goto: Timeout 30000ms exceeded.");
     return goodPage(u);
   };
+  const check = (fetchImpl, r, t) => health.runHealthCheck({ db, feed: [{ url, name: "Ann Lee" }], fetchImpl, render: r, now: t, scheduled: "check", log: quiet });
   await health.runHealthCheck({ db, feed, fetchImpl: fail, render, now: at(0), log: quiet });
-  await health.runHealthCheck({ db, feed, fetchImpl: unsure, render: blindRender, now: at(7), log: quiet });
-  await health.runHealthCheck({ db, feed, fetchImpl: fail, render, now: at(14), log: quiet });
-  // A manual re-run an hour later, on the same bad day.
-  await health.runHealthCheck({ db, feed, fetchImpl: fail, render, now: new Date(at(14).getTime() + 3600000), log: quiet });
+  assert.equal(await col(db, url, "health"), "suspect");
+  // The hour's re-check could not tell: still stage 1, still shown.
+  await check(unsure, blindRender, new Date(at(0).getTime() + 3600000));
+  assert.deepEqual([await col(db, url, "health"), Number(await col(db, url, "health_fails"))], ["suspect", 1]);
+  // Failing again an hour later: stage 2, still shown; never hidden on the first day.
+  await check(fail, render, new Date(at(0).getTime() + 2 * 3600000));
   assert.deepEqual([await col(db, url, "health"), Number(await col(db, url, "health_fails"))], ["suspect", 2]);
 });
 

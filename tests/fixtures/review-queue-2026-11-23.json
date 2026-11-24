@@ -1,0 +1,1336 @@
+[
+ {
+  "review": {
+   "id": 403,
+   "batch": "bot-wall",
+   "url": "https://imvinay.com",
+   "grp": "bot_wall",
+   "current": "hidden",
+   "proposed": "review",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:48.082Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://imvinay.com",
+   "name": "Vinay Kulkarni",
+   "status": "live",
+   "reason": "",
+   "shot_key": "67903762ff6a7c95",
+   "captured_at": "2026-11-23 04:35:26",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:40:12.991Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": null
+  }
+ },
+ {
+  "review": {
+   "id": 404,
+   "batch": "bot-wall",
+   "url": "https://www.bobmatyas.com",
+   "grp": "bot_wall",
+   "current": "hidden",
+   "proposed": "review",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:48.082Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://www.bobmatyas.com",
+   "name": "Bob Matyas",
+   "status": "error",
+   "reason": "capture blocked: a bot or security check stood in for the site",
+   "shot_key": "b224d173a302e31a",
+   "captured_at": "2026-11-13 04:37:47",
+   "health": "live",
+   "health_reason": "capture blocked: a bot or security check stood in for the site",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:33:12.568Z",
+   "needs_review": "1",
+   "signals_score": 3,
+   "graded_portfolio": null
+  }
+ },
+ {
+  "review": {
+   "id": 405,
+   "batch": "bot-wall",
+   "url": "https://ilkeozs.info",
+   "grp": "bot_wall",
+   "current": "hidden",
+   "proposed": "review",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-20T05:06:43.764Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://ilkeozs.info",
+   "name": "Ilke Ozsekerli",
+   "status": "live",
+   "reason": "",
+   "shot_key": "71ab8cf542e281bf",
+   "captured_at": "2026-11-23 04:33:08",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:35:15.364Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": null
+  }
+ },
+ {
+  "review": {
+   "id": 407,
+   "batch": "bot-wall",
+   "url": "https://sanoj.dev",
+   "grp": "bot_wall",
+   "current": "hidden",
+   "proposed": "review",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-21T05:09:44.961Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://sanoj.dev",
+   "name": "Sanoj D",
+   "status": "error",
+   "reason": "capture blocked: a bot or security check stood in for the site (phone view)",
+   "shot_key": null,
+   "captured_at": null,
+   "health": "live",
+   "health_reason": "capture blocked: a bot or security check stood in for the site (phone view)",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:38:47.547Z",
+   "needs_review": "1",
+   "signals_score": 3,
+   "graded_portfolio": null
+  }
+ },
+ {
+  "review": {
+   "id": 358,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "http://gianlucafiore.it",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "http://gianlucafiore.it",
+   "name": "Gianluca Fiore",
+   "status": "live",
+   "reason": "",
+   "shot_key": "8e712be551796e08",
+   "captured_at": "2026-11-23 17:01:22",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:42.252Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 360,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://abdulmomin.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://abdulmomin.dev",
+   "name": "Abdul Momin",
+   "status": "live",
+   "reason": "",
+   "shot_key": "0c03549e87cbf663",
+   "captured_at": "2026-11-11 04:37:11",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:31:33.250Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 361,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://atanas.info",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://atanas.info",
+   "name": "Atanas Atanasov",
+   "status": "live",
+   "reason": "",
+   "shot_key": "3314ab95c58cef17",
+   "captured_at": "2026-11-22 18:25:30",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:32:56.408Z",
+   "needs_review": "0",
+   "signals_score": 6,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 362,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://batuhan.tech",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://batuhan.tech",
+   "name": "Batuhan Eroğlu",
+   "status": "live",
+   "reason": "",
+   "shot_key": "8643dcfc4d917c9d",
+   "captured_at": "2026-11-22 18:23:43",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:33:09.425Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 363,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://borntofrappe.github.io",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://borntofrappe.github.io",
+   "name": "Gabriele Corti",
+   "status": "live",
+   "reason": "",
+   "shot_key": "bde23dbd6d887468",
+   "captured_at": "2026-11-22 18:38:38",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:33.739Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 364,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://ciangoon.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://ciangoon.dev",
+   "name": "Cian Goon",
+   "status": "live",
+   "reason": "",
+   "shot_key": "2363277ac3361890",
+   "captured_at": "2026-11-22 18:27:29",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:33:45.783Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 365,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://debpriyo.is-a.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://debpriyo.is-a.dev",
+   "name": "Debpriyo Ghosal",
+   "status": "live",
+   "reason": "",
+   "shot_key": "0aeaf338591d24e0",
+   "captured_at": "2026-11-22 18:29:58",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:33:56.486Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 366,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://dherault.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://dherault.com",
+   "name": "David Hérault",
+   "status": "live",
+   "reason": "",
+   "shot_key": "08e8492f586e2dd6",
+   "captured_at": "2026-11-22 18:29:14",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:33:52.480Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 367,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://dipanshusingh.vercel.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://dipanshusingh.vercel.app",
+   "name": "Dipanshu Singh",
+   "status": "live",
+   "reason": "",
+   "shot_key": "0d119c0a22698890",
+   "captured_at": "2026-11-22 18:33:30",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:21.108Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 368,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://dustinbrett.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://dustinbrett.com",
+   "name": "Dustin Brett",
+   "status": "live",
+   "reason": "",
+   "shot_key": "eb3d8003253e9349",
+   "captured_at": "2026-11-14 04:48:16",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:15.108Z",
+   "needs_review": "1",
+   "signals_score": 0,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 369,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://ganesh-vscode.netlify.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://ganesh-vscode.netlify.app",
+   "name": "Ganesh Narayanapurapu",
+   "status": "live",
+   "reason": "",
+   "shot_key": "20c3ce8cc0768c71",
+   "captured_at": "2026-11-22 18:39:16",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:45.215Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 370,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://hasansiddiqui.netlify.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://hasansiddiqui.netlify.app",
+   "name": "Hasan",
+   "status": "live",
+   "reason": "",
+   "shot_key": "bbc22e75ceab3adf",
+   "captured_at": "2026-11-22 18:43:24",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:57.652Z",
+   "needs_review": "0",
+   "signals_score": 3,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 371,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://juanpablojimenez.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://juanpablojimenez.dev",
+   "name": "Juan Pablo Jimenez",
+   "status": "live",
+   "reason": "",
+   "shot_key": "4ef9fdc1ca9d9dfa",
+   "captured_at": "2026-11-22 18:48:48",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:35:45.175Z",
+   "needs_review": "0",
+   "signals_score": 6,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 372,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://lamine.cc",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://lamine.cc",
+   "name": "Lamine Neggazi",
+   "status": "live",
+   "reason": "",
+   "shot_key": "e911cc7b29ea5eea",
+   "captured_at": "2026-11-22 18:51:34",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:36:18.565Z",
+   "needs_review": "0",
+   "signals_score": 6,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 373,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://mahatosunil.com.np",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://mahatosunil.com.np",
+   "name": "Sunil Mahato",
+   "status": "live",
+   "reason": "",
+   "shot_key": "031c7be0f5ec16dd",
+   "captured_at": "2026-06-13 02:40:12",
+   "health": "live",
+   "health_reason": "blocked by a bot check (HTTP 200)",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:43.348Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 374,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://oriondobos.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://oriondobos.com",
+   "name": "Orion Dobos",
+   "status": "live",
+   "reason": "",
+   "shot_key": "e0f67c9c3db01907",
+   "captured_at": "2026-11-22 19:01:20",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:37:21.651Z",
+   "needs_review": "0",
+   "signals_score": 4,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 375,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://portfolionaqqash.vercel.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://portfolionaqqash.vercel.app",
+   "name": "Naqqash",
+   "status": "live",
+   "reason": "",
+   "shot_key": "fe48439888f53f8f",
+   "captured_at": "2026-11-22 18:57:11",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:37:12.941Z",
+   "needs_review": "0",
+   "signals_score": 4,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 376,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://rohit-raj.netlify.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://rohit-raj.netlify.app",
+   "name": "Rohit Raj",
+   "status": "live",
+   "reason": "",
+   "shot_key": "27dbd75793253270",
+   "captured_at": "2026-11-22 19:12:49",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:38:18.900Z",
+   "needs_review": "0",
+   "signals_score": 6,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 377,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://rohitsolanki.me",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://rohitsolanki.me",
+   "name": "Rohit Solanki",
+   "status": "live",
+   "reason": "",
+   "shot_key": "451da2204b4735d9",
+   "captured_at": "2026-06-13 02:14:18",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:38:26.155Z",
+   "needs_review": "0",
+   "signals_score": 2,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 378,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://singhshailendra.in",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://singhshailendra.in",
+   "name": "Shailendra Singh",
+   "status": "live",
+   "reason": "",
+   "shot_key": "3eedbea92898f5f5",
+   "captured_at": "2026-11-22 19:20:27",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:11.172Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 379,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://thesoham2203.vercel.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://thesoham2203.vercel.app",
+   "name": "Soham Penshanwar",
+   "status": "live",
+   "reason": "",
+   "shot_key": "f0d677517707354b",
+   "captured_at": "2026-11-22 19:13:00",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:24.224Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 380,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://ujjwalsoni-portfolio.vercel.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://ujjwalsoni-portfolio.vercel.app",
+   "name": "Ujjwal Soni",
+   "status": "live",
+   "reason": "",
+   "shot_key": "034a4fe1fad25053",
+   "captured_at": "2026-11-22 19:17:15",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:57.329Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 381,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://www.abhishekworks.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://www.abhishekworks.com",
+   "name": "Abhishek Singh",
+   "status": "live",
+   "reason": "",
+   "shot_key": "43732931e02b6dc1",
+   "captured_at": "2026-11-22 18:14:23",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:31:46.051Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 382,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://www.michaellalavedra.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://www.michaellalavedra.com",
+   "name": "Michaell Alavedra",
+   "status": "live",
+   "reason": "",
+   "shot_key": "c03a0b22b92aa1b0",
+   "captured_at": "2026-11-22 18:51:43",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:36:46.645Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 383,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://www.sachingoyal.me",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://www.sachingoyal.me",
+   "name": "Sachin Goyal",
+   "status": "live",
+   "reason": "",
+   "shot_key": "65d1339a39de6d06",
+   "captured_at": "2026-11-22 19:06:58",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:38:26.301Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 384,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://ychof.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://ychof.com",
+   "name": "Kenta Yamamoto",
+   "status": "live",
+   "reason": "",
+   "shot_key": "682766c7b6f1d014",
+   "captured_at": "2026-11-16 04:49:18",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:35:58.647Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 385,
+   "batch": "signals-collapsed:2026-11-16",
+   "url": "https://yourtarikur.vercel.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-18T05:15:36.589Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://yourtarikur.vercel.app",
+   "name": "Tarikur Rahman",
+   "status": "live",
+   "reason": "",
+   "shot_key": "7fb9fe5d766c4da2",
+   "captured_at": "2026-11-22 19:23:29",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:45.170Z",
+   "needs_review": "0",
+   "signals_score": 4,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 391,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://alfreddagenais.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://alfreddagenais.com",
+   "name": "Alfred Dagenais",
+   "status": "live",
+   "reason": "",
+   "shot_key": "22b7b87b1327ad03",
+   "captured_at": "2026-11-22 18:18:51",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:32:10.466Z",
+   "needs_review": "0",
+   "signals_score": 3,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 392,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://alisaleem252.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://alisaleem252.com",
+   "name": "Ali Saleem",
+   "status": "live",
+   "reason": "",
+   "shot_key": "d822b8dc8d42e162",
+   "captured_at": "2026-11-22 18:17:04",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:32:11.357Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 393,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://asifjaved.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://asifjaved.dev",
+   "name": "Asif Javed",
+   "status": "live",
+   "reason": "",
+   "shot_key": "5c13f890ab59cc05",
+   "captured_at": "2026-11-22 18:25:21",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:32:51.052Z",
+   "needs_review": "0",
+   "signals_score": 4,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 394,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://bsodium.fr",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://bsodium.fr",
+   "name": "Elliot Négrel-Jerzy",
+   "status": "live",
+   "reason": "",
+   "shot_key": "cd2ab4175c61362a",
+   "captured_at": "2026-11-22 18:31:25",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:22.808Z",
+   "needs_review": "1",
+   "signals_score": 1,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 395,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://fmorenil.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://fmorenil.dev",
+   "name": "Fernando Morenilla",
+   "status": "live",
+   "reason": "",
+   "shot_key": "849db1b7a233f289",
+   "captured_at": "2026-11-22 18:37:48",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:25.140Z",
+   "needs_review": "0",
+   "signals_score": 6,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 396,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://kamilmazurek.pl",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://kamilmazurek.pl",
+   "name": "Kamil Mazurek",
+   "status": "live",
+   "reason": "",
+   "shot_key": "7a049489078fcb61",
+   "captured_at": "2026-11-22 18:42:21",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:35:45.061Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 397,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://khokon.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://khokon.dev",
+   "name": "Khokon",
+   "status": "live",
+   "reason": "",
+   "shot_key": "5b0f5c237e7ddf8c",
+   "captured_at": "2026-11-22 18:50:17",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:35:56.119Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 398,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://mfaysal.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://mfaysal.com",
+   "name": "Mahir Faysal",
+   "status": "live",
+   "reason": "",
+   "shot_key": "72596e447233961c",
+   "captured_at": "2026-11-22 18:53:56",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:36:23.163Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 399,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://niresh.com.np",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://niresh.com.np",
+   "name": "Niresh Shrestha",
+   "status": "live",
+   "reason": "",
+   "shot_key": "6b27333fe080653a",
+   "captured_at": "2026-11-22 19:03:55",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:37:08.533Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 400,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://praveen.science",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://praveen.science",
+   "name": "Praveen Kumar Purushothaman",
+   "status": "live",
+   "reason": "",
+   "shot_key": "516b87e1d89dd158",
+   "captured_at": "2026-11-22 19:09:07",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:37:37.885Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 401,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://remyjouni.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://remyjouni.dev",
+   "name": "Remy Jouni",
+   "status": "live",
+   "reason": "",
+   "shot_key": "2de904d65ed8cf70",
+   "captured_at": "2026-11-22 19:05:16",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:38:06.625Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 402,
+   "batch": "signals-collapsed:2026-11-19",
+   "url": "https://www.sushantmondal.com",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-19T05:15:46.868Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://www.sushantmondal.com",
+   "name": "Sushant Mondal",
+   "status": "live",
+   "reason": "",
+   "shot_key": "f345b8bf3d74c6a9",
+   "captured_at": "2026-11-22 19:14:12",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:35.987Z",
+   "needs_review": "0",
+   "signals_score": 2,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 406,
+   "batch": "signals-collapsed:2026-11-20",
+   "url": "https://saurabh-works.netlify.app",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-20T05:06:43.764Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://saurabh-works.netlify.app",
+   "name": "Saurabh Singh",
+   "status": "live",
+   "reason": "",
+   "shot_key": "73fcd875192f1859",
+   "captured_at": "2026-11-22 19:18:02",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:39:04.313Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 408,
+   "batch": "signals-collapsed:2026-11-21",
+   "url": "https://Floriscodes.nl",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-21T05:09:44.961Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://Floriscodes.nl",
+   "name": "Floris Melchers",
+   "status": "live",
+   "reason": "",
+   "shot_key": "2ebdbc593c436175",
+   "captured_at": "2026-11-22 18:38:16",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:34:27.739Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ },
+ {
+  "review": {
+   "id": 409,
+   "batch": "signals-collapsed:2026-11-22",
+   "url": "https://heysai.dev",
+   "grp": "signals_collapsed",
+   "current": "ranked",
+   "proposed": "remove",
+   "agreed": 0,
+   "status": "pending",
+   "created_at": "2026-11-22T05:15:57.312Z",
+   "undone_at": null
+  },
+  "site": {
+   "url": "https://heysai.dev",
+   "name": "Sairithik Komuravelly",
+   "status": "live",
+   "reason": "",
+   "shot_key": "3fba16176795dcb5",
+   "captured_at": "2026-11-22 19:08:30",
+   "health": "live",
+   "health_reason": "",
+   "health_fails": "0",
+   "health_checked_at": "2026-11-23T04:38:39.314Z",
+   "needs_review": "0",
+   "signals_score": 5,
+   "graded_portfolio": true
+  }
+ }
+]

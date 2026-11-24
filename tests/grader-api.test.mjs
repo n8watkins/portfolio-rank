@@ -11,7 +11,8 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { AI_CRITERIA } from "../pipeline/rubric.mjs";
+// A person's own grade still runs on the frozen v2 prompt (pipeline/rubric-v2.mjs) until the owner decides.
+import { V2_AI_CRITERIA as AI_CRITERIA } from "../pipeline/rubric-v2.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { claimCaptures, readJob } from "../lib/grader/jobs.mjs";

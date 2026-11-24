@@ -10,7 +10,8 @@ import { createClient } from "@libsql/client";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { createRequestLog, ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
-import { AI_CRITERIA } from "../pipeline/rubric.mjs";
+// A person's own grade still runs on the frozen v2 prompt (pipeline/rubric-v2.mjs).
+import { V2_AI_CRITERIA as AI_CRITERIA } from "../pipeline/rubric-v2.mjs";
 import { drainPeopleQueue, readRequest, requestGrade } from "../pipeline/people.mjs";
 import { activeAlerts, nightConditions, reconcileAlerts, tractionConditions } from "../pipeline/alerts.mjs";
 

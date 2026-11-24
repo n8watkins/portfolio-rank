@@ -347,13 +347,15 @@ test("small libraries hand out only the tiers they have room for", () => {
   assert.equal(tierAt(1, 1), "B");
 });
 
-test("the report card: the grade's score and its standing, apart from the tier", () => {
+test("the grade's key is the code checks alone: Gemini's letter and dropped scores never count (rubric v3)", () => {
   assert.equal(gradeScore(grade(5, 100)), 100);
   assert.equal(gradeScore(grade(1, 0)), 0);
+  assert.equal(gradeScore(grade(1, 72)), gradeScore(grade(5, 72)), "the old axis scores count for nothing");
   const v1 = { tier: "A", is_portfolio: true, visual_design: 5, five_second_test: 5, storytelling: 5, writing: 5, memorability: 5 };
-  assert.equal(gradeScore(v1), 80 + 0.2 * CHECKS_WHEN_UNKNOWN);
+  assert.equal(gradeScore(v1), CHECKS_WHEN_UNKNOWN);
+  assert.equal(gradeScore({ rubric_version: 3, is_portfolio: true, checks_score: 64 }), 64);
   assert.equal(gradeScore(grade(5, 100, "S", { is_portfolio: false })), null);
-  assert.ok(gradeKey(grade(4, 80, "S")) > gradeKey(grade(4, 80, "A")));
+  assert.equal(gradeKey(grade(4, 80, "S")), gradeKey(grade(4, 80, "D")), "the letter is no tie-break");
   assert.deepEqual(standing([10, 20, 30], 25), { rank: 2, total: 4, topPct: 38, ahead: 50 });
   assert.equal(standing([10], null), null);
 });

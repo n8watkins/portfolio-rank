@@ -127,7 +127,7 @@ Whether the key is set is not confirmed.
 3. **Wait for the free checks**: it waits for `sync-upstream.yml` for up to 45 minutes (to about 21:15), and does not wait for `health.yml`.
 4. **Plan the AI work** (`planNight`), which does these free things first:
    1. makes sure this week's poll exists, and next week's when it starts before tomorrow's run;
-   2. writes review rows for bot-walled sites that were never captured, and for listed sites whose portfolio signals collapsed;
+   2. closes review rows whose reason no longer holds (every "signals collapsed" row, and a bot-wall or blocked re-capture row once a capture got through), then writes review rows for bot-walled sites that were never captured, asked once (`lib/reviews/door.mjs` `syncReviewRows`, `closeStaleReviews`);
    3. sets aside new sites whose stored screenshot does not show the site;
    4. counts what each stage has waiting.
 5. **Run the AI stages** below, in order, in batches of 20 requests.
@@ -175,8 +175,12 @@ Each chain is a list of steps in the order they happen.
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
-   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
-   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link (`pipeline/capture-projects.mjs`).
+   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 4).
+   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link or of the home page's own address for a hash route ("/#/projects"), and reads it once its list has stopped changing, within the step's 25 seconds (`pipeline/capture-projects.mjs`).
+   Up to 8 project links are checked: one link per repository (or per folder of one, linked by its tree), and at most 3 of one outside site before the others; the site's own project pages count only as real pages, on a host that answers every address by the text they do not share with a page that cannot exist (AUTOMATION.md, Rubric v2).
+   On the projects page, a link to another page of the same site counts as a project page at any path only when it sits in the main content, not in a menu, a list of profiles, an aside or a section that is not projects, its whole label does not name a section of the site ("About", "Get in touch", "Next project") nor start with a call to action ("Download Resume", "Read my articles"; "View project" is fine), and at the top of the site its path is not a page that is never a project ("/resume", "/services", "/blog", "/about"); below the top of the site its path must not name one either ("/topics/react"), and the page's own menu, header or footer must not link it too ("/contact", "/blog").
+   Each link counts once, in the highest place it is seen in: a link in a work list that the projects list links again is a project; but what the home page shows outside its projects is raised by the projects page only when that page links it more than once, as a project card does.
+   A menu is found by its shape, whatever it is built from: the links beside a link to the home page or to the projects page itself, at the same depth, mostly to the site's own pages and mostly naming its sections; only its own pages are left out, never a demo or a repository.
    When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`), `lib/freshness.mjs` `screenshotsDue`.
    A capture is due again for one of two reasons only: it is 90 days old, or a person asked for a new one (your "Re-measure", or a re-grade an owner asked for).
@@ -215,18 +219,24 @@ Each chain is a list of steps in the order they happen.
    Lighthouse for every member comes from the nightly prewarm (`scripts/lib/prewarm.mjs`), graded or not; until it has run, those items count the library median.
    The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
 9. **Grade** (night stage 1, `grade_new`).
-   One Gemini request with the screenshot, the page text and the facts.
-   It answers whether it is a portfolio and writes the Gemini report card (scores and notes).
-   It never sets or moves the Starting rank or the Tier, and its own letter is never shown on a listed site's pages.
+   One Gemini request with the screenshot, the page text and the facts (rubric v3, prompt `grade-v3`, `pipeline/rubric.mjs`).
+   It is asked two things and nothing else: whether it is a portfolio (with a short reason, written first) and the roles the page names.
+   Your decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
+   It never sets or moves the Starting rank or the Tier, and none of its answers is shown (your decision, 2026-11-23: no Gemini report card); "is it a portfolio" feeds the removal rule below and the roles name the profile for search engines.
+   Your decision (2026-11-23): the five-second test will be measured by code, so the model is not asked it; older grades' five-second scores stay in the database, unread and unshown.
+   Grades made before v3 keep their old fields in the database, and no site is graded again because of v3.
+   No profile, list, stat, rank or tier reads those fields.
+   Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
+   Before `RANKING_V2` is turned on, those views must be reseeded from the code checks or retired if any page shows them.
    A stored screenshot that does not show the site is checked first and set aside.
    Paused.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
-   2. Gemini says portfolio: it is listed with its report card, unless its address is not a portfolio page (step 3).
+   2. Gemini says portfolio: it is listed, unless its address is not a portfolio page (step 3).
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
-      So does an address whose host is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist; any Substack or Medium page, subdomains included; any Linktree page on `linktr.ee` or `linktree.com`; and the link-in-bio pages `bio.link` and `beacons.ai`), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page.", "any substack should never be considered a portfolio page." and "A link tree is not a portfolio page ... A medium page is not a portfolio page".
+      So does an address whose host, or the host it forwards to after its redirects (`addressNotPortfolio`), is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist; any Substack or Medium page, subdomains included; any Linktree page on `linktr.ee` or `linktree.com`; and the link-in-bio pages `bio.link` and `beacons.ai`), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page.", "any substack should never be considered a portfolio page." and "A link tree is not a portfolio page ... A medium page is not a portfolio page".
       A site on its own subdomain of a hosting place, such as `name.github.io`, `name.vercel.app` or `name.netlify.app`, is a real site and is never caught ("Vercel is different. Vercel is just a hosting place."). Notion pages are not decided and not caught.
       An admin or login path is a junk rule only beside Gemini's "not a portfolio", as before.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
@@ -251,6 +261,12 @@ Each chain is a list of steps in the order they happen.
 
 ### A site stops working
 
+Your rule (2026-11-23): "if something is failing a health check, it doesn't go to review by me, it gets checked, it gets put in a pool ... And after 90 days, it gets put into the archived section."
+Every kind of failed check takes these same steps: the site does not answer (paused hosting, a dead domain, an HTTP error), it is parked or for sale, it is blank, it redirects to a social profile, its capture was never anything but blocked, or it duplicates another entry.
+Never a failed check: a bot wall, a check that could not tell (a timeout, a dropped connection, a browser that did not start), a "not a portfolio" grade, and low portfolio signals (the code could not read the site; it stays listed).
+Nor a listed address that fails while the site answers at its own address with www or https, where it ended on an earlier good read (http://gianlucafiore.it has a stale server among its addresses; https://www.gianlucafiore.it serves the site): the site passes, and `/admin/health-pool` lists it as "listed address unreliable". Another domain is never tried this way.
+Nothing at any step writes a row to your review page.
+
 1. **Nightly health check** (`health.yml`, `pipeline/health-check.mjs`, started by the night).
    Every listed site is loaded.
    A plain request comes first, and its whole page is read up to 2,000,000 characters (`pipeline/gate.mjs` `httpGate`).
@@ -269,25 +285,46 @@ Each chain is a list of steps in the order they happen.
    Up to 120 due sites a run, with a 20 minute limit.
    Five sites that were live are loaded beside them.
    If fewer than 3 of those load, the checker is at fault, nothing is recorded, and the run fails.
-3. **Re-check the next day.**
-   Still failing: the site is not working.
-   It is hidden from browse, search, the leaderboard, the games and the sitemap, and its profile page answers "not found" (`lib/hidden.mjs`).
-   Nothing is deleted.
+3. **Re-check the next day: the temporary pool.**
+   Still failing: the site goes into the temporary pool.
+   It is hidden from browse, search, the leaderboard, the tiers, the games and the sitemap, and its profile page answers "not found" (`lib/hidden.mjs`).
+   Nothing is deleted: its rank, votes, grade and captures stay.
+   Two failures on one day never hide a site: the hiding check comes at least a day after the first failure, and a week after it for a blank page, a blocked capture, a redirect to a social profile, a duplicate, a placeholder page or the browser's error page (weak evidence the checker itself can cause).
+   No more than 20 sites are hidden in any 24 hours, oldest first failure first, and no more than 5 of those weak verdicts; the rest wait their turn, still shown, and are hidden as places free (36 dead sites: 20 one day, 16 the next).
+   This is the ordinary pace and sends you nothing; `/admin/health-pool` shows who is waiting.
+   A spike is different: when more than 100 sites (about 5% of the list), or more than 50 for one kind of reason, start failing within 48 hours, the fault is most likely ours or a host-wide outage, so none of them is hidden while it lasts and you get one alert.
+   It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day) before it is hidden, at the same 20 a day.
+   Weak verdicts are counted over 8 days instead: a fault in our reader can go on for a week at a steady pace.
+   More than 50 new ones of one kind (blank pages, say) in 8 days holds that kind's weak verdicts, still shown and checked daily, with one alert; other kinds keep moving.
+   More than 50 of all weak kinds together holds every kind with 10 or more, since one fault can show as several kinds.
+   The hold lifts when fewer than 50 of its held sites still fail, and each still failing then needs a full week again; a site held 14 days and still failing is released anyway into the weak drain, so a hold never lasts forever, and the alert stays up ("released, hiding N a day") until a week after the last of them is hidden.
+   A slower leak gets an alert without a hold: more than 15 sites hidden on weak evidence in a week; while it is up only 1 a day is hidden, and it clears once the week's count is down to 5.
+   Sites nobody could see anyway (a capture that never showed the site, no screenshot) never count toward any of this.
+   On release night, the sites already failing under the old rule keep their first failure date, so only those that really started failing recently count toward a spike; `node pipeline/health-check.mjs --dry-run` counts them beforehand ("Restarted on the ladder"), with how many fall inside the 48-hour and 8-day windows.
 4. **Keep re-checking** (hourly, when due): daily for the first 7 days, weekly to day 30, then monthly.
-   A check that passes brings the site straight back.
+   Every night one plain request also goes to each hidden site; if it answers with words, its full re-check comes within the hour.
+   A check that passes brings the site straight back, exactly as it was, tier included.
 5. **Day 90.**
    One more check is made on day 90.
-   Only a check made on or after day 90 that fails takes the site off the list.
-6. **The weekly export** (`health.yml`, `pipeline/exclusions.mjs`, every 6 or more days).
-   The site is added to `data/excluded.json` and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
-   Removed sites are re-checked later (days 7, 14 and 21, then monthly) and come back when they pass.
-7. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
+   Only a check made on or after day 90 that fails sends the site to the archive.
+6. **The weekly export: the archive** (`health.yml`, `pipeline/exclusions.mjs`, every 6 or more days).
+   The site is added to `data/excluded.json` (kind `down`, or `duplicate` for a duplicate) and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
+7. **The archive check** (the same weekly export, `pipeline/not-working.mjs` `archiveCheckDue`): every `down` and `dead` entry is checked again on days 7, 14 and 21 after it was archived, then every 30 days; plain health checks only, no Gemini, at most 40 a run.
+   One that passes leaves the archive and is recorded in `data/additions.json`, so the next sync lists it again even when the community list dropped it.
+   It counts as back only when the page carries the listed person's whole name, together and in order, in its title or its opening text (not its address; a name in Chinese or Japanese as written; a one-word name in the title or the first heading), so a lapsed domain someone else bought does not come back under the old name; otherwise it stays archived and `/admin/health-pool` shows what was found.
+   It comes back as a new site, whenever that is, because we cannot know it is the same site (your rule, 2026-11-23: "It can't keep its own votes."): captured, measured and ranked from code like a site listed for the first time, with none of the old site's votes, rating, tier, grade, face-offs, likes, claim or review decisions.
+   The old site's rows are kept as history under a closed-off key, `archived:<day>:<address>`, which nothing lists (`pipeline/archive-return.mjs`); no other site's rating moves for it.
+   A site back from the temporary pool (step 4) is different: the same site after a bad spell, back exactly as it was.
+   Not-a-portfolio removals, owner requests and duplicates are never checked this way.
+8. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
    Any other delisted row is kept and counted in the run summary.
    Votes and ratings stay.
 
 No one is emailed at any step.
+You see the pool, the archive and what came back in the last 30 days on `/admin/health-pool`.
 A site the check could not tell about for 28 days gives you an alert on the alerts page.
-A different path exists for a site that answers with the wrong thing (parked, blank, a duplicate): 3 failed checks, a week apart, spanning at least 13 days.
+A bot wall: a site whose capture met one is never failed for it; the first time, a row asks you about it once, and once you have decided it no check asks again or pools it for the wall.
+It is asked about again only after it failed a real check (it did not load, was parked or blank) and came back.
 A parked domain counts as the wrong thing also when its home page is only a redirect made on load (a script or a meta refresh of a few seconds) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
 The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
 A short page that loads Sedo's lander images, or whose whole title is Sedo's ("abdulmomin.dev - abdulmomin Resources and Information." on its own domain), is parked the same way.
@@ -299,6 +336,35 @@ A browser that shows only its own error page (`chrome-error://`) fails with `doe
 Each of these is a failed check, counted like any other failure of its kind by the health check's ladder, whichever ladder runs; none is ever a removal by itself.
 The capture judges where its browser ended with the same `parkedPage`: a new site whose first capture is one of these pages is not stored, is retried like any failed capture, and is hidden until a health check passes it (`lib/hidden.mjs`); a re-capture of a listed site that meets one keeps its good capture and changes nothing that is shown.
 A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
+
+### A live site that may not be a portfolio (suspicion flags, not wired yet)
+
+The health check answers "is this site alive", not "is this alive site a portfolio".
+`pipeline/portfolio-flags.mjs` holds named suspicion flags for that second question, each a pure function over a site's saved page (no network, no AI).
+A raised flag gives its name, one plain sentence quoting what it found on the page, and the snippets it matched.
+Email addresses and phone numbers in a quote are replaced by `[email]` and `[phone]`.
+They are not yet wired to anything: no flag removes, hides, ranks or queues a site today.
+The plan is that a flagged site goes to your review queue, listed meanwhile.
+
+| Flag | What it looks for |
+| --- | --- |
+| `filler-text` | Template filler in the text: "Lorem ipsum", "your name here". |
+| `placeholder-page` | A short page with no projects that says it is coming soon, under construction or a work in progress. |
+| `moved-notice` | A short page with no projects saying the site has moved to another site. |
+| `blog-only` | Only a blog, found two ways. Dated posts and nothing else the code can see: any project evidence keeps the page quiet (a projects section, heading or link, a "Projects" or "Work" menu entry or button, links to the site's own project pages, case studies), and so does a resume or work history. Or the site's name is a blog: its title, site name or first heading names it as one ("Patrick's Blog", "A blog about Rust", "Kişisel Blog", "a blog by Bouwe", "Ana Ruiz-Blog", or just "Blog"), that part of the name does not also say portfolio, projects, work, case study, resume or CV, and it has no projects menu entry, no plural projects heading, no resume heading and no project link shown outside its posts. Project links are code repositories, live demos and the site's own project pages; any one of them outside the posts protects the page whatever heading sits above it. Links inside a post (an `<article>`, a block marked as a post, or a card that carries a date or a link to a post) never protect it, and when the code cannot tell, a link counts as outside the posts, because missing a blog is the cheaper mistake. A name that only mentions a blog ("Code & Blog", "Portfolio & Blog", "I build things and blog about them") is never flagged, and having a blog is never a negative. |
+| `link-card` | A name, a line and a handful of profile or email links, nothing else: a contact card. You have not ruled on these yet. |
+| `company-voice` | The page speaks as "we" far more than "I" and sells services or names a team or jobs. A freelancer or a one-person studio is protected; a page naming two people says so. |
+| `sells-teaching` | Coaching, courses, speaking or a book for sale, and no projects. |
+| `product-page` | One product's or tool's own site: pricing, sign up, documentation, terms, and no person behind it. A one-person business is protected, and so is a page that speaks as "I" or names its one-word domain as a person ("I'm Kunal" on kunal.dev). |
+| `readme-page` | A code repository's README rendered as the page: install steps, commands, the folder layout. |
+| `hidden-spam-links` | Gambling, adult or pharmacy links to two or more other sites, hidden in a block that can never be opened (zero size, zero font size, pushed far off screen): the site appears to have been compromised. Hidden tabs and menus, and links to project hosting such as vercel.app or github.io, never count. |
+| `forwards-elsewhere` | The address forwards to another domain without the person's name or handle: the health check's own "moved" verdict, given a flag's name. |
+| `sub-page` | The listed address is a sub-page that is not itself a portfolio (a blog category page); says in plain words what the site's home page is. A github.io project site, a `/portfolio` or `/portfolio.html` path, a university's `/~name/` page or any sub-page with projects is never flagged, and a code host's or a university's home page is never judged. |
+
+Beside the flags, and never one of them, `unreadable-page` notes a page the code could not read (under 60 characters of text: an intro or gate screen, a lock screen, a canvas, a bot check).
+Most are real portfolios, so it is never a suspicion and never goes to the review queue as one; it is for fixing how pages are read.
+
+How each flag scores on the labelled benchmark and on a fresh sample of listed sites is printed by the benchmark scorer kept with the owner's handoff files (`run-benchmark.mjs`), which runs them against any checkout.
 
 ### The community list drops a site
 
@@ -370,8 +436,8 @@ Always on; no switch.
 
 ### Ranking
 
-The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
-The rank starts from the Code checks score and moves with face-off votes.
+No Gemini answer is in the ranking or shown on a page; the model decides only whether a page is a portfolio (the removal rule).
+The rank starts from the Code checks score and moves with face-off votes; no Gemini output is in it.
 Every place that shows the Code checks score shows each item and the total to one decimal when it is not whole, and never rounds a score up to its maximum (`lib/check-points.mjs` `formatPoints`): 9.4 of 10 shows as 9.4/10, never 10/10.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).
@@ -400,6 +466,8 @@ The routes answer 404 and the five-minute tick returns at once.
    The same browser capture, behind a filtering proxy.
 3. **Grade** (`pipeline/people.mjs`).
    One Gemini request from the day's quota, or the visitor's own key.
+   It still uses the frozen v2 prompt (`pipeline/rubric-v2.mjs`: Gemini's letter and five scores), because the visitor's report is built on them; listed sites use v3.
+   What that report shows under v3 waits for your decision.
    A request that cannot be answered waits, and the hourly task 7 finishes it.
 4. **Report and email** (the five-minute tick, `worker/grader.ts`).
    The visitor gets a report page and, if they asked, a one-time link by email.

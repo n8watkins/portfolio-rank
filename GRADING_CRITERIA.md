@@ -1,11 +1,11 @@
 # Grading Criteria
 
 > Status (2026-11-10): gates, the weekly health check, PSI scorecards, polish/behavior checks, the Gemini rubric and human+AI ELO are live; see AUTOMATION.md for how they run.
-> Rubric v2 (section 6): code measures the facts, Gemini judges quality from one screenshot and the page text.
+> Rubric v3 (section 6, since 2026-11-23): code measures the facts that rank a site; Gemini is asked two things only (is it a portfolio, with a reason, and the roles the page names), and neither is in the rank or the tier.
 > Not built yet: originality clustering (section 5) and weighting human votes above AI votes (section 7).
 > Each section says where the running system differs from the plan.
 
-Every criterion below is assessed **automatically** — by deterministic scripts, free APIs, or
+Every criterion below is assessed **automatically** - by deterministic scripts, free APIs, or
 Gemini. Humans are never asked to grade a rubric. The only thing humans ever do is the optional
 one-click "which is better?" vote (see PLAN.md → Face-off screen).
 
@@ -21,7 +21,7 @@ Data source: `feed.json` from github.com/n8watkins/developer-portfolios (~1,700+
 | Behavior | Playwright (same run as screenshots) | free | all sites |
 | Originality | known-template fingerprints only (clustering not built) | free | all captured sites |
 | Facts for the rubric | capture script (`pipeline/facts.mjs`) | free | all captured sites |
-| Design & content | Gemini Flash-Lite (free-tier daily budget), quality only | free tier | rubric once per site, when it is added |
+| Is it a portfolio, roles | Gemini Flash-Lite (free-tier daily budget), two questions only, never in the rank | free tier | once per site, when it is added |
 | Overall design rank | Human ELO votes (the ELO-era AI votes were removed on 2026-11-22; their votes stay) | free | forever-refining |
 
 ## 1. Gates (pass/fail)
@@ -50,10 +50,10 @@ Client extracted from `appturnity/site-forge/la-pool-engine/website-template/src
 - Accessibility score (0–100)
 - SEO score (0–100)
 - Best-practices score (0–100)
-- Mobile-friendly pass/fail (meta-viewport + viewport-insight + target-size composite —
+- Mobile-friendly pass/fail (meta-viewport + viewport-insight + target-size composite -
   logic already written in the checkup route)
 
-## 3. Polish checklist (HTML parse — one fetch per site)
+## 3. Polish checklist (HTML parse - one fetch per site)
 
 All boolean/count, fully deterministic. No AI needed.
 
@@ -89,32 +89,46 @@ Planned:
 Today `pipeline/capture.mjs` stores `domHash` and `classHash` in each site's `meta`, but nothing clusters them and no score or badge uses them.
 The second signal is built: `pipeline/facts.mjs` records known template fingerprints (and the site builder) in `facts.template`, scored as the "Not a known template" check in section 6.
 
-## 6. Design & content (rubric v2: code checks facts, Gemini judges quality)
+## 6. What code measures and what Gemini is asked (rubric v3)
 
-Owner rule (2026-11-10): anything code can check is measured for free and stored; Gemini only judges quality and gets the measured facts as a few lines of context.
+Owner rule (2026-11-10): anything code can check is measured for free and stored; Gemini gets the measured facts as a few lines of context.
+Owner decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
+A site's rank and tier come only from code measurements and votes.
+Owner decision (2026-11-23): no Gemini report card is shown, on a profile, the printable report or anywhere else; the model is used for one decision, whether a page is a portfolio at all (the Removal rule below), and the roles it also names are stored, not shown; they still name the profile for search engines (`lib/profile-seo.ts`).
+Then (owner, 2026-11-23): the five-second test will be measured by code, so the model is no longer asked it at all; older grades' five-second scores stay in the database, unread and unshown (`DROPPED_OUTPUTS`).
 The rubric lives in one pure module, `pipeline/rubric.mjs` (version, criteria, prompt, response schema, parser), used by the nightly grader, the eval and the docs.
+
+**Is it a portfolio** (the owner's definition, 2026-11-22): "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
+The prompt says no for a parked, blank or hijacked domain, an unedited template, a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built (even a developer's), a company or agency site presenting a team's services, a GitHub or other code-host profile, a Substack, a Medium page, a Linktree or other link-in-bio page, a site that redirects to or ends on a GitHub or other code-host profile, and a blog with no projects, even a technical one.
+It says yes for a portfolio that also has a blog ("having a blog shouldn't be a negative. It just can't just be a blog page"), a portfolio that also offers freelance work or says hire me, and for a solo developer or designer under a studio name who shows projects they built.
+A digital resume counts as a portfolio (it earns nothing for projects; that is the Code checks score's business), certificates are not projects, and a weak portfolio is still a portfolio.
+Gemini writes a short `portfolio_reason` before its answer.
+What a "no" does is unchanged: the Removal rule (`lib/reviews/door.mjs`) removes the site with a record and Undo when a junk rule fires or the code finds fewer than 4 of 6 portfolio signals, and holds it for the owner otherwise.
+
+**Older grades:** grades made before v3 keep everything they stored (the letter, the four dropped scores and `quality_score`) in `portfolios.ai_rubric` and `rubric_history`; nothing is deleted.
+No profile, list, stat, rank or tier reads those fields any more (`pipeline/rubric.mjs` `keptOutputs`), and no Gemini answer is shown for an old grade or a new one.
+Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
+A site is never re-graded because of v3: old rows wait for their next grade like any other (graded once, below).
+A person's own "Grade my portfolio" request still uses the frozen v2 prompt (`pipeline/rubric-v2.mjs`) until the owner decides what that report shows.
 
 **Facts** (`pipeline/facts.mjs`, free): measured by `pipeline/capture.mjs` from the rendered page and stored in `portfolios.facts`, with the visible page text (at most 4,000 characters) in `portfolios.page_text`.
 Rows captured before v2 get both measured when they are next graded: over plain HTTP, or in a browser when the server sends under 200 characters of text (client-rendered sites).
 Project and demo links (other sites and GitHub repositories, never social profiles or private addresses) are checked with HEAD, then GET, at most 8 per site with an 8-second timeout.
 A 401, 403, 429 or 999 answer is a bot wall and counts as blocked, not broken.
 
-**Rubric pass** (1 call per site): one image (the settled top of the page), the facts and the page text.
+**The request** (1 call per site): one image (the settled top of the page), the facts and the page text.
 The name, address, facts and page text travel in one `<site_data>` block that the system instruction declares untrusted data, never instructions, and any marker inside the data is removed so it cannot close the block.
+The template and the site builder are measured but no longer sent (template tracking is not used; the builder is information only).
 Thinking is at the lowest level the model allows (`minimal`; a model that rejects it is asked again without it), each note is one short clause, and the answer is capped by a strict JSON schema and `maxOutputTokens`.
-Each grade in `portfolios.ai_rubric` stores the tier (S/A/B/C/D), `is_portfolio`, the five scores with notes, `quality_score`, the code `checks` and `checks_score`, the `facts`, `rubric_version`, the model that answered and its token `usage` (input, output, thinking).
-Motion is no longer an AI axis: the capture's frame difference is a fact, and the "3 seconds later" frame and the shrunken full-page image are no longer sent.
+The parser keeps only the v3 fields: anything else in an answer (a letter, a dropped axis, a made-up field) is ignored and never stored.
+Each grade in `portfolios.ai_rubric` stores `is_portfolio`, `portfolio_reason`, `roles`, the code `checks` and `checks_score`, the `facts`, `rubric_version` (3), the model that answered and its token `usage` (input, output, thinking).
+Motion is not an AI axis: the capture's frame difference is a fact.
 
 <!-- rubric:start (generated by scripts/rubric-docs.mjs from pipeline/rubric.mjs; do not edit by hand) -->
-Rubric version 2 (`pipeline/rubric.mjs`).
+Rubric version 3 (`pipeline/rubric.mjs`, prompt `grade-v3`).
 
 | Id | Criterion | Measured by | Weight | What | Evidence |
 | --- | --- | --- | ---: | --- | --- |
-| `visual_design` | Visual design | Gemini | 30% | Hierarchy, typography, color and use of space. | top-of-page screenshot |
-| `five_second_test` | Five-second test | Gemini | 20% | Clear who the person is and what they do within five seconds of landing. | top-of-page screenshot and the start of the page text |
-| `storytelling` | Project presentation | Gemini | 25% | Projects shown with the problem, their role, the outcome and links, rather than bare tech lists. | page text, with project-link health as context |
-| `writing` | Writing | Gemini | 15% | Clarity, voice, concision and typos. | page text |
-| `memorability` | Memorability | Gemini | 10% | Would a recruiter remember this site tomorrow. | screenshot and page text |
 | `resume` | Resume link | code | 12% | A link to a resume or CV. | links on the page |
 | `github` | GitHub link | code | 12% | A link to a GitHub profile. | links on the page |
 | `contact` | Contact path | code | 24% | A mailto link, a contact form, a contact page or a LinkedIn/social profile. | links and forms on the page |
@@ -126,10 +140,12 @@ Rubric version 2 (`pipeline/rubric.mjs`).
 | `pages` | Pages and sections | code | context | Internal pages linked from the home page and in-page sections in the navigation. | links on the page |
 | `portfolio_signals` | Portfolio-likeness | code | context | How many of six portfolio signals the page has: projects, about, contact, resume, GitHub, the person's name in the title or heading. | page HTML (pipeline/signals.mjs) |
 
-Gemini criteria are scored 1 to 5 and make up `quality_score` (weighted mean, 1-5).
+Gemini is asked two things and nothing else: `is_portfolio` with a short `portfolio_reason` (written first), and up to 3 `roles` the page names.
+Neither is scored, shown or used in a rank or tier; "not a portfolio" goes to the Removal rule, and the roles name a profile for search engines.
 Code criteria pass or fail and make up `checks_score` (weighted share passed, 0-100); unknown checks are left out of the share.
-Criteria with weight "context" are measured, stored and shown to Gemini, but not scored.
+Criteria with weight "context" are measured and stored but not scored; all but the template are shown to Gemini as facts.
 Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and at most 4,000 characters of page text, with thinking at "minimal".
+Older grades also stored `tier`, `visual_design`, `storytelling`, `writing`, `memorability`, `quality_score`, `five_second_test`; those stay in the database, no profile, list, stat, rank or tier reads them, and the readers that still use an old letter are named in section 6.
 <!-- rubric:end -->
 
 **Cost per grade** (offline estimate on 30 sampled sites, `npm run eval:rubric -- --sample 30`, at 3.5 Flash-Lite's paid rates of $0.30 in and $2.50 out per 1M tokens):
@@ -137,10 +153,11 @@ Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and a
 | Rubric | Images | Input tokens | Output tokens | Cost per grade |
 | --- | ---: | ---: | ---: | ---: |
 | v1 (until 2026-11-10) | 3 (2 from R2) | about 3,580 | about 400 | about $0.0021 |
-| v2 | 1 | about 2,240 | about 130 | about $0.0010 |
+| v2 (until 2026-11-23) | 1 | about 2,240 | about 130 | about $0.0010 |
+| v3 (offline estimate, not measured live) | 1 | about the same as v2 (the longer portfolio rule replaces the dropped axes) | about 60, half of v2's | about $0.0008 |
 
 The free tier counts requests, not tokens, so a grade is still one request; the savings matter at paid rates and for per-minute token limits.
-`npm run eval:rubric -- --sample 30 --live` grades the sample with v2 and compares it with the stored grades (it uses up to 60 of the day's 3.5 requests).
+`npm run eval:rubric -- --sample 30 --live` grades the sample with the current rubric and compares `is_portfolio` with the stored grades (it uses up to 60 of the day's 3.5 requests).
 
 **Graded once:** a site is graded when it is added and never re-graded automatically, so a grade from an older rubric version stays as it is (owner, 2026-11-21; [docs/DECISIONS.md](docs/DECISIONS.md)).
 A grade made again (a person's re-grade request, its one fresh grade after the owner's review, or a manual tool) moves the old grade to `rubric_history`.
@@ -158,15 +175,15 @@ AI comparisons are now ranking v2's ([RANKING.md](RANKING.md)), off until `RANKI
 
 ## 8. Bonus badges (GitHub API, only when a GitHub link exists)
 
-- "Active builder" — recent commit activity, pinned repos with real READMEs
+- "Active builder" - recent commit activity, pinned repos with real READMEs
 - Not a rank input; display-only.
 
 ## How scores combine
 
 - **Primary sort = ELO** (design, human-weighted).
 - Everything else is a scorecard + badges, not blended into one number:
-  Engineering (PSI composite), Polish (% checklist), Content (the rubric's `quality_score`),
+  Engineering (PSI composite), Polish (% checklist),
   Checks (the rubric's `checks_score`, section 6),
   badges: *Blazing fast*, *Original* (planned, see section 5), *Dark mode*, *Active builder*, *Motion*.
-- Disagreements ("gorgeous but slow") are surfaced, not averaged away — that's the
+- Disagreements ("gorgeous but slow") are surfaced, not averaged away - that's the
   interesting content.
