@@ -615,17 +615,18 @@ test("report links: the shared one-time links, scope report-link: a nonce hash, 
   assert.equal(await pruneLinks(db, { now: now + 2 * 86400000 }), 2);
 });
 
-test("the print report escapes what it shows and keeps the tier letter for the top tiers", () => {
+test("the print report escapes what it shows and shows the code checks only: no Gemini letter, score or note", () => {
   assert.equal(printView("{nope"), null);
-  assert.equal(printView(JSON.stringify({ tier: "Z" })), null);
-  const g = printView(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "<b>busy</b>" }, writing: 3, checks: { resume: true, github: false } }));
-  assert.equal(g.showTier, false);
-  assert.deepEqual(g.judgments.map((j) => [j.id, j.score]), [["visual_design", 2], ["writing", 3]], "older bare scores count too");
-  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.dev", now: T0 });
+  assert.equal(printView(JSON.stringify({ error: "no_usable_captures" })), null);
+  const g = printView(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "busy" }, five_second_test: { score: 2, note: "<b>vague</b>" }, writing: 3, checks: { resume: true, github: false } }));
+  assert.deepEqual(Object.keys(g).sort(), ["checksScore", "facts"]);
+  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: 61 }, hero: null, siteUrl: "https://portfoliorank.dev", now: T0 });
   assert.ok(html.includes("Zoë &lt;script&gt;"));
   assert.ok(!html.includes("<script>"));
-  assert.ok(html.includes("&lt;b&gt;busy&lt;/b&gt;"));
-  assert.ok(html.includes("Top 40%"));
+  assert.ok(!html.includes("vague") && !html.includes("busy") && !html.includes("Quality") && !html.includes("Gemini"), "no Gemini note or score");
+  // Only the People board's place: the Merged and AI boards are seeded from Gemini's old letter.
+  assert.ok(html.includes("Top 61%"));
+  assert.ok(!html.includes("Top 40%") && !html.includes("Top 38%") && !html.includes("Merged"), "no Merged or AI place");
   assert.ok(!html.includes(">D<"), "no public D");
   assert.ok(html.includes("@media print"));
   assert.ok(html.includes("✓ Resume link") && html.includes("✗ GitHub link"));

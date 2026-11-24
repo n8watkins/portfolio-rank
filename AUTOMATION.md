@@ -20,7 +20,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
   fullpage-backfill.mjs (capped)  ──►  tall images for older captures ──► R2 (+ portfolios.meta.fullPage)
   evidence.mjs  ──►  old rows' text and facts, project link checks
         ▼   (all of the above: the free checks on Actions, started by Cloudflare at 20:30 Pacific)
-  end-of-day Workflow (Cloudflare)  ──►  new sites graded once (rubric v2) ──► Turso (portfolios.ai_rubric)
+  end-of-day Workflow (Cloudflare)  ──►  new sites graded once (rubric v3) ──► Turso (portfolios.ai_rubric)
                                     ──►  AI ranking comparisons (RANKING_V2) ──► Turso (comparisons, site_ratings)
         ▼
   Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug] · /removed
@@ -679,7 +679,7 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
 
 `pipeline/judge.mjs` calls Gemini through `pipeline/gemini.mjs`.
 
-- **Rubric v2** (owner rule 2026-11-10: "code checks facts; Gemini judges quality"; criteria in GRADING_CRITERIA.md section 6, defined once in `pipeline/rubric.mjs`):
+- **Rubric v3** (owner rule 2026-11-10: "code checks facts"; owner decision 2026-11-22: Gemini is asked only whether it is a portfolio with a short reason and the roles the page names, prompt `grade-v3` (the five-second test was dropped from it on 2026-11-23, to be measured by code); criteria in GRADING_CRITERIA.md section 6, defined once in `pipeline/rubric.mjs`; a person's own grade stays on the frozen v2, `pipeline/rubric-v2.mjs`):
   `capture.mjs` stores each site's visible text (at most 4,000 characters, `portfolios.page_text`) and the facts code can check (`pipeline/facts.mjs`, `portfolios.facts`: resume, GitHub, contact, project links that load, own domain, footer year, pages and sections, template, motion, portfolio signals).
   Resume, GitHub and contact come from links and from buttons, `role="button"` and `onclick` controls (a resume needs a resume-like label such as "View Resume", GitHub a github.com URL on the control, and only a short label is read for contact words), a URL a button navigates to from its onclick is a project link (not URLs in data- attributes), and links inside HTML comments do not count ([pipeline/page-controls.mjs](pipeline/page-controls.mjs); facts version 2, measured in the audit in [scripts/experiments/facts-audit/](scripts/experiments/facts-audit/)).
   Facts version 3 (2026-11-22): the capture measures the phone view (390 wide) as well as the desktop view (1440) and merges them (`mergeViews`): a yes/no fact is yes when either view has it, the footer year is the higher, and the link candidates are both views' (the desktop's first); a phone view that is blocked, cannot be read, or is a host's error or placeholder page served 200 (`isErrorPage`: "There isn't a GitHub Pages site here", a parked domain) adds nothing, so the desktop facts stand.
@@ -731,14 +731,14 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
   A version 3 row between the release and its re-measure: it is shown, scored and ranked exactly as before, from its stored counts, so nothing a visitor sees changes at the release; the nightly link re-check, when it comes due (30 days), tests its stored list again with the version 4 rule for own pages, so a site like bhavaniravi.com can move to a pass then, while a list chosen by version 3 (no projects page at a hash route, the projects page read before its list arrived, eight links to one host, own pages at the top of the site left out) stays as it was until the site is captured again; its next nightly re-capture, or the whole-list run (`remeasure-all.yml`, whose `skip_version` default is 4, so it takes every row of version 3 and older), measures it as version 4.
   A re-capture that moves a row from 3 to 4 is the measuring code's change, never a capture problem (lib/capture-problems.mjs `measuring`).
   A grade keeps the copy of the facts and the code checks it was made with, and is never rewritten for new facts, but nothing reads that copy while the row has newer ones: wherever a grade's code items are used (resume, GitHub, contact, own domain, project links, footer year), they come from `portfolios.facts` when its version is at least the grade's copy's, and from the grade's copy otherwise ([lib/fresh-facts.mjs](lib/fresh-facts.mjs)).
-  That covers the Code checks score and its fix list (the full tiers rebuild, a new site's Starting rank, and the profile's breakdown, which is made on read), the report card's Code checks score, the fact chips on the leaderboard and the home page, the printable report and the list's numbers.
-  A site Gemini never graded is scored the same way from its own measured facts ([lib/fresh-facts.mjs](lib/fresh-facts.mjs) `checksReading`), so one site has one number on the profile, its report card and the printable report.
+  That covers the Code checks score and its fix list (the full tiers rebuild, a new site's Starting rank, and the profile's breakdown, which is made on read), the fact chips on the leaderboard and the home page, the printable report and the list's numbers.
+  A site Gemini never graded is scored the same way from its own measured facts ([lib/fresh-facts.mjs](lib/fresh-facts.mjs) `checksReading`), so one site has one number on the profile and the printable report.
   Gemini's answer is never changed, and the removal rule still reads the signals stored with the grade.
   A Starting rank is set from the points once (at capture, the daily tiers task, or a grade's write when the site had none), so new facts move it only at the next full rebuild (`scripts/refresh-tiers.mjs`).
   A project shown in a projects section counts as a project link when its GitHub or demo URL is a link or is written in its button; a "Projects" button that only scrolls to that section is not a link itself, but it counts for the `projects` signal and as an in-page section.
   A grade sends one image (the settled top of the page, local capture or R2 `hero.jpg`), the facts and the page text in a `<site_data>` block the system instruction marks as untrusted, with thinking at `minimal` and a strict JSON schema.
   Rows captured before v2 get their text and facts measured when graded (plain HTTP, or a browser when the server sends under 200 characters; `--no-browser` turns that off) and stored.
-  Every grade records `rubric_version`, the model, token usage (input, output, thinking), the facts, the code checks, `quality_score` and `checks_score`.
+  Every grade records `rubric_version`, the model, token usage (input, output, thinking), the facts, the code checks and `checks_score`; grades before v3 also hold Gemini's letter, four dropped scores and `quality_score`, which stay stored and are read by no profile, list, stat, rank or tier (`keptOutputs`); the openskill views' seed, the games' percentiles and a person's report's comparison pool still read the old letter (GRADING_CRITERIA.md section 6).
 - **Rubric eval:** `npm run eval:rubric -- --sample 30` estimates v1 and v2 tokens and cost offline for a seeded sample of graded sites (no Gemini); add `--live` to grade the sample with v2 on 3.5 only and compare with the stored grades (it checks today's quota first, logs as job `eval-rubric`, and never writes grades).
   Run it with the database and key through `pass-env run -- npm run eval:rubric -- --sample 30 --live`.
 
@@ -799,8 +799,8 @@ All of this starts with the next release: every production job runs released cod
 - **How points are shown** ([lib/check-points.mjs](lib/check-points.mjs) `formatPoints`): the profile, the tier card, the quickest points and the printable report show each item, the total and each gain to one decimal when it is not whole ("9.4/10", "10/10", "61.6 of 100"), and never round a score up to its maximum, so a shown score never claims full marks that were not earned.
   An item short of full marks is also stored below its maximum (SEO 99 and best practices 100 is 9.9 of 10, not 10).
   Every stored point is to one decimal, so the items shown add up to the total shown; the order uses the same values.
-- **Gemini's letter** is never shown or counted as a site's grade: the profile's report card has a neutral "AI" mark, the home page and the old leaderboard show the Tier only while `RANKING_V2` is on and nothing otherwise, and polls, live stats and blog facts choose by the Tier (`lib/tiers-letters.mjs` `siteTiers`).
-  The visitor grader ("Grade my portfolio", off) still shows Gemini's letter on its own reports until the letter is retired.
+- **Gemini's letter** is no longer asked for (rubric v3) and an older grade's letter is never shown or counted: no profile shows a Gemini report card (owner, 2026-11-23), the home page and the old leaderboard show the Tier only while `RANKING_V2` is on and nothing otherwise, and polls, live stats and blog facts choose by the Tier (`lib/tiers-letters.mjs` `siteTiers`).
+  The visitor grader ("Grade my portfolio", off) still asks the frozen v2 prompt and shows Gemini's letter on its own reports until the owner decides what that report shows.
 
 ## Ranking v2 (built, not switched on)
 
@@ -822,7 +822,7 @@ serve images.
 
 - `pipeline/capture.mjs [--upload-only] [--only s] [--force]` - Playwright capture + R2 upload
 - `pipeline/judge.mjs rubric [flags]` - Gemini grading (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
-- `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
+- `npm run eval:rubric -- --sample 30 [--live]` - rubric v3 eval (offline token and cost estimate; `--live` grades the sample)
 - `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - the nightly health check; `--exclusions` plans the export once a week and applies it until it lands; `--dry-run` checks every site and writes nothing, not even the roster sync (`LOCAL_DB_FILE=...` for a scratch database)

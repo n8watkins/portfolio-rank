@@ -9,7 +9,8 @@ import { percentilesOf } from "@/lib/games/pool.mjs";
 import { gamesEnabled, getPool, portfolioName, sign, unsign } from "@/lib/games/server";
 import { openOneTimeLink } from "@/lib/grader/links.mjs";
 import { printView, renderReportHtml } from "@/lib/grader/report.mjs";
-import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { checksReading } from "@/lib/fresh-facts.mjs";
+import { inLibrary } from "@/lib/tiers-store.mjs";
 import { loadCodeChecks } from "@/lib/tiers-view";
 import { shownPoints } from "@/lib/check-points.mjs";
 import { authSecret } from "@/lib/grader/server";
@@ -87,12 +88,13 @@ export async function GET(req: Request) {
     if (proof !== "control") return page(403, "Grade hidden", "The owner of this portfolio chose to hide its grade.");
   }
   const row = (await db().execute({ sql: "SELECT ai_rubric, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-  // The code checks from the newest measured facts (lib/fresh-facts.mjs).
-  const graded = printView(row?.ai_rubric == null ? null : freshGrade(String(row.ai_rubric), row.facts));
-  if (!graded) return page(404, "No report yet", "This portfolio hasn't been graded yet.");
-  // Never Gemini's letter (the "AI" mark instead), and the one Code checks score the profile shows (lib/tiers-view.ts).
+  // The code checks from the newest measured facts (lib/fresh-facts.mjs checksReading): a Gemini grade's, or for a
+  // site no model has looked at, its own, when it is a real profile by code (lib/tiers-store.mjs IN_LIBRARY_SQL).
+  const graded = printView(checksReading(row?.ai_rubric ?? null, row?.facts ?? null), { inLibrary: await inLibrary(db(), url) });
+  if (!graded) return page(404, "No report yet", "This portfolio hasn't been measured yet.");
+  // The code checks only (printView), and the one Code checks score the profile shows (lib/tiers-view.ts).
   const code = await loadCodeChecks(url, row?.ai_rubric ?? null, false);
-  const view = { ...graded, showTier: false, checksScore: code ? shownPoints(code.check).total : null };
+  const view = { ...graded, checksScore: code ? shownPoints(code.check).total : null };
   const shot = (await shotBases([url])).get(url);
   const tagline = (feed as { url: string; tagline?: string }[]).find((p) => p.url === url)?.tagline ?? null;
   const html = renderReportHtml({

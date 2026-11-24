@@ -1,6 +1,6 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
-import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
+import { geminiAnswered, keptOutputs, versionOf } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { BASE_ELO } from "@/lib/elo";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
@@ -15,6 +15,7 @@ import type { PsiResult } from "@/lib/tools/psi";
 import type { ShareResult } from "@/lib/tools/share";
 import { psiKey, quickKey, shareKey } from "@/lib/tools/keys";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { inLibrary } from "@/lib/tiers-store.mjs";
 
 // Everything a portfolio's profile (/p/<address>) shows, for a listed
 // portfolio or one added through "Add your portfolio" (the discovery
@@ -27,40 +28,42 @@ export type Feed = { name: string; url: string; tagline?: string };
 
 export const profilePath = (url: string) => `/p/${encodeURIComponent(url)}`;
 
-const AXIS_LABELS: Record<string, string> = Object.fromEntries(AI_CRITERIA.map((c) => [c.id, c.name]));
-
+/**
+ * What a profile reads from Gemini's stored answer (owner, 2026-11-23: no
+ * Gemini report card is shown): whether it is a portfolio, which decides
+ * whether search engines may index the page, and the roles, which name the
+ * page for search (lib/profile-seo.ts). The reason, and an older grade's
+ * letter and dropped scores (the five-second test among them), stay in the
+ * database and are never read here.
+ */
 export type ReportCard = {
   model?: string;
-  quality?: number;
   checks?: number;
   roles: string[];
   isPortfolio: boolean;
-  axes: { key: string; label: string; score: number; note?: string }[];
+  /** The rubric version the grade was made with (1 for the oldest grades). */
+  rubricVersion: number;
+  /** When Gemini answered (ISO), or null. */
+  judgedAt: string | null;
 };
 
-/** The AI grade's public part (never Gemini's own letter), or null for none or an error. */
+/** What a profile reads from Gemini's answer (above), or null for none or an error. */
 export function reportCard(raw: unknown): ReportCard | null {
-  let r: Record<string, unknown>;
+  let parsed: unknown;
   try {
-    r = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+    parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
   } catch {
     return null;
   }
-  if (!r || typeof r !== "object" || typeof r.tier !== "string" || !r.tier || "error" in r) return null;
-  const axes = Object.entries(AXIS_LABELS)
-    .map(([key, label]) => {
-      const ax = r[key] as { score?: number; note?: string } | undefined;
-      if (!ax || typeof ax !== "object" || typeof ax.score !== "number") return null;
-      return { key, label, score: ax.score, note: ax.note };
-    })
-    .filter((a): a is NonNullable<typeof a> => a !== null);
+  if (!geminiAnswered(parsed)) return null;
+  const r = keptOutputs(parsed) as Record<string, unknown>;
   return {
     model: typeof r.model === "string" ? r.model : undefined,
-    quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
     checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
     roles: Array.isArray(r.roles) ? r.roles.filter((x): x is string => typeof x === "string").slice(0, 3) : [],
     isPortfolio: r.is_portfolio !== false,
-    axes,
+    rubricVersion: versionOf(r),
+    judgedAt: typeof r.judged_at === "string" ? r.judged_at : null,
   };
 }
 
@@ -201,13 +204,14 @@ export function profileJsonLd(f: SeoFacts, { canonical, title }: { canonical: st
  * check found. One batch of reads, once per request (the page and its
  * metadata share it).
  */
-export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "report" | "hidden" | "socials">> => {
+export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "report" | "hidden" | "inLibrary" | "socials">> => {
   await ensureSchema();
   const client = db();
-  const [row, inspect, owner] = await Promise.all([
+  const [row, inspect, owner, listed] = await Promise.all([
     client.execute({ sql: `SELECT ai_rubric, facts, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]),
     client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`inspect:${url}`] }).then((r) => r.rows[0]),
     ownerState(client, url, { fresh: true }),
+    inLibrary(client, url),
   ]);
   let inspected = null;
   try {
@@ -216,6 +220,7 @@ export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "
   return {
     report: owner.hideGrade || row?.ai_rubric == null ? null : reportCard(freshGrade(row.ai_rubric, row.facts)),
     hidden: Number(row?.hidden ?? 0) === 1,
+    inLibrary: listed,
     socials: socialsFrom(inspected),
   };
 });

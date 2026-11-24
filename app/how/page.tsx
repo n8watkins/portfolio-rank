@@ -1,10 +1,10 @@
 import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
-import { AI_JUDGES, CODE_CHECKS, CODE_CONTEXT } from "@/lib/rubric-copy";
+import { CODE_CHECKS, CODE_CONTEXT } from "@/lib/rubric-copy";
 
 export const metadata = {
   title: "How it works - PortfolioRank",
   description:
-    "How PortfolioRank ranks developer portfolios: ELO from head-to-head votes, AI bootstrapping, and objective scorecards.",
+    "How PortfolioRank ranks developer portfolios: checks our code measures, ELO from head-to-head votes, and objective scorecards.",
 };
 
 export default function HowPage() {
@@ -15,8 +15,7 @@ export default function HowPage() {
           <h1 className="text-3xl font-bold tracking-tight">How it works</h1>
           <p className="mt-2 text-mute">
             A list of {PORTFOLIO_COUNT_LABEL} portfolios, turned into a ranking you
-            can trust - by a mix of a crowd, an AI, and some boring-but-honest
-            measurements.
+            can trust - by a crowd and some boring-but-honest measurements.
           </p>
         </div>
 
@@ -46,10 +45,7 @@ export default function HowPage() {
               is why a handful of votes can sort thousands of sites sensibly.
             </p>
             <p>
-              Two twists specific to here:{" "}
-              <strong className="text-ink">AI seeds, humans refine.</strong> Before
-              any people vote, Gemini casts the first rounds so the board
-              isn&apos;t empty on day one; then real votes take over.{" "}
+              One twist specific to here:{" "}
               <strong className="text-ink">Superstars</strong> let you spend an
               earned ⭐ to make a vote count double - for the rare site you think is
               genuinely exceptional.
@@ -64,37 +60,21 @@ export default function HowPage() {
 
         <article className="mb-10">
           <h2 className="text-xl font-bold tracking-tight">
-            🤖 How the AI judging works
+            🤖 What code measures, and the one thing AI decides
           </h2>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
-              Ranking {PORTFOLIO_COUNT_LABEL} sites by hand is a non-starter, so an
-              AI does the first pass. A real browser captures each site, and the
-              work is split: <strong className="text-ink">code checks facts,
-              Gemini judges quality</strong>. Gemini reads the screenshot and the
-              page&apos;s text and scores {AI_JUDGES}, each from 1 to 5, which
-              add up to a quality score. Code checks {CODE_CHECKS}, which add up to
-              a checks score out of 100; it also records {CODE_CONTEXT} as context,
-              without scoring them.
+              A real browser captures each of the {PORTFOLIO_COUNT_LABEL} sites, and{" "}
+              <strong className="text-ink">code measures the facts that rank it</strong>. Code
+              checks {CODE_CHECKS}, which add up to a checks score; it also records{" "}
+              {CODE_CONTEXT} as context, without scoring them. A site&apos;s starting
+              rank comes from those measurements, and votes move it from there.
             </p>
             <p>
-              For the leaderboard, the AI also votes head-to-head, the same way you
-              do - but it weighs more than looks. Its comparison folds in the{" "}
-              <strong className="text-ink">objective scorecard</strong> (Lighthouse
-              performance + accessibility, plus polish signals like a custom
-              domain and a working share card). A gorgeous page that&apos;s slow or
-              inaccessible loses ground it would&apos;ve won on looks alone.
-            </p>
-            <p>
-              The honest caveat:{" "}
-              <strong className="text-ink">
-                an AI judging a screenshot judges how something looks
-              </strong>{" "}
-              - not whether the projects are real or the code is good. That&apos;s
-              exactly why it only <em>seeds</em> the ranking and humans get the
-              final say. The model and prompt are fixed (one model, for
-              consistency) and every AI vote is tagged, so its influence can always
-              be separated out.
+              <strong className="text-ink">No AI model decides anything</strong>: rank, tier and
+              listing come from code measurements, people&apos;s votes and the owner&apos;s own
+              review. An AI check that asks whether a page is a portfolio at all exists, but it
+              is switched off; even when on, it never sets a rank or a tier.
             </p>
             <p>
               What each grade means and what goes into it:{" "}

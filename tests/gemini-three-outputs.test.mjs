@@ -1,0 +1,366 @@
+// Rubric v3 (owner, 2026-11-22): "Gemini outputs kept: is_portfolio,
+// five-second test, roles. Dropped: the letter, project presentation, visual
+// design, writing, memorability." What this covers:
+//   - a v3 grade (no letter) is a real Gemini answer everywhere one is read:
+//     library membership and rank (lib/tiers-store.mjs), rubric history, the
+//     sitemap, the Lighthouse queue, the list's numbers;
+//   - the readers of the dropped outputs show and use only the kept three,
+//     for old (v2) grades and new ones alike, and nothing is deleted;
+//   - the night grader asks v3 and a person's own grade the frozen v2.
+// No network, no Gemini key: a stand-in Gemini client and throwaway databases.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createClient } from "@libsql/client";
+import { migrate } from "../lib/schema.mjs";
+import { ensureRosterSchema } from "../pipeline/roster.mjs";
+import { DROPPED_OUTPUTS, GEMINI_ANSWERED_SQL, RESPONSE_SCHEMA, RUBRIC_VERSION, codeChecks, gradeRecord, keptOutputs, parseRubricResponse } from "../pipeline/rubric.mjs";
+import { checksReading, withFreshFacts } from "../lib/fresh-facts.mjs";
+import { V2_RESPONSE_SCHEMA } from "../pipeline/rubric-v2.mjs";
+import { GEMINI_YES_SQL, geminiYes, libraryMember, rankForWrite, rankFromCode, refreshTiers } from "../lib/tiers-store.mjs";
+import { readSiteRow } from "../lib/tiers-db.mjs";
+import { gradeKey } from "../lib/grade-score.mjs";
+import { parseRubric, replaceGradeStatements } from "../pipeline/rubric-history.mjs";
+import { gradedUrls } from "../lib/sitemap-profiles.mjs";
+import { lighthouseDue } from "../lib/freshness.mjs";
+import { siteStats } from "../lib/games/stats.mjs";
+import { printView, renderReportHtml } from "../lib/grader/report.mjs";
+import { geminiReason, doorDecision } from "../lib/reviews/door.mjs";
+import { gradeOf } from "../lib/capture-problems.mjs";
+import { gradeFromEvidence } from "../pipeline/night.mjs";
+import { RUBRIC_V2 } from "../pipeline/rubric-v2.mjs";
+
+const NOW = Date.parse("2026-11-23T12:00:00Z");
+const CAPTURED = "2026-11-21 10:00:00";
+const ACTIVE = () => "1";
+
+async function freshDb() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gemini-three-"));
+  const client = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
+  await migrate(client);
+  await ensureRosterSchema(client);
+  return client;
+}
+
+/** A v3 grade as the night stores it, from a parsed answer (the mock writer's shape). */
+const v3 = (over = {}, answer = {}) =>
+  ({
+    ...gradeRecord({
+      parsed: parseRubricResponse({
+        portfolio_reason: "Shows four web apps the person built",
+        is_portfolio: true,
+        five_second_test: { score: 4, note: "Name and frontend role are clear" },
+        roles: ["frontend developer"],
+        ...answer,
+      }),
+      model: "gemini-3.5-flash-lite",
+      facts: null,
+      source: "r2",
+      now: new Date("2026-11-23T00:00:00Z"),
+    }),
+    ...over,
+  });
+
+/** A v2 grade as stored before v3, with every field it had. */
+const v2 = (over = {}) => ({
+  is_portfolio: true,
+  tier: "S",
+  visual_design: { score: 5, note: "polished hero" },
+  five_second_test: { score: 3, note: "role is vague" },
+  storytelling: { score: 2, note: "bare tech lists" },
+  writing: { score: 5, note: "crisp copy" },
+  memorability: { score: 5, note: "memorable" },
+  roles: ["data engineer"],
+  rubric_version: 2,
+  quality_score: 4.2,
+  checks_score: 70,
+  model: "gemini-3.5-flash-lite",
+  judged_at: "2026-11-15T00:00:00.000Z",
+  ...over,
+});
+
+const facts = (n) => {
+  const names = ["name", "projects", "about", "contact", "resume", "github"];
+  const signals = Object.fromEntries(names.map((k, i) => [k, i < n]));
+  return { v: 2, resume: true, github: true, contact: true, own_domain: true, footer_year: 2026, project_links: { checked: 3, ok: 3, broken: 0, blocked: 0 }, signals: { ...signals, score: n }, measured_at: "2026-11-21T10:00:00Z" };
+};
+
+test("with no model running, a ranked member by code is indexable, in the sitemap and has a printable report; a Gemini 'no' on record still excludes", async () => {
+  const { seedNewcomers, inLibrary } = await import("../lib/tiers-store.mjs");
+  const { checksReading } = await import("../lib/fresh-facts.mjs");
+  const db = await freshDb();
+  await refreshTiers(db, { now: NOW });
+  const add = (url, n, rubric = null) =>
+    db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', ?, ?, '2026-11-20 00:00:00')", args: [url, rubric, JSON.stringify(facts(n))] });
+  await add("https://code.dev", 6);
+  await add("https://weak.dev", 2);
+  await add("https://said-no.dev", 6, JSON.stringify(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })));
+  await add("https://down.dev", 6);
+  await seedNewcomers(db, { now: NOW });
+  // Even a member row for the "no" (an old one) does not let it in.
+  await db.execute("UPDATE tier_ratings SET member = 1 WHERE url = 'https://said-no.dev'");
+  await db.execute("UPDATE portfolios SET health = 'down' WHERE url = 'https://down.dev'");
+  assert.deepEqual([...(await gradedUrls(db))].sort(), ["https://code.dev"], "the sitemap's profiles");
+  assert.equal(await inLibrary(db, "https://code.dev"), true, "indexable (lib/profile-seo.ts reads this)");
+  for (const url of ["https://weak.dev", "https://said-no.dev", "https://down.dev"]) assert.equal(await inLibrary(db, url), false, url);
+  // The printable report: the code checks from the site's own facts, no grade needed.
+  const reading = checksReading(null, JSON.stringify(facts(6)));
+  const view = printView(reading, { inLibrary: true });
+  assert.ok(view && view.facts.length > 0 && typeof view.checksScore === "number");
+  assert.equal(printView(reading, { inLibrary: false }), null, "not in the library: no report");
+  assert.equal(printView(null, { inLibrary: true }), null, "nothing measured: no report");
+});
+
+test("the code test follows what PortfolioRank shows: a rate-limited recapture keeps a shown member indexed; a hidden one, a down one and a code-host address never are", async () => {
+  const { seedNewcomers, inLibrary } = await import("../lib/tiers-store.mjs");
+  const db = await freshDb();
+  await refreshTiers(db, { now: NOW });
+  const add = (url) =>
+    db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, facts, captured_at) VALUES (?, 'live', 'k', ?, '2026-11-20 00:00:00')", args: [url, JSON.stringify(facts(6))] });
+  const sites = ["https://rate-limited.dev", "https://failed-unchecked.dev", "https://down.dev", "https://github.com/ana", "https://ana.github.io", "https://redirects.dev", "https://ana.substack.com", "https://medium.com/@ana", "https://linktr.ee/ana"];
+  for (const u of sites) await add(u);
+  await seedNewcomers(db, { now: NOW });
+  // Every one of them is a member by code; the address rule's cases may be held for the owner.
+  for (const u of sites) await db.execute({ sql: "INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded) VALUES (?, 25, 8, 9, 36, 1, 1) ON CONFLICT(url) DO UPDATE SET member = 1", args: [u] });
+  // A recapture answered HTTP 429 (pipeline/capture-blocked.mjs): status error, the health check still live: shown.
+  await db.execute("UPDATE portfolios SET status = 'error', health = 'live' WHERE url = 'https://rate-limited.dev'");
+  // A failed capture the health check has not cleared: hidden (lib/hidden.mjs).
+  await db.execute("UPDATE portfolios SET status = 'error', health = NULL WHERE url = 'https://failed-unchecked.dev'");
+  await db.execute("UPDATE portfolios SET health = 'down' WHERE url = 'https://down.dev'");
+  await db.execute("UPDATE portfolios SET final_url = 'https://github.com/ana' WHERE url = 'https://redirects.dev'");
+  assert.deepEqual([...(await gradedUrls(db))].sort(), ["https://ana.github.io", "https://rate-limited.dev"], "the sitemap's profiles");
+  assert.equal(await inLibrary(db, "https://rate-limited.dev"), true, "shown, so indexable");
+  assert.equal(await inLibrary(db, "https://ana.github.io"), true, "a real portfolio on GitHub Pages stays in");
+  for (const u of sites.filter((x) => !["https://rate-limited.dev", "https://ana.github.io"].includes(x))) assert.equal(await inLibrary(db, u), false, u);
+  // A Gemini "yes" does not lift the address rule either.
+  await db.execute({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = 'https://github.com/ana'", args: [JSON.stringify(v3())] });
+  assert.equal(await inLibrary(db, "https://github.com/ana"), false);
+  assert.ok(!(await gradedUrls(db)).has("https://github.com/ana"));
+});
+
+test("a v3 grade (no letter) is Gemini's yes for membership; the owner's keep and an error are not", () => {
+  const g = v3();
+  assert.equal(g.tier, undefined);
+  assert.equal(g.rubric_version, RUBRIC_VERSION);
+  assert.equal(geminiYes(g), true);
+  assert.equal(geminiYes(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })), false);
+  assert.equal(geminiYes(v2()), true, "an old grade still counts, by its letter being stored");
+  assert.equal(geminiYes({ is_portfolio: true, ai_is_portfolio: false, fresh_grade: "due", source: "owner_review" }), false);
+  assert.equal(libraryMember({ listed: true, grade: g }), "gemini");
+  assert.equal(libraryMember({ listed: true, goodCapture: true, measured: true, signals: 3, grade: g }), "gemini", "a 3-signal site is ranked on Gemini's v3 yes");
+});
+
+test("the SQL forms agree with the code: a v3 row is answered and a yes; an owner keep or an error is neither", async () => {
+  const db = await freshDb();
+  const rows = [
+    ["https://v3.dev", v3()],
+    ["https://v3-no.dev", v3({}, { is_portfolio: false })],
+    ["https://v2.dev", v2()],
+    ["https://keep.dev", { is_portfolio: true, ai_is_portfolio: false, fresh_grade: "due", source: "owner_review" }],
+    ["https://err.dev", { error: "no_usable_captures", rubric_version: 3 }],
+  ];
+  for (const [url, g] of rows) await db.execute({ sql: "INSERT INTO portfolios (url, ai_rubric) VALUES (?, ?)", args: [url, JSON.stringify(g)] });
+  // Text that is not JSON never reaches json_extract (an error in SQLite): the SQL is a CASE.
+  await db.execute({ sql: "INSERT INTO portfolios (url, ai_rubric) VALUES (?, ?)", args: ["https://broken.dev", "{not json"] });
+  const answered = (await db.execute(`SELECT url FROM portfolios p WHERE ${GEMINI_ANSWERED_SQL("p.ai_rubric")} ORDER BY url`)).rows.map((r) => r.url);
+  assert.deepEqual(answered, ["https://v2.dev", "https://v3-no.dev", "https://v3.dev"]);
+  const yes = (await db.execute(`SELECT url FROM portfolios p WHERE ${GEMINI_YES_SQL("p")} ORDER BY url`)).rows.map((r) => r.url);
+  assert.deepEqual(yes, ["https://v2.dev", "https://v3.dev"]);
+  for (const [url, g] of rows) assert.equal(yes.includes(url), geminiYes(g), url);
+});
+
+test("rank: a v3 yes keeps a code-ranked site exactly where it was; a v3 yes ranks a 3-signal site; a v3 no takes it out", async () => {
+  const db = await freshDb();
+  await db.batch(
+    Array.from({ length: 30 }, (_, i) => ({
+      sql: "INSERT INTO portfolios (url, status, shot_key, captured_at, ai_rubric, facts) VALUES (?, 'live', 'k', ?, ?, ?)",
+      args: [`https://lib${i}.dev/`, CAPTURED, JSON.stringify(i % 2 ? v2({ tier: ["S", "A", "B", "C", "D"][i % 5] }) : v3()), JSON.stringify(facts(5))],
+    })),
+    "write"
+  );
+  await refreshTiers(db, { now: NOW - 86_400_000 });
+  // Every member, v2 and v3 alike, is in the library and has its rank copied into its grade.
+  for (let i = 0; i < 30; i++) assert.equal((await readSiteRow(db, `https://lib${i}.dev/`)).member, 1, `lib${i}`);
+  const stored = JSON.parse(String((await db.execute("SELECT ai_rubric FROM portfolios WHERE url = 'https://lib0.dev/'")).rows[0].ai_rubric));
+  assert.ok(stored.rank && stored.rank.seeded, "a v3 grade carries its rank");
+
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, captured_at, facts) VALUES (?, 'live', 'k', ?, ?)", args: ["https://coded.dev/", CAPTURED, JSON.stringify(facts(6))] });
+  await rankFromCode(db, "https://coded.dev/", { now: NOW });
+  const start = await readSiteRow(db, "https://coded.dev/");
+  const yes = await rankForWrite(db, v3({}, { five_second_test: { score: 1, note: "unclear" } }), { url: "https://coded.dev/", now: NOW + 1000 });
+  const after = await readSiteRow(db, "https://coded.dev/");
+  assert.ok(yes.rank && yes.rank.seeded);
+  assert.equal(after.mu, start.mu, "a low five-second score moves nothing");
+  assert.equal(after.points, start.points);
+
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, captured_at, facts) VALUES (?, 'live', 'k', ?, ?)", args: ["https://three.dev/", CAPTURED, JSON.stringify(facts(3))] });
+  assert.equal(await rankFromCode(db, "https://three.dev/", { now: NOW }), false);
+  const three = await rankForWrite(db, v3(), { url: "https://three.dev/", now: NOW });
+  assert.ok(three.rank && three.rank.seeded);
+  assert.equal((await readSiteRow(db, "https://three.dev/")).member, 1);
+
+  const no = await rankForWrite(db, v3({}, { is_portfolio: false, portfolio_reason: "A GitHub profile" }), { url: "https://coded.dev/", now: NOW + 2000 });
+  assert.equal(no.rank, undefined);
+  assert.equal((await readSiteRow(db, "https://coded.dev/")).member, 0);
+});
+
+test("a v3 grade's code score follows newer measurements, as a v2 grade's and an ungraded site's do", () => {
+  const now = new Date(NOW);
+  const stale = { v: 2, resume: false, github: false, contact: false, own_domain: false, footer_year: 2019, project_links: { checked: 3, ok: 0, broken: 3, blocked: 0 } };
+  const newer = JSON.stringify(facts(6));
+  const graded = (g) => ({ ...g, facts: stale, checks: codeChecks(stale, now), checks_score: 0 });
+  const reads = [graded(v2()), graded(v3()), null].map((g) => checksReading(g, newer, { now }).checks_score);
+  assert.deepEqual(reads, [100, 100, 100], "v2, v3 and no grade read the same newest facts");
+  assert.equal(withFreshFacts(graded(v3()), newer, { now }).facts_from, "measured");
+});
+
+test("the grade key never reads a Gemini output: two grades with the same checks score have the same key", () => {
+  assert.equal(gradeKey(v2({ checks_score: 70 })), gradeKey(v3({ checks_score: 70 })));
+  assert.equal(gradeKey(v2({ tier: "S", checks_score: 70 })), gradeKey(v2({ tier: "D", quality_score: 1, checks_score: 70 })));
+});
+
+test("a v3 grade replaced later moves to rubric_history like any other; nothing is deleted from an old one", () => {
+  assert.ok(parseRubric(JSON.stringify(v3())));
+  assert.ok(parseRubric(JSON.stringify(v2())));
+  assert.equal(parseRubric(JSON.stringify({ is_portfolio: true, fresh_grade: "due", source: "owner_review" })), null);
+  const stmts = replaceGradeStatements("https://a.dev", JSON.stringify(v3()), v3(), new Date(NOW));
+  assert.ok(stmts.some((s) => /INSERT INTO rubric_history/.test(s.sql)), "the old v3 grade is kept");
+  // Reading an old grade through keptOutputs never changes what is stored.
+  const old = v2();
+  const copy = JSON.stringify(old);
+  keptOutputs(old);
+  assert.equal(JSON.stringify(old), copy);
+});
+
+test("sitemap, Lighthouse queue and the list's numbers count a v3 grade as graded and never read a letter", async () => {
+  const db = await freshDb();
+  const add = (url, g) => db.execute({ sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: [url, JSON.stringify(g)] });
+  await add("https://v3.dev", v3());
+  await add("https://v2-d.dev", v2({ tier: "D" }));
+  await add("https://v3-no.dev", v3({}, { is_portfolio: false }));
+  await add("https://keep.dev", { is_portfolio: true, fresh_grade: "due", source: "owner_review" });
+  assert.deepEqual([...(await gradedUrls(db))].sort(), ["https://v2-d.dev", "https://v3.dev"]);
+  // Lighthouse was S, A and B only by Gemini's letter; now every graded portfolio, a D included.
+  assert.deepEqual((await lighthouseDue(db, { now: NOW, limit: 10, active: ACTIVE })).sort(), ["https://v2-d.dev", "https://v3.dev"]);
+  const stats = await siteStats(db, { feed: [], now: new Date(NOW) });
+  assert.equal(stats.graded, 2);
+});
+
+test("the printable report shows the code checks only: no Gemini answer, letter or score, for an old grade too", () => {
+  for (const g of [v2(), v3()]) {
+    const view = printView(JSON.stringify(g));
+    assert.ok(view);
+    assert.deepEqual(Object.keys(view).sort(), ["checksScore", "facts"]);
+    const html = renderReportHtml({ name: "Ana", url: "https://ana.dev", tagline: null, view, percentiles: null, hero: null, siteUrl: "https://portfoliorank.dev", now: new Date(NOW) });
+    for (const word of ["Gemini", "Five-second", "five-second", "Is it a portfolio", "Roles", "Visual design", "Quality", "polished hero", "role is vague", ">S<"]) assert.ok(!html.includes(word), word);
+    assert.match(html, /Measured by code/);
+  }
+  assert.equal(printView(JSON.stringify({ is_portfolio: true, fresh_grade: "due" })), null);
+});
+
+test("no Gemini score or note reaches a page: the leaderboard chips, home and the search description read code facts only", () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+  assert.match(read("lib/leaderboard.ts"), /out\.set\(url, \{ facts, best: null \}\)/);
+  assert.ok(!/fiveSecondOf|strongCapture|five_second/.test(read("lib/home.ts")), "home");
+  assert.ok(!/axes|AI review/.test(read("lib/profile-seo.ts")), "search description");
+  assert.ok(!/five_second|five-second/.test(read("components/admin/StatusReviewQueue.tsx")), "the review queue");
+});
+
+test("the five-second test is not asked (owner, 2026-11-23) and no reader of a stored one is left outside the named old-letter readers", () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+  assert.ok(!("five_second_test" in RESPONSE_SCHEMA.properties));
+  assert.ok(DROPPED_OUTPUTS.includes("five_second_test"), "kept in the database, left out for every reader");
+  for (const f of ["lib/home.ts", "lib/leaderboard.ts", "lib/profile.ts", "lib/profile-seo.ts", "lib/reviews/door.mjs", "pipeline/content/facts.mjs", "pipeline/judge.mjs", "scripts/export-grades.mjs"]) {
+    assert.ok(!/five_second_test|fiveSecondOf|five_second\b/.test(read(f)), f);
+  }
+  // The eval keeps v1's frozen prompt text (to size it) but compares no five-second score.
+  assert.ok(!/fiveSecondOf|\.five_second_test/.test(read("scripts/eval-rubric.mjs")), "eval-rubric");
+});
+
+test("the Removal rule's reason is Gemini's own reason only, never a score or note; the rule itself is unchanged", () => {
+  assert.equal(geminiReason(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })), "Sells coaching sessions.");
+  assert.match(geminiReason(v2({ is_portfolio: false })), /no reason/);
+  assert.ok(!/five|role is vague/.test(geminiReason(v2({ is_portfolio: false }))));
+  const d = doorDecision({
+    grade: { ...v2({ is_portfolio: false }), facts: { signals: { score: 1 } } },
+    row: { url: "https://x.dev", name: "X", page_text: "x", facts: null },
+  });
+  assert.equal(d.outcome, "remove", "the rule itself is unchanged");
+});
+
+test("the capture problems page shows no letter for an old grade", () => {
+  assert.deepEqual(gradeOf(JSON.stringify(v2())), { state: "portfolio" });
+  assert.deepEqual(gradeOf(JSON.stringify(v3({}, { is_portfolio: false }))), { state: "not_portfolio" });
+});
+
+/** A stand-in Gemini client: records the schema it was asked with and answers `answer`. */
+const fakeGemini = (answer) => {
+  const asked = [];
+  return {
+    asked,
+    generate: async (parts, schema, options) => {
+      asked.push({ parts, schema, options });
+      return { result: answer, model: "gemini-3.5-flash-lite", usage: { inputTokens: 2000, outputTokens: 60, thoughtsTokens: 0 } };
+    },
+  };
+};
+const ROW = { url: "https://ana.dev", name: "Ana", page_text: "Ana, frontend developer. Projects: a weather app.", facts: JSON.stringify(facts(5)), meta: "{}" };
+
+test("the night grader asks v3 and nothing else; a dropped field in the answer is not stored", async () => {
+  const g = fakeGemini({ portfolio_reason: "Shows a weather app she built", is_portfolio: true, five_second_test: { score: 5, note: "clear" }, roles: ["frontend developer"], tier: "S", visual_design: { score: 5, note: "x" } });
+  const grade = await gradeFromEvidence(g, { row: ROW, image: { inline_data: { mime_type: "image/jpeg", data: "AA" } }, now: new Date(NOW) });
+  assert.deepEqual(g.asked[0].schema, RESPONSE_SCHEMA);
+  assert.equal(g.asked[0].options.prompt, "grade-v3");
+  assert.equal(grade.rubric_version, 3);
+  for (const k of DROPPED_OUTPUTS) assert.equal(grade[k], undefined, k);
+  assert.equal(grade.portfolio_reason, "Shows a weather app she built");
+});
+
+test("a person's own grade (people queue, own key) still asks the frozen v2 prompt, unchanged", async () => {
+  const answer = { is_portfolio: true, tier: "B", ...Object.fromEntries(["visual_design", "five_second_test", "storytelling", "writing", "memorability"].map((k) => [k, { score: 3, note: "ok" }])), roles: [] };
+  const g = fakeGemini(answer);
+  const grade = await gradeFromEvidence(g, { row: ROW, image: { inline_data: { mime_type: "image/jpeg", data: "AA" } }, now: new Date(NOW), rubric: RUBRIC_V2 });
+  assert.deepEqual(g.asked[0].schema, V2_RESPONSE_SCHEMA);
+  assert.equal(g.asked[0].options.prompt, "grade-v2.1");
+  assert.equal(grade.rubric_version, 2);
+  assert.equal(grade.tier, "B");
+  assert.equal(grade.quality_score, 3);
+  // pipeline/people.mjs and lib/grader/own-key.mjs are the two callers of v2.
+  assert.match(fs.readFileSync(new URL("../pipeline/people.mjs", import.meta.url), "utf8"), /rubric: RUBRIC_V2/);
+  assert.match(fs.readFileSync(new URL("../lib/grader/own-key.mjs", import.meta.url), "utf8"), /from "\.\.\/\.\.\/pipeline\/rubric-v2\.mjs"/);
+});
+
+test("SQL over ai_rubric never throws on text that is not JSON: prewarm, fresh grade due, owner keeps", async () => {
+  const { prewarmQueue } = await import("../scripts/lib/prewarm.mjs");
+  const { FRESH_GRADE_DUE_SQL, OWNER_KEEPS_SQL, ensureReviewSchema } = await import("../lib/reviews/store.mjs");
+  const db = await freshDb();
+  await ensureReviewSchema(db);
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES (?, 'live', 'k', ?)", args: ["https://broken.dev", "{not json"] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES (?, 'live', 'k', ?)", args: ["https://due.dev", JSON.stringify({ is_portfolio: true, fresh_grade: "due" })] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES (?, 'live', 'k', ?)", args: ["https://kept.dev", JSON.stringify({ is_portfolio: true, review: { kind: "owner_kept" } })] });
+  await prewarmQueue(db, { active: () => "1", now: NOW });
+  const due = (await db.execute(`SELECT url FROM portfolios p WHERE ${FRESH_GRADE_DUE_SQL("p")}`)).rows.map((r) => r.url);
+  assert.deepEqual(due, ["https://due.dev"]);
+  const keeps = (await db.execute(`SELECT url FROM portfolios p WHERE ${OWNER_KEEPS_SQL("p")}`)).rows.map((r) => r.url);
+  assert.deepEqual(keeps, ["https://kept.dev"]);
+});
+
+test("SQL over ai_rubric never throws on text that is not JSON: newcomers to the tiers, the night's ungraded list", async () => {
+  const { seedNewcomers } = await import("../lib/tiers-store.mjs");
+  const { UNGRADED } = await import("../pipeline/night.mjs");
+  const db = await freshDb();
+  await refreshTiers(db, { now: NOW });
+  const strong = JSON.stringify(facts(6));
+  // A row with broken JSON in ai_rubric (and in facts) sorted first, then a good one.
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', ?, ?, '2026-11-20 00:00:00')", args: ["https://a-broken.dev", "{not json", "{not json"] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', ?, ?, '2026-11-20 00:00:00')", args: ["https://b-broken.dev", "{not json", strong] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', NULL, ?, '2026-11-20 00:00:00')", args: ["https://c-good.dev", strong] });
+  await seedNewcomers(db, { now: NOW });
+  const members = (await db.execute("SELECT url FROM tier_ratings WHERE member = 1 ORDER BY url")).rows.map((r) => String(r.url));
+  assert.ok(members.includes("https://c-good.dev"), members.join(","));
+  assert.ok(!members.includes("https://a-broken.dev"));
+  const ungraded = (await db.execute(`SELECT url FROM portfolios p WHERE ${UNGRADED()} ORDER BY url`)).rows.map((r) => String(r.url));
+  assert.deepEqual(ungraded, ["https://c-good.dev"], "broken text is neither a grade to redo nor a crash");
+});

@@ -20,25 +20,23 @@ const base = {
     ],
   },
   hidden: false,
+  inLibrary: true,
   socials: { github: null, linkedin: null, x: null },
 };
 const opts = { canonical: "https://portfoliorank.dev/p/x", title: "Jane Doe - PortfolioRank", siteUrl: "https://portfoliorank.dev", siteName: "PortfolioRank" };
 
-test("only a graded real portfolio the health check shows is indexed", () => {
+test("only a real profile by code (in the library) that the health check shows is indexed; no model has to have looked", () => {
   assert.equal(indexable(base), true);
-  assert.equal(indexable({ ...base, report: null }), false, "ungraded, or the owner hid the grade");
-  assert.equal(indexable({ ...base, report: { ...base.report, isPortfolio: false } }), false, "not a portfolio");
+  assert.equal(indexable({ ...base, report: null }), true, "no Gemini answer: indexed on the code test alone");
+  assert.equal(indexable({ ...base, inLibrary: false }), false, "not in the library, or a Gemini 'not a portfolio' on record");
   assert.equal(indexable({ ...base, hidden: true }), false, "hidden by the health check");
 });
 
-test("the description says who and what, then the review's strongest criteria, then the tagline while it fits", () => {
-  assert.equal(
-    profileDescription({ ...base, tagline: "I build fast sites." }),
-    "Jane Doe's frontend developer and designer portfolio at janedoe.dev. Strongest in the AI review: visual design (5/5) and project presentation (4/5)."
-  );
-  const short = { ...base, report: { ...base.report, axes: [{ key: "w", label: "Writing", score: 4 }] }, tagline: "I build fast sites." };
-  assert.equal(profileDescription(short), "Jane Doe's frontend developer and designer portfolio at janedoe.dev. Strongest in the AI review: writing (4/5). “I build fast sites.”");
-  assert.equal(profileDescription({ ...base, report: { ...base.report, roles: [], axes: [] } }), "Jane Doe's developer portfolio at janedoe.dev.");
+test("the description says who and what, then the tagline while it fits; never a Gemini score", () => {
+  // An old grade's scores (the axes here) are never read (owner, 2026-11-23: no Gemini report card).
+  assert.equal(profileDescription({ ...base, tagline: "I build fast sites." }), "Jane Doe's frontend developer and designer portfolio at janedoe.dev. “I build fast sites.”");
+  assert.equal(profileDescription({ ...base, report: { ...base.report, roles: [] } }), "Jane Doe's developer portfolio at janedoe.dev.");
+  assert.ok(!/AI review|\/5/.test(profileDescription(base)));
 });
 
 test("a long name is cut at a word with an ellipsis, never past the limit", () => {

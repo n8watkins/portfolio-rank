@@ -4,11 +4,13 @@ import { db, ensureSchema } from "@/lib/db";
 import { heroOf, shotBases } from "@/lib/shots";
 import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
-import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
+import { factLines } from "@/lib/grader/report.mjs";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { GEMINI_SAYS_PORTFOLIO_SQL } from "@/pipeline/rubric.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
+import { eloOrder } from "@/lib/leaderboard";
 import { familyOf, isPublicTier, tierLabel } from "@/lib/tiers.mjs";
 import { peekTierMeta } from "@/lib/tiers-db.mjs";
 import { publicLetters, siteTiers } from "@/lib/tiers-letters.mjs";
@@ -37,43 +39,66 @@ export const domainOf = (url: string) => {
 /** A listed portfolio's page on PortfolioRank (its report). */
 export const reportPath = (url: string) => `/p/${encodeURIComponent(url)}`;
 
-/** The AI grade's "top N%" for a rank among `total`, never 0. */
+/** "Top N%" for a rank among `total`, never 0. */
 export const topPct = (rank: number, total: number) => Math.max(1, Math.round((100 * rank) / Math.max(1, total)));
+
+/** How many of the ranked order the home page reads: the cards pick from its best. */
+const POOL_SIZE = 300;
 
 type PoolSite = {
   url: string;
   name: string;
-  mu: number;
-  /** Gemini's letter: the pool's order only, never shown (owner, 2026-11-22). */
-  tier: string;
-  quality: number | null;
-  axes: Record<string, number | null>;
-  roles: string[];
+  /** Its place in the order /top shows (boardOrder). */
+  rank: number;
+  /** Its Tier (every letter) while tiers are shown, else null: shown only when public. Never Gemini's letter. */
+  tier: string | null;
 };
 
+/** True while tiers by ELO are on (RANKING_V2), as /top reads it (lib/leaderboard.ts rankingViewsEnabled). */
+const rankingV2 = () => /^true$/i.test(String(process.env.RANKING_V2 ?? ""));
+
 /**
- * The graded, listed portfolios best first (by the AI grade's level), with
- * each one's rank by AI grade. The pool itself is cached an hour
- * (lib/grader/report.mjs gradedPool).
+ * The order /top shows, so the home page's Top 10 and its "#N" places come
+ * from the same order in each flag state: with RANKING_V2 on, the ranked
+ * board (code checks, then votes; lib/tiers-board.ts rankedSites); with it
+ * off, the people's ELO board (sites with at least one person's vote, best
+ * ELO first; lib/leaderboard.ts eloOrder). Never Gemini's order or letter.
+ * A database error is thrown to the page's error path, never shown as an
+ * empty board.
  */
-async function rankedPool(): Promise<(PoolSite & { aiRank: number })[]> {
-  await ensureSchema();
-  const [pool, hidden] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, hiddenUrls()]);
-  return pool
-    .filter((p) => byUrl.has(p.url) && !hidden.has(p.url))
-    .sort((a, b) => b.mu - a.mu || (b.quality ?? 0) - (a.quality ?? 0) || a.url.localeCompare(b.url))
-    .map((p, i) => ({ ...p, aiRank: i + 1 }));
+async function boardOrder(limit: number): Promise<{ sites: PoolSite[]; total: number }> {
+  if (rankingV2()) {
+    const { sites, total } = await rankedSites(limit);
+    return { sites: sites.map((s) => ({ url: s.url, name: s.name, rank: s.rank, tier: s.tier })), total };
+  }
+  // The whole ELO board (people's votes only, so a few hundred rows), so `total` is its size.
+  const all = await eloOrder(100_000);
+  return { sites: all.slice(0, limit).map((r, i) => ({ url: r.url, name: byUrl.get(r.url)?.name ?? domainOf(r.url), rank: i + 1, tier: null })), total: all.length };
 }
 
 /**
- * Showcase quality: Gemini scores visual design and the five-second test
- * from the very screenshot we show (the top-of-page capture,
- * pipeline/rubric.mjs buildRubricRequest), so a 5 for visual design and at
- * least 4 for the five-second test means the capture itself looks good: not
- * blank, not a cookie wall, not a broken layout. Blank and failed captures
- * never reach the grade at all (pipeline/capture.mjs gate).
+ * The best of /top's order, for the showcase and the portfolio of the day.
+ * Cached an hour, as the AI-grade pool it replaced was, so their "#N" can lag
+ * /top by up to an hour; the Top 10 reads the order fresh (topTen). No Gemini
+ * answer is read (owner, 2026-11-23).
  */
-export const strongCapture = (p: Pick<PoolSite, "axes">) => p.axes.visual_design === 5 && (p.axes.five_second_test ?? 0) >= 4;
+export async function rankedPool(): Promise<{ pool: PoolSite[]; total: number }> {
+  await ensureSchema();
+  const { sites, total } = await cached<{ sites: PoolSite[]; total: number }>("home", `pool:${rankingV2() ? "tiers" : "elo"}`, { ttlMs: HOUR }, () =>
+    boardOrder(POOL_SIZE)
+  );
+  return { pool: sites, total };
+}
+
+/**
+ * The cached pool without the sites hidden now: a site hidden after the pool
+ * was cached leaves the showcase and the portfolio of the day at once (the
+ * hide paths also drop the cached pool, lib/games/pool.mjs HOME_POOL_KEYS).
+ */
+export async function visiblePool(): Promise<{ pool: PoolSite[]; total: number; hidden: Set<string> }> {
+  const [{ pool, total }, hidden] = await Promise.all([rankedPool(), hiddenUrls()]);
+  return { pool: pool.filter((p) => !hidden.has(p.url)), total, hidden };
+}
 
 /**
  * The letter a home card shows for each site: its public Tier while tiers are
@@ -95,9 +120,10 @@ export type ShowItem = {
   href: string;
 };
 
-/** The hero's card deck: the best-graded portfolios whose screenshots are strong. */
-async function showcase(pool: (PoolSite & { aiRank: number })[], count = 6): Promise<ShowItem[]> {
-  const strong = pool.filter(strongCapture).slice(0, count * 2);
+/** The hero's card deck: the best-ranked portfolios that have a stored screenshot, in /top's order. */
+async function showcase(pool: PoolSite[], count = 6): Promise<ShowItem[]> {
+  // The best of the order with a stored screenshot (no Gemini score picks them, owner 2026-11-23).
+  const strong = pool.slice(0, count * 4);
   const shots = await shotBases(strong.map((p) => p.url));
   const picked = strong.filter((p) => shots.has(p.url)).slice(0, count);
   const letters = await lettersFor(picked.map((p) => p.url));
@@ -107,7 +133,7 @@ async function showcase(pool: (PoolSite & { aiRank: number })[], count = 6): Pro
     domain: domainOf(p.url),
     hero: heroOf(shots.get(p.url)!),
     tier: letters.get(p.url) ?? null,
-    rank: p.aiRank,
+    rank: p.rank,
     href: reportPath(p.url),
   }));
 }
@@ -125,51 +151,47 @@ export type BoardItem = {
 };
 
 export type TopTen =
-  | { kind: "ai"; rows: BoardItem[] }
+  /** RANKING_V2 off: the first 10 of the people's ELO board /top shows (lib/leaderboard.ts eloOrder), the score its ELO. */
+  | { kind: "elo"; rows: BoardItem[] }
   /** Tiers by ELO (RANKING_V2): the ranked board's first 10 (lib/tiers-board.ts), the score a tier by ELO. */
   | { kind: "ranked"; rows: BoardItem[] };
 
 /**
- * The top 10. With RANKING_V2 on: the ranked board's first 10, tiers by ELO
- * (lib/tiers-board.ts), the same rows /top shows first. Until then the order
- * of the AI grade (the people's ELO board is too thin to rank on yet: most
- * sites share one vote), with no letter: Gemini's is never shown (owner,
- * 2026-11-22) and the Tiers are hidden.
+ * The top 10: the same first 10 rows /top shows, read fresh, in each flag
+ * state. With RANKING_V2 on, the ranked board (code checks, then votes) with
+ * each public Tier; with it off, the people's ELO board with each ELO. Never
+ * Gemini's order or letter (owner, 2026-11-22).
  */
-async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
-  await ensureSchema();
-  const item = (url: string, rank: number, score: string, tied = false): BoardItem => {
+async function topTen(): Promise<TopTen> {
+  const item = (url: string, rank: number, score: string): BoardItem => {
     const p = byUrl.get(url);
-    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, score, href: reportPath(url) };
+    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied: false, hero: null, score, href: reportPath(url) };
   };
-  if (/^true$/i.test(String(process.env.RANKING_V2 ?? ""))) {
-    // Tiers by ELO: the ranked board's first 10, the same rows /top shows first (public letters only).
-    const { sites } = await rankedSites(10);
-    const rows = sites.map((s) => item(s.url, s.rank, isPublicTier(s.tier) ? s.tier : ""));
-    const shots = await shotBases(rows.map((r) => r.url));
-    for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-    return { kind: "ranked", rows };
-  }
-  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, ""));
+  const shown = rankingV2();
+  const rows: BoardItem[] = shown
+    ? (await rankedSites(10)).sites.map((s) => item(s.url, s.rank, isPublicTier(s.tier) ? s.tier : ""))
+    : (await eloOrder(10)).map((r, i) => item(r.url, i + 1, String(Math.round(r.elo))));
   const shots = await shotBases(rows.map((r) => r.url));
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-  return { kind: "ai", rows };
+  return { kind: shown ? "ranked" : "elo", rows };
 }
 
 /** `tier`: the site's public Tier while tiers are shown, else null; never Gemini's letter. */
 export type GradedItem = { url: string; name: string; domain: string; tier: string | null; at: string; hero: string | null; href: string };
+
+/** The newest Gemini grades that say portfolio; CASE forms, so text that is not JSON is skipped, never an error. */
+export const RECENT_GRADES_SQL = `SELECT url, at FROM (
+  SELECT url, CASE WHEN json_valid(ai_rubric) THEN json_extract(ai_rubric, '$.judged_at') END AS at
+  FROM portfolios
+  WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND ${GEMINI_SAYS_PORTFOLIO_SQL("ai_rubric")}
+) WHERE at IS NOT NULL ORDER BY at DESC LIMIT 30`;
 
 /** The portfolios Gemini graded most recently. Cached an hour: it reads the whole list. */
 async function recentlyGraded(count = 6): Promise<GradedItem[]> {
   const hidden = await hiddenUrls();
   const { items } = await cached<{ items: { url: string; at: string }[] }>("home", "recent-grades", { ttlMs: HOUR }, async () => {
     const res = await db().execute(
-      `SELECT url, json_extract(ai_rubric, '$.judged_at') AS at
-       FROM portfolios
-       WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)
-         AND json_extract(ai_rubric, '$.tier') IS NOT NULL AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
-         AND COALESCE(json_extract(ai_rubric, '$.is_portfolio'), 1) != 0
-       ORDER BY at DESC LIMIT 30`
+      RECENT_GRADES_SQL
     );
     return { items: res.rows.map((r) => ({ url: String(r.url), at: String(r.at) })) };
   });
@@ -191,7 +213,7 @@ export type LiveStat = { key: string; label: string; value: string; tone: 1 | 2 
 type SiteStats = Awaited<ReturnType<typeof siteStats>>;
 
 /** The Live card's numbers: the same as /api/stats/live, read here so the page renders them. */
-async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> {
+async function liveStats(listed: number): Promise<LiveStat[]> {
   const now = new Date();
   const [site, counts, week] = await Promise.all([
     cached<SiteStats>("stats", "site", { ttlMs: HOUR }, () => siteStats(db(), { feed: FEED, now })),
@@ -214,8 +236,8 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     { key: "portfolios", label: "Portfolios listed", value: n(listed), tone: 1 },
     // Beside it, the people who listed them (the community list's contributors).
     { key: "contributors", label: "Contributors to the list", value: CONTRIBUTOR_COUNT_LABEL, tone: 3 },
-    // The same count as the AI ranks on this page (listed, graded, not hidden).
-    { key: "graded", label: "Graded by AI", value: n(pool.length), tone: 2 },
+    // Listed, not hidden, Gemini answered and did not say "not a portfolio" (lib/games/stats.mjs siteStats).
+    { key: "graded", label: "Graded by AI", value: n(site.graded), tone: 2 },
     site.ownDomainPct == null ? null : { key: "own", label: "On their own domain", value: `${site.ownDomainPct}%`, tone: 4 },
     site.commonRole ? { key: "role", label: "Most common role", value: site.commonRole.label, tone: 3 } : null,
     // A quiet week would read as a dead site: then a number that is never 0.
@@ -243,6 +265,8 @@ export type PortfolioOfTheDay = {
   tier: string | null;
   rank: number;
   total: number;
+  /** What `rank` is a place in: /top's order in this flag state. */
+  order: "code checks and votes" | "people's votes";
   best: { label: string; note: string }[];
   facts: { id: string; label: string; pass: boolean }[];
   href: string;
@@ -253,8 +277,8 @@ export type PortfolioOfTheDay = {
  * shows: a strong capture whose Tier (lib/tiers-letters.mjs siteTiers: code
  * checks and votes, never Gemini's letter) is in the S or A family.
  */
-async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  const strong = pool.filter((p) => strongCapture(p) && !skip.has(p.url)).slice(0, 300);
+async function portfolioOfTheDay(pool: PoolSite[], total: number, skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
+  const strong = pool.filter((p) => !skip.has(p.url)).slice(0, 300);
   const tiers = await siteTiers(db(), strong.map((p) => p.url)).catch(() => new Map<string, string | null>());
   const candidates = strong.filter((p) => ["S", "A"].includes(familyOf(tiers.get(p.url) ?? null) ?? "")).slice(0, 100);
   if (candidates.length === 0) return null;
@@ -270,9 +294,6 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
     if (!base) continue;
     // Its fact lines from the newest measured facts (lib/fresh-facts.mjs).
     const grade = (freshGrade(String(row.rows[0]?.ai_rubric ?? "{}"), row.rows[0]?.facts) ?? {}) as Record<string, unknown>;
-    const judgments = (judgmentLines(grade) as { label: string; score: number | null; note: string }[])
-      .filter((j) => typeof j.score === "number" && j.note)
-      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
     // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their label.
     const facts = (factLines(grade) as { id: string; label: string; pass: boolean | null; shownAs: string }[])
       .filter((f) => f.pass !== null)
@@ -284,9 +305,11 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
       domain: domainOf(p.url),
       hero: heroOf(base),
       tier: (await lettersFor([p.url])).get(p.url) ?? null,
-      rank: p.aiRank,
-      total: pool.length,
-      best: judgments.slice(0, 2).map((j) => ({ label: j.label, note: j.note })),
+      rank: p.rank,
+      total,
+      order: rankingV2() ? "code checks and votes" : "people's votes",
+      // No Gemini answer is shown (owner, 2026-11-23).
+      best: [],
       facts: facts.slice(0, 6),
       href: reportPath(p.url),
     };
@@ -306,11 +329,10 @@ export type HomeData = Awaited<ReturnType<typeof homeData>>;
 
 export async function homeData() {
   await ensureSchema();
-  const pool = await rankedPool();
-  const hidden = await hiddenUrls();
+  const { pool, total: ranked, hidden } = await visiblePool();
   const total = FEED.filter((p) => !hidden.has(p.url)).length;
-  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total, pool), polls()]);
-  const potd = await portfolioOfTheDay(pool, new Set(show.map((s) => s.url)));
+  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(), recentlyGraded(), liveStats(total), polls()]);
+  const potd = await portfolioOfTheDay(pool, ranked, new Set(show.map((s) => s.url)));
   return {
     /** Listed portfolios anyone can see (the browse grid's count). */
     total,

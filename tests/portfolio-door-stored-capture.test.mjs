@@ -20,7 +20,7 @@ import { atTheDoor } from "../lib/reviews/door.mjs";
 import { decideReviews, ensureReviewSchema, listReviews, undoneRemovals, undoReviews } from "../lib/reviews/store.mjs";
 import { storedCaptureBlocked } from "../lib/reviews/stored-capture.mjs";
 import { finishNight, planNight, runBatch, scanStoredCaptures, startNight } from "../pipeline/night.mjs";
-import { gradeRecord, parseRubricResponse } from "../pipeline/rubric.mjs";
+import { RUBRIC_VERSION, gradeRecord, parseRubricResponse } from "../pipeline/rubric.mjs";
 import { PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { DAY, T0, answer, col, context, drive, faulty, freshDb, grade, hidden, mockGemini, reviewsOf, site } from "./helpers/door-night.mjs";
 
@@ -209,9 +209,9 @@ test("b: after Undo the site shows no grade, is not graded on the old capture, a
   const n2 = await drive(c2.ctx, c2.clock);
   assert.equal(n2.summary.sites.counts.graded, 1);
   const g = await grade(db, url);
-  assert.equal(g.tier, "B");
+  assert.equal(g.rubric_version, RUBRIC_VERSION, "a real grade (rubric v3 has no letter)");
   assert.equal(g.is_portfolio, true);
-  assert.equal(g.visual_design.score, 3);
+  assert.ok(g.portfolio_reason, "with the model's reason");
   assert.deepEqual((await reviewsOf(db, url)).map((r) => String(r.status)), ["closed"], "the undone row is settled by the grade");
 
   // Exactly one: the next night grades nothing.
@@ -234,7 +234,7 @@ test("b: after Reject the site is kept with no scores shown, and its one fresh g
   assert.equal(kept.review.kind, "owner_kept");
   assert.equal(kept.is_portfolio, true);
   assert.equal(kept.tier, undefined, "no tier until the fresh grade");
-  assert.equal(kept.visual_design, undefined, "no scores until the fresh grade");
+  assert.equal(kept.portfolio_reason, undefined, "no answer until the fresh grade");
 
   await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-20 12:00:00' WHERE url = ?", args: [url] });
   const c2 = context(db, { gemini: { [url]: answer(false) }, start: T0 + 5 * DAY });
@@ -245,7 +245,7 @@ test("b: after Reject the site is kept with no scores shown, and its one fresh g
   assert.equal(g.review.kind, "owner_kept", "Gemini still says no: the owner's keep holds");
   assert.equal(g.is_portfolio, true);
   assert.equal(g.ai_is_portfolio, false);
-  assert.equal(g.tier, "D", "now with the fresh grade's own scores");
+  assert.ok(g.portfolio_reason, "now with the fresh grade's own answer");
   assert.equal(g.fresh_grade, undefined, "the fresh grade is done");
   assert.equal((await listReviews(db)).pending.length, 0, "nothing new asked of the owner");
   assert.equal(await hidden(db, url), false);
@@ -361,7 +361,7 @@ test("review 3: a missing screenshot keeps the owner's keep waiting for its fres
   await night(db, { gemini: { [url]: answer(false) }, start: T0 + 7 * DAY });
   const g = await grade(db, url);
   assert.equal(g.review.kind, "owner_kept");
-  assert.equal(g.tier, "D");
+  assert.equal(g.rubric_version, RUBRIC_VERSION);
   assert.equal((await listReviews(db)).pending.length, 0, "nothing new asked of the owner");
 });
 
@@ -379,14 +379,14 @@ test("review 4: Reject and Undo of a 'no' made on a checked capture keep its gra
   await decideReviews(db, { ids: [Number(k.id)], action: "reject", actor: owner, onFeed: () => true, now: new Date(T0 + 3600000) });
   const gk = await grade(db, kept);
   assert.equal(gk.review.kind, "owner_kept");
-  assert.equal(gk.tier, "D", "the grade stays (graded once)");
+  assert.equal(gk.rubric_version, RUBRIC_VERSION, "the grade stays (graded once)");
   assert.equal(gk.fresh_grade, undefined);
   const [u] = await reviewsOf(db, undone);
   await undoReviews(db, { ids: [Number(u.id)], actor: owner, now: new Date(T0 + 3600000) });
   const gu = await grade(db, undone);
   assert.equal(gu.error, undefined, "Undo puts the grade back as it was");
   assert.equal(gu.ai_is_portfolio, false);
-  assert.equal(gu.tier, "D");
+  assert.equal(gu.rubric_version, RUBRIC_VERSION);
   await recapture(db, kept, "2026-11-20 12:00:00");
   await recapture(db, undone, "2026-11-20 12:00:00");
   assert.equal((await night(db, { start: T0 + 5 * DAY })).summary.sites.counts.graded, 0, "no fresh grade is due");

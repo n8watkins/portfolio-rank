@@ -16,7 +16,8 @@ import { pollDelay } from "../lib/grader/poll.mjs";
 import { emailState, requestEmail, sendDueEmails } from "../lib/grader/notify.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
-import { AI_CRITERIA } from "../pipeline/rubric.mjs";
+// A person's own grade still runs on the frozen v2 prompt (pipeline/rubric-v2.mjs).
+import { V2_AI_CRITERIA as AI_CRITERIA } from "../pipeline/rubric-v2.mjs";
 import { drainPeopleQueue, processRequest } from "../pipeline/people.mjs";
 import { readRequest } from "../pipeline/people-store.mjs";
 
