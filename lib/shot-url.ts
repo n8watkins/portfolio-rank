@@ -22,7 +22,8 @@ export type FullPageFrame = { width: number; height: number; pageHeight?: number
  * `cropped`: the page goes on below `height`.
  */
 export type FullPageShot = { src: string; thumb: string; thumbWidth: number; width: number; height: number; topHeight: number; cropped: boolean };
-export type FullPagePreview = { desktop: FullPageShot; phone: FullPageShot };
+/** `phone` is null when the capture has no phone image (its narrow view was missing): show the desktop alone, never a broken image. */
+export type FullPagePreview = { desktop: FullPageShot; phone: FullPageShot | null };
 
 const isFrame = (f: unknown): f is FullPageFrame => {
   const x = f as Partial<FullPageFrame> | null;
@@ -36,14 +37,16 @@ const VIEWS = {
 } as const;
 
 /**
- * The tall images and thumbnails of a capture, or null unless both views
- * were taken. `base` is `${SHOTS_BASE_URL}/${shot_key}` (any ?v= on it is
- * dropped): the files sit under their own version, <shot_key>/<v>/, and
- * never change, so they can be cached for good.
+ * The tall images and thumbnails of a capture, or null unless the desktop
+ * view was taken; `phone` is null when only the desktop's were stored
+ * (pipeline/fullpage.mjs nextFullPage). `base` is
+ * `${SHOTS_BASE_URL}/${shot_key}` (any ?v= on it is dropped): the files sit
+ * under their own version, <shot_key>/<v>/, and never change, so they can
+ * be cached for good.
  */
 export function fullPageFrames(base: string, fullPage: unknown): FullPagePreview | null {
   const fp = fullPage as { v?: string; desktop?: unknown; phone?: unknown } | null;
-  if (!fp || !/^[0-9a-z]{1,16}$/.test(String(fp.v ?? "")) || !isFrame(fp.desktop) || !isFrame(fp.phone)) return null;
+  if (!fp || !/^[0-9a-z]{1,16}$/.test(String(fp.v ?? "")) || !isFrame(fp.desktop)) return null;
   const dir = `${base.split("?")[0]}/${fp.v}`;
   const shot = (name: keyof typeof VIEWS, f: FullPageFrame): FullPageShot => ({
     src: `${dir}/${VIEWS[name].tall}`,
@@ -54,7 +57,7 @@ export function fullPageFrames(base: string, fullPage: unknown): FullPagePreview
     topHeight: Math.min(VIEWS[name].topHeight, f.height),
     cropped: Boolean(f.cropped),
   });
-  return { desktop: shot("desktop", fp.desktop), phone: shot("phone", fp.phone) };
+  return { desktop: shot("desktop", fp.desktop), phone: isFrame(fp.phone) ? shot("phone", fp.phone) : null };
 }
 
 /** A roster site's icon, served by the Worker (worker/assets.ts) with a placeholder when it has none. */

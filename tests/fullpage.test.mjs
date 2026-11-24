@@ -21,6 +21,7 @@ import {
   captureView,
   fullPageComplete,
   fullPageDue,
+  fullPageStorable,
   nextFullPage,
   nextTries,
   recordFullPage,
@@ -28,6 +29,7 @@ import {
   shotHeight,
   textHash,
   tileRows,
+  versionFiles,
   versionOf,
   VIEW_BUDGET_MS,
 } from "../pipeline/fullpage.mjs";
@@ -266,6 +268,30 @@ test("looks the same: no new version and no upload; a visual or text change make
   assert.equal(textHash("a"), textHash("a"));
 });
 
+test("a missing phone view: the desktop's images are stored alone, as a try the backfill may repeat; a stored pair stays", async () => {
+  const a = await views("/in-view");
+  const missing = { ok: false, meta: { missing: "a bot or security check stood in for the site" } };
+  const t0 = new Date("2026-11-13T10:00:00Z");
+  const alone = nextFullPage(null, { desktopView: a.desktop, phoneView: missing, pageText: "Jane Doe", at: t0 });
+  assert.deepEqual([alone.uploadImages, alone.uploadLegacy, alone.fullPage.v, alone.fullPage.tries], [true, true, versionOf(t0), 1]);
+  assert.equal(alone.fullPage.phone.missing, missing.meta.missing, "the reason is kept");
+  assert.equal(fullPageStorable(alone.fullPage), true, "stored: the desktop's images");
+  assert.equal(fullPageComplete(alone.fullPage), false, "still due for the backfill's phone view");
+  assert.deepEqual(Object.keys(versionFiles(a.desktop, missing)).sort(), [IMAGE_FILES.desktop.tall, IMAGE_FILES.desktop.thumb].sort(), "no phone file is written");
+  assert.deepEqual(Object.keys(versionFiles(a.desktop, a.phone)).length, 4);
+  // Missing again a week later: another desktop-only version, one more try (FULL_PAGE_MAX_TRIES bounds the backfill).
+  const t1 = new Date("2026-11-20T10:00:00Z");
+  const again = nextFullPage(alone.fullPage, { desktopView: a.desktop, phoneView: missing, pageText: "Jane Doe", at: t1 });
+  assert.deepEqual([again.uploadImages, again.fullPage.v, again.fullPage.tries], [true, versionOf(t1), 2]);
+  // Both views later: a whole version.
+  const whole = nextFullPage(again.fullPage, { desktopView: a.desktop, phoneView: a.phone, pageText: "Jane Doe", at: t1 });
+  assert.ok(fullPageComplete(whole.fullPage));
+  // A stored pair is never replaced by a desktop alone.
+  const kept = nextFullPage(whole.fullPage, { desktopView: a.desktop, phoneView: missing, pageText: "Jane Doe", at: new Date("2026-11-27T10:00:00Z") });
+  assert.deepEqual([kept.uploadImages, kept.fullPage.v], [false, whole.fullPage.v]);
+  assert.equal(kept.fullPage.lastError.phone.missing, missing.meta.missing);
+});
+
 test("R2 writes: four immutable AVIF files under the version, then the old version deleted; the purge stays in its prefix", async () => {
   const sent = [];
   const commands = {
@@ -395,13 +421,17 @@ test("no images bucket yet: nothing stored and no version recorded, so the backf
   assert.equal(fullPageFrames("https://images.example/k", fp), null, "never linked");
 });
 
-test("preview URLs: versioned files, thumbnails and the top's height; only with both views; the switch is off by default", () => {
+test("preview URLs: versioned files, thumbnails and the top's height; the desktop's needed, the phone's only when stored; the switch is off by default", () => {
   const fp = { v: "k3x9", at: "2026-11-13T10:00:00Z", desktop: { width: 1440, height: 4000, cropped: true, bytes: 5 }, phone: { width: 390, height: 600, bytes: 4 } };
   assert.deepEqual(fullPageFrames("https://images.example/0123456789abcdef?v=old", fp), {
     desktop: { src: "https://images.example/0123456789abcdef/k3x9/desktop.avif", thumb: "https://images.example/0123456789abcdef/k3x9/desktop-thumb.avif", thumbWidth: 480, width: 1440, height: 4000, topHeight: 900, cropped: true },
     phone: { src: "https://images.example/0123456789abcdef/k3x9/phone.avif", thumb: "https://images.example/0123456789abcdef/k3x9/phone-thumb.avif", thumbWidth: 240, width: 390, height: 600, topHeight: 600, cropped: false },
   });
-  assert.equal(fullPageFrames("/shots/k", { ...fp, phone: { error: "timeout" } }), null);
+  // No phone image (its view was missing): the desktop alone, never a link to a file that is not there.
+  const desktopOnly = fullPageFrames("/shots/k", { ...fp, phone: { missing: "a bot or security check stood in for the site" } });
+  assert.equal(desktopOnly?.phone, null);
+  assert.equal(desktopOnly?.desktop.src, "/shots/k/k3x9/desktop.avif");
+  assert.equal(fullPageFrames("/shots/k", { ...fp, desktop: { error: "timeout" } }), null, "no desktop image, nothing to show");
   assert.equal(fullPageFrames("/shots/k", { ...fp, v: undefined }), null, "no version, nothing stored");
   assert.equal(fullPageFrames("/shots/k", null), null);
   assert.equal(fullPagePreviewEnabled({}), false);

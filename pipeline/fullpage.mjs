@@ -444,6 +444,51 @@ export async function captureView(page, name, { budgetMs } = {}) {
   }
 }
 
+/**
+ * In the browser, before the scroll-through: notes each fixed or sticky
+ * element's own inline visibility (data-pr-vis), so RESTORE_FIXED can undo
+ * what the stitching hides (HIDE_FIXED: fixed and sticky bars are hidden
+ * after the first tile so they show once).
+ */
+const MARK_FIXED = () => {
+  for (const el of document.querySelectorAll("body *")) {
+    const pos = getComputedStyle(el).position;
+    if (pos !== "fixed" && pos !== "sticky") continue;
+    el.setAttribute("data-pr-vis", JSON.stringify([el.style.getPropertyValue("visibility"), el.style.getPropertyPriority("visibility")]));
+  }
+};
+
+/** In the browser, after the scroll-through: each marked element's inline visibility as it was (MARK_FIXED). */
+const RESTORE_FIXED = () => {
+  for (const el of document.querySelectorAll("[data-pr-vis]")) {
+    try {
+      const [value, priority] = JSON.parse(el.getAttribute("data-pr-vis"));
+      if (value) el.style.setProperty("visibility", value, priority);
+      else el.style.removeProperty("visibility");
+    } catch {
+      // not ours to read
+    }
+    el.removeAttribute("data-pr-vis");
+  }
+};
+
+/**
+ * The tall image of one view (captureView), then the page as a visitor sees
+ * it again: the fixed and sticky bars the stitching hid are shown again, so
+ * the text read afterwards (judged and stored) has the header, the
+ * navigation and the contact button, as before the scroll, plus whatever the
+ * scroll-through loaded, and the next view of the same page (the phone view,
+ * the page resized) starts from the page as it was.
+ * @param {import("playwright").Page} page
+ * @param {"desktop" | "phone"} name
+ */
+export async function captureViewAsSeen(page, name, opts = {}) {
+  await page.evaluate(MARK_FIXED).catch(() => {});
+  const view = await captureView(page, name, opts);
+  await page.evaluate(RESTORE_FIXED).catch(() => {});
+  return view;
+}
+
 /** A short hash of the page text, so a text change is never taken for "looks the same". */
 export const textHash = (text) => createHash("sha1").update(String(text ?? "")).digest("hex").slice(0, 16);
 
@@ -464,8 +509,13 @@ export function unchanged(prev, next) {
  *   both views taken, looks the same: the stored version stays (only
  *     `checkedAt` moves), nothing is uploaded.
  *   both views taken, changed or new: a new version `v` (the capture time).
- *   a view failed: the stored version, if any, stays with `lastError`;
- *     without one, the errors are recorded (the backfill tries again).
+ *   only the desktop view taken (the phone view failed, or is missing: its
+ *     `meta` says why): a stored version with both images stays, with
+ *     `lastError`; otherwise a new version with the desktop's images only,
+ *     its `phone` the reason, counted as a try (the backfill tries the phone
+ *     view again, FULL_PAGE_MAX_TRIES at most).
+ *   the desktop view failed: the stored version, if any, stays with
+ *     `lastError`; without one, the errors are recorded (the backfill tries again).
  * The old frames (hero.jpg, mobile.jpg) go up unless nothing changed.
  */
 export function nextFullPage(prev, { desktopView, phoneView, pageText, at }) {
@@ -477,12 +527,27 @@ export function nextFullPage(prev, { desktopView, phoneView, pageText, at }) {
     return { fullPage: next, uploadImages: true, uploadLegacy: true };
   }
   const errors = { at: iso, desktop: desktopView.meta, phone: phoneView.meta };
+  if (desktopView.ok && !fullPageComplete(prev)) {
+    return { fullPage: { v: versionOf(at), at: iso, textHash: th, desktop: desktopView.meta, phone: phoneView.meta, tries: nextTries(prev) }, uploadImages: true, uploadLegacy: true };
+  }
   if (prev?.v) return { fullPage: { ...prev, lastError: errors }, uploadImages: false, uploadLegacy: true };
   return { fullPage: { ...errors, tries: nextTries(prev) }, uploadImages: false, uploadLegacy: true };
 }
 
 /** Whether a stored `fullPage` has both tall images. */
 export const fullPageComplete = (fp) => Boolean(fp && fp.v && fp.desktop?.bytes > 0 && fp.phone?.bytes > 0);
+
+/** Whether a `fullPage` names a version with images to store: the desktop's at least (nextFullPage). */
+export const fullPageStorable = (fp) => Boolean(fp && fp.v && fp.desktop?.bytes > 0);
+
+/** The files of a new version (storeVersion's `files`): the desktop's, and the phone's when it was taken. */
+export function versionFiles(desktopView, phoneView) {
+  return {
+    [IMAGE_FILES.desktop.tall]: desktopView.files.tall,
+    [IMAGE_FILES.desktop.thumb]: desktopView.files.thumb,
+    ...(phoneView.ok ? { [IMAGE_FILES.phone.tall]: phoneView.files.tall, [IMAGE_FILES.phone.thumb]: phoneView.files.thumb } : {}),
+  };
+}
 
 /**
  * Waits for a freshly loaded page's first screen to hold still (preloaders,

@@ -41,14 +41,14 @@
 // check, or under 40 words with nothing else that shows a site:
 // ./capture-blocked.mjs). A page with no words, or only a canvas, video or
 // image, is never stored as live: a flat frame is blank, anything else goes
-// to the owner's review. The desktop view decides; the phone view stops the
-// capture only with an error status or a bot wall of its own. A site with
+// to the owner's review. The desktop view decides; the phone view is the same
+// page resized to 390 wide, never a second visit, and never fails the capture:
+// when it is not the site it is recorded as missing (narrowView). A site with
 // no good capture records it as a failed capture and is retried (a bot wall
 // also sets needs_review for the owner); a site that has one keeps it, and a
 // refresh that met a bot wall or a page still covered by a dialog also goes
 // to the owner's review list (a pending recapture_blocked row: lib/reviews/door.mjs
-// blockedRefreshReview), unless only the phone view saw it
-// (refreshNeedsReview). A new capture that lost a portfolio sign or most of
+// blockedRefreshReview, refreshNeedsReview). A new capture that lost a portfolio sign or most of
 // the text of the one it replaced is recorded (lib/capture-problems.mjs);
 // the admin's Capture problems page lists all of these.
 // Where a rule cannot tell, the outcome is the owner's review or "keep the
@@ -71,7 +71,6 @@ import {
   BLANK_FRAME,
   BLOCKED_PREFIX,
   BOT_WALL,
-  BOT_WALL_REASON,
   isBotWallReason,
   MEDIA_ONLY,
   MEDIA_REVIEW_REASON,
@@ -94,7 +93,7 @@ import {
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
 import { ensureCaptureProblemSchema, recordCaptureChange } from "../lib/capture-problems.mjs";
 import { blockedRefreshReview, closeBlockedRefreshReviews } from "../lib/reviews/door.mjs";
-import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
+import { FRAMES, captureViewAsSeen, fullPageStorable, nextFullPage, settleFirstScreen, versionFiles } from "./fullpage.mjs";
 import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 import { rankFromCode } from "../lib/tiers-store.mjs";
@@ -206,14 +205,11 @@ const COVERED = /^still a dialog on top\b/;
  * of only a canvas, video or image, an error status on a page that shows a
  * site), and not a gate, loader or mode picker still in the way: those stay
  * refresh failures, listed on the Capture problems page (group A) with their
- * reason. Never a verdict of the phone view alone (`phone`): the phone view
- * is a second visit of the same capture, after the desktop view showed the
- * site, so a bot check there may be the site's protection answering our own
- * second visit.
- * @param {{ reason?: string, phone?: boolean }} verdict
+ * reason. The narrow view never fails a capture (narrowView), so only the
+ * desktop view's verdicts come here.
+ * @param {{ reason?: string }} verdict
  */
-export function refreshNeedsReview({ reason = "", phone = false } = {}) {
-  if (phone) return false;
+export function refreshNeedsReview({ reason = "" } = {}) {
   const r = String(reason);
   if (isBotWallReason(r)) return true;
   return r.startsWith(BLOCKED_PREFIX) && COVERED.test(r.slice(BLOCKED_PREFIX.length));
@@ -317,7 +313,15 @@ const closeWithin = (ctx) => (ctx ? within(ctx.close(), CLOSE_LIMIT_MS, "closing
  * @param {import("playwright").Page} page
  */
 function trackDocument(page) {
-  const doc = { status: 0, cfMitigated: "" };
+  const doc = { status: 0, cfMitigated: "", navigations: 0 };
+  // `navigations`: the main document's requests (the first load, a reload, the page sending the browser on).
+  page.on("request", (req) => {
+    try {
+      if (req.isNavigationRequest() && req.frame() === page.mainFrame()) doc.navigations++;
+    } catch {
+      // a request without a frame (a service worker's): not the document
+    }
+  });
   page.on("response", (res) => {
     try {
       if (res.frame() !== page.mainFrame() || !res.request().isNavigationRequest()) return;
@@ -353,49 +357,8 @@ const resultOf = (status, reason) =>
 
 const wordCount = (t) => String(t ?? "").split(/\s+/).filter(Boolean).length;
 
-/**
- * In the browser, before the scroll-through: notes each fixed or sticky
- * element's own inline visibility (data-pr-vis), so RESTORE_FIXED can undo
- * what the scroll-through's stitching hides (pipeline/fullpage.mjs: fixed and
- * sticky bars are hidden after the first tile so they show once).
- */
-const MARK_FIXED = () => {
-  for (const el of document.querySelectorAll("body *")) {
-    const pos = getComputedStyle(el).position;
-    if (pos !== "fixed" && pos !== "sticky") continue;
-    el.setAttribute("data-pr-vis", JSON.stringify([el.style.getPropertyValue("visibility"), el.style.getPropertyPriority("visibility")]));
-  }
-};
-
-/** In the browser, after the scroll-through: each marked element's inline visibility as it was (MARK_FIXED). */
-const RESTORE_FIXED = () => {
-  for (const el of document.querySelectorAll("[data-pr-vis]")) {
-    try {
-      const [value, priority] = JSON.parse(el.getAttribute("data-pr-vis"));
-      if (value) el.style.setProperty("visibility", value, priority);
-      else el.style.removeProperty("visibility");
-    } catch {
-      // not ours to read
-    }
-    el.removeAttribute("data-pr-vis");
-  }
-};
-
-/**
- * The tall image of one view (pipeline/fullpage.mjs captureView), then the
- * page as a visitor sees it again: the fixed and sticky bars the stitching
- * hid are shown again, so the text read afterwards (judged and stored) has
- * the header, the navigation and the contact button, as before the scroll,
- * plus whatever the scroll-through loaded.
- * @param {import("playwright").Page} page
- * @param {"desktop" | "phone"} name
- */
-export async function captureViewAsSeen(page, name) {
-  await page.evaluate(MARK_FIXED).catch(() => {});
-  const view = await captureView(page, name);
-  await page.evaluate(RESTORE_FIXED).catch(() => {});
-  return view;
-}
+// The tall image of one view with the page shown as a visitor sees it again afterwards (pipeline/fullpage.mjs).
+export { captureViewAsSeen };
 
 /**
  * Whether the desktop view, after its passes, waits and scroll-through, is
@@ -430,20 +393,95 @@ async function judgeDesktop(page, doc, passes, seenText, seenHtml = "") {
 }
 
 /**
- * The phone view, once the desktop view showed the site: only an error
- * status or a bot wall on the phone's own navigation stops the capture (the
- * verdict, reasons marked "(phone view)", retried). Anything else the blocked
- * rules find (a "best viewed on a desktop" screen, a cookie dialog that
- * would not close) is a note for the meta (`note`), never a failed capture.
+ * The narrow view, once the desktop view showed the site: whether its screen
+ * is the site. An error status (the page reloaded itself into one) or a bot
+ * check makes the narrow view `missing`, with the reason; anything else the
+ * blocked rules find (a "best viewed on a desktop" screen, a cookie dialog
+ * that would not close) is a `note` for the meta. Neither ever fails the
+ * capture: the desktop view decides.
  * @param {import("playwright").Page} page
  */
-async function judgePhone(page, doc, passes) {
+async function judgeNarrow(page, doc, passes) {
   const shown = await readBlockedInputs(page);
-  const suffix = " (phone view)";
   const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: shown.text, title: shown.title, shown: { ...shown, ...passes } });
-  if (verdict) return { verdict: { ...verdict, reason: `${verdict.reason}${suffix}`, phone: true }, note: null };
-  if (isBotWallPage(shown)) return { verdict: { status: "error", reason: `${BOT_WALL_REASON}${suffix}`, needsReview: true, phone: true }, note: null };
-  return { verdict: null, note: capturedBlocked({ ...shown, ...passes }) };
+  const plain = (reason) => (String(reason).startsWith(BLOCKED_PREFIX) ? String(reason).slice(BLOCKED_PREFIX.length) : String(reason));
+  if (verdict) return { missing: plain(verdict.reason), note: null };
+  if (isBotWallPage(shown)) return { missing: BOT_WALL, note: null };
+  return { missing: null, note: capturedBlocked({ ...shown, ...passes }) };
+}
+
+/** The narrow view's viewport (pipeline/fullpage.mjs FRAMES.phone), and the desktop's it goes back to. */
+const NARROW = { width: FRAMES.phone.width, height: FRAMES.phone.viewportHeight };
+const WIDE = { width: FRAMES.desktop.width, height: FRAMES.desktop.viewportHeight };
+/** How long the resized page gets for what its new width asks for (srcset images, a script a media query loads). */
+const REFLOW_IDLE_MS = 3000;
+/** In the browser: two frames, so the page is laid out and painted at its new size (a timer in case frames never come). */
+const NEXT_PAINT = () =>
+  new Promise((done) => {
+    setTimeout(done, 500);
+    requestAnimationFrame(() => requestAnimationFrame(() => done()));
+  });
+
+/**
+ * The narrow view (390 x 844) of the page the desktop view showed, without
+ * a second visit: the same page is resized, given a moment to reflow and
+ * settle, passed through the gate, the dialog and the mode picker if the
+ * narrow layout shows one, then measured (sideways overflow), photographed
+ * (the tall phone image) and read (the facts some sites show only at 390
+ * wide). A second visit seconds after the first, from a data-centre address,
+ * is what many sites' protection challenges (Cloudflare answered 28 of 30
+ * such failures, 2026-11-23); a fresh load at 390 showed the same links,
+ * words and overflow as the resized page on every one of 15 sampled sites.
+ *
+ * Never fails the capture. Returns { view, crop, seen, overflow390, passes,
+ * note, missing, navigated }: `missing` is the reason there is no narrow
+ * view (the page reloaded itself into a bot check or an error status, or
+ * could not be resized or photographed), and then `view` is a failed view
+ * and `crop`, `seen` and `overflow390` are null. `navigated`: the page made
+ * a new document load meanwhile (a site that reloads when the window
+ * narrows), so it is no longer the page the desktop view read.
+ * @param {import("playwright").Page} page
+ */
+export async function narrowView(page, doc) {
+  const before = doc.navigations;
+  const navigated = () => doc.navigations > before;
+  let passes = { splash: null, modal: null, mode: null };
+  const missing = (reason) => ({ view: { ok: false, meta: { missing: reason } }, crop: null, seen: null, overflow390: null, passes, note: null, missing: reason, navigated: navigated() });
+  try {
+    await page.setViewportSize(NARROW);
+  } catch {
+    return missing("the page could not be resized");
+  }
+  await page.evaluate(NEXT_PAINT).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: REFLOW_IDLE_MS }).catch(() => {});
+  if (navigated()) {
+    // The page loaded itself again at the new width: judged like a new visit, before the waits.
+    await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
+    if (doc.status >= 400) {
+      const early = await judgeNarrow(page, doc, passes);
+      if (early.missing) return missing(early.missing);
+    }
+    await waitForContent(page);
+  }
+  // A gate, a dialog or a picker the narrow layout shows (the desktop's were passed already).
+  passes = {
+    splash: await passSplashGate(page).catch(() => null),
+    modal: await passModal(page).catch(() => null),
+    mode: await passModePicker(page).catch(() => null),
+  };
+  // Transitions and images the new width started: a short wait for a still first screen.
+  await settleFirstScreen(page, { polls: 4, diff: pngDiff }).catch(() => false);
+  // Sideways scrolling: the page is wider than the screen (5 px of slack, as before).
+  const overflow390 = await page.evaluate((px) => document.documentElement.scrollWidth > px, NARROW.width + 5).catch(() => null);
+  const view = await captureViewAsSeen(page, "phone");
+  const judged = await judgeNarrow(page, doc, passes);
+  if (judged.missing) return missing(judged.missing);
+  const crop = view.ok ? view.files.crop : await shot(page, { type: "jpeg", quality: 75 }).catch(() => null);
+  if (!crop) return missing(view.meta?.error ? `no phone image (${view.meta.error})` : "no phone image");
+  // A narrow view that is blocked (the note) or cannot be read adds nothing to the facts.
+  const read = judged.note ? null : await page.evaluate(readRenderedPage).catch(() => null);
+  const seen = read ? { html: read.html, text: read.text, finalUrl: page.url() } : null;
+  return { view, crop, seen, overflow390, passes, note: judged.note, missing: null, navigated: navigated() };
 }
 
 /**
@@ -459,9 +497,9 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
   const { url, name } = entry;
   // A refresh never marks a site failed (see the header): it only waits out a
   // backoff, and a bot check or a covering dialog also goes to the owner's
-  // review list, unless only the phone view saw it (refreshNeedsReview).
+  // review list (refreshNeedsReview).
   const record = refresh
-    ? (status, reason, opts = {}) => recordRefreshFailure(db, url, `${status}: ${reason}`, new Date(), { needsReview: refreshNeedsReview({ reason, ...opts }) })
+    ? (status, reason) => recordRefreshFailure(db, url, `${status}: ${reason}`, new Date(), { needsReview: refreshNeedsReview({ reason }) })
     : (status, reason, opts = {}) => recordCaptureFailure(db, url, name, status, reason, { needsReview: Boolean(opts.needsReview) });
   // run.aborted: the time limit passed, so the capture must write nothing more;
   // run.committed: the good capture is being written (each write bounded), so the limit waits for it;
@@ -552,12 +590,11 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
   // without is a failed capture with its reason, retried later with backoff.
   // A verdict reached while the browser was dying (a page that read as
   // blank because it was closing) is not the site's: nothing is recorded.
-  // `phone`: the verdict is the phone view's alone (judgePhone), after the desktop view showed the site.
-  const reject = async ({ status, reason, needsReview = false, phone = false }) => {
+  const reject = async ({ status, reason, needsReview = false }) => {
     if (await run.watch.lost()) return BROWSER_GONE;
     await closeOwn();
     if (run.watch.now()) return BROWSER_GONE;
-    await fail(status, reason, { needsReview, phone });
+    await fail(status, reason, { needsReview });
     return kept(resultOf(status, reason));
   };
 
@@ -715,46 +752,35 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     const pageText = normalizePageText(seen.text);
     const heroJpg = desktopView.ok ? desktopView.files.crop : await shot(page, { type: "jpeg", quality: 75 });
 
-    // Phone: the same page at 390 wide, horizontal-overflow check, then the
-    // tall phone image, whose top is mobile.jpg.
-    const mpage = await ctx.newPage();
-    const mdoc = trackDocument(mpage);
-    await mpage.setViewportSize({ width: 390, height: 844 });
-    await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
-    await mpage.waitForTimeout(1500);
-    // The phone view starts at the gate, the dialog and the picker too.
-    const mobileSplash = await passSplashGate(mpage).catch(() => null);
-    const mobileModal = await passModal(mpage).catch(() => null);
-    const mobileMode = await passModePicker(mpage).catch(() => null);
-    // The desktop view already waited for content; the phone view gets the same chance.
-    await waitForContent(mpage);
-    // An error status on the phone's own navigation: decided now, before its waits and scroll-through.
-    if (mdoc.status >= 400) {
-      const early = await judgePhone(mpage, mdoc, { splash: mobileSplash, modal: mobileModal, mode: mobileMode });
-      if (early.verdict) return reject(early.verdict);
-    }
-    // Its intro plays again on this load: a short wait for a still first screen.
-    await settleFirstScreen(mpage, { polls: 4, diff: pngDiff }).catch(() => false);
-    const overflow390 = await mpage.evaluate(
-      () => document.documentElement.scrollWidth > 395
-    );
-    const phoneView = await captureViewAsSeen(mpage, "phone");
-    // The desktop view decides; the phone view stops the capture only on an
-    // error status or a bot wall of its own (judgePhone, retried). Anything
-    // else blocked on it is kept as a note in the meta (phoneBlocked).
-    const phone = await judgePhone(mpage, mdoc, { splash: mobileSplash, modal: mobileModal, mode: mobileMode });
-    if (phone.verdict) return reject(phone.verdict);
-    // Facts from the desktop reading (single-page apps included), merged with
-    // the phone view's own reading (projects some sites show only at 390 wide),
-    // plus a capped check of their project and demo links. A phone view that
-    // is blocked (phone.note) or cannot be read adds nothing: the desktop facts stand.
-    const phoneSeen = phone.note ? null : await mpage.evaluate(readRenderedPage).catch(() => null);
-    const mobileJpg = phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 });
-    // Everything stored from both pages is taken. When the home page shows fewer
-    // than 3 projects, the site's own projects page is read (./capture-projects.mjs:
-    // a plain GET of a same-site link, time-limited; a failure adds nothing).
+    // Where the desktop view ended up, before the narrow view may move the page on.
     const homeUrl = page.url();
-    const home = { html: seen.html, text: seen.text, url, finalUrl: homeUrl, phone: phoneSeen ? { html: phoneSeen.html, text: phoneSeen.text, finalUrl: mpage.url() } : null };
+
+    // The narrow view: the same page resized to 390 x 844, never a second
+    // visit (narrowView): overflow check, the tall phone image (its top is
+    // mobile.jpg) and the phone reading. The desktop view decides: a narrow
+    // view that is not the site is recorded as missing (phoneMissing), and a
+    // blocked one as a note (phoneBlocked); neither fails the capture.
+    const narrow = await narrowView(page, doc);
+    const phoneView = narrow.view;
+    const { splash: mobileSplash, modal: mobileModal, mode: mobileMode } = narrow.passes;
+    // Without a phone image, mobile.jpg is the desktop's first screen for a new
+    // site (the pages show it on a phone, never a broken image); a site that has
+    // a capture keeps the mobile.jpg it has (none is written).
+    const mobileJpg = narrow.crop ?? (stored.good ? null : heroJpg);
+    // Back to the desktop's size for the projects page below, which may press a link on this page;
+    // not on a page that loaded itself again (a resize could reload it once more).
+    if (!narrow.navigated) {
+      await page.setViewportSize(WIDE).catch(() => {});
+      await page.evaluate(NEXT_PAINT).catch(() => {});
+    }
+    // Facts from the desktop reading (single-page apps included), merged with
+    // the narrow view's own reading (projects some sites show only at 390 wide),
+    // plus a capped check of their project and demo links. A narrow view that
+    // is missing, blocked or cannot be read adds nothing: the desktop facts stand.
+    // When the home page shows fewer than 3 projects, the site's own projects page
+    // is read (./capture-projects.mjs: a plain GET of a same-site link,
+    // time-limited; a failure adds nothing).
+    const home = { html: seen.html, text: seen.text, url, finalUrl: homeUrl, phone: narrow.seen };
     const projectsUrl = projectsPageFor(homeProjectLinks(home), homeUrl);
     const projectsPage = projectsUrl ? await readProjectsPage(page, projectsUrl).catch(() => null) : null;
     // homeText: the page text as stored, which the nightly link re-check compares own project pages against too.
@@ -766,7 +792,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     if (run.aborted) return "aborted";
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "hero.jpg"), heroJpg);
-    fs.writeFileSync(path.join(dir, "mobile.jpg"), mobileJpg);
+    if (mobileJpg) fs.writeFileSync(path.join(dir, "mobile.jpg"), mobileJpg);
 
     // The stored images: a new version, or nothing when the page looks as it
     // did (pipeline/fullpage.mjs unchanged), so no write and every cached
@@ -780,7 +806,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // The new version goes up first; the old one is deleted only once the
     // row points at the new one (below), so the row never names images that
     // are gone.
-    if (s3 && IMAGES_BUCKET && uploadImages && fullPageComplete(fullPage)) {
+    if (s3 && IMAGES_BUCKET && uploadImages && fullPageStorable(fullPage)) {
       const commands = await import("@aws-sdk/client-s3");
       if (run.aborted) return "aborted";
       // Set before the upload: a version partly up when a PUT fails is removed too (below).
@@ -791,18 +817,14 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
         bucket: IMAGES_BUCKET,
         shotKey: key,
         v: fullPage.v,
-        files: {
-          [IMAGE_FILES.desktop.tall]: desktopView.files.tall,
-          [IMAGE_FILES.desktop.thumb]: desktopView.files.thumb,
-          [IMAGE_FILES.phone.tall]: phoneView.files.tall,
-          [IMAGE_FILES.phone.thumb]: phoneView.files.thumb,
-        },
+        files: versionFiles(desktopView, phoneView),
       });
     }
 
     const meta = {
       ...diagnostics,
-      overflow390,
+      // null when there is no narrow view (phoneMissing).
+      overflow390: narrow.overflow390,
       darkMode,
       motion,
       heroSettled,
@@ -816,8 +838,10 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
       ...(mode || mobileMode ? { mode: { ...(mode ?? {}), mobile: mobileMode ? mobileMode.passed : null } } : {}),
       // One line of what was done to reach the screenshots; only the screen after it is stored.
       ...(actionNote({ splash, modal, mode }) ? { action: actionNote({ splash, modal, mode }) } : {}),
-      // What the blocked rules found on the phone view, when its screen is not the site (judgePhone).
-      ...(phone.note ? { phoneBlocked: phone.note } : {}),
+      // What the blocked rules found on the narrow view, when its screen is not the site (judgeNarrow).
+      ...(narrow.note ? { phoneBlocked: narrow.note } : {}),
+      // Why there is no narrow view, when there is none (narrowView): the desktop capture is stored without it.
+      ...(narrow.missing ? { phoneMissing: narrow.missing } : {}),
       fullPage,
     };
 

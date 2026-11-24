@@ -26,6 +26,7 @@ import sharp from "sharp";
 import { captureSite, keyOf } from "../pipeline/capture.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema } from "../lib/freshness.mjs";
+import { ensureCaptureProblemSchema } from "../lib/capture-problems.mjs";
 
 const SITE = `<main style="font:18px system-ui;max-width:800px;margin:40px auto;padding:0 16px">
 <h1>Jane Doe</h1><h2>Backend engineer</h2>
@@ -87,6 +88,7 @@ before(async () => {
   db = createClient({ url: `file:${path.join(root, "db.sqlite")}` });
   await ensureRosterSchema(db);
   await ensureFreshnessSchema(db);
+  await ensureCaptureProblemSchema(db);
   for (const p of ["/cf-repeat-refresh", "/cf-reload-refresh"]) {
     await db.execute({
       sql: "INSERT INTO portfolios (url, name, status, reason, shot_key, meta, page_text, facts, checked_at, captured_at) VALUES (?, 'Jane Doe', 'live', '', ?, ?, ?, '{}', ?, ?)",
