@@ -190,7 +190,7 @@ test("blog-only: a site that calls itself a blog and has none of a portfolio's o
   const dated = `<p><time>March 3, 2026</time> <a href="/2026/03/03/hello.html">Hello</a></p>`;
   // Title, og:site_name or first h1; project and repository links inside the posts do not protect it.
   for (const [what, html] of [
-    ["title", page(`<h1>Patrick</h1>${dated}<h3>New Project</h3><p><a href="https://github.com/x/y">y</a></p>`, { title: "Patrick's Blog" }).html],
+    ["title", page(`<h1>Patrick</h1>${dated}<article><h3>New Project</h3><p><a href="https://github.com/x/y">y</a></p></article>`, { title: "Patrick's Blog" }).html],
     ["og:site_name", `<html><head><meta property="og:site_name" content="Kevinbkdev Blog"></head><body><h1>Hi</h1>${dated}<h2>🚀 Project</h2></body></html>`],
     ["first h1", page(`<h1>bouwe.io, a blog by Bouwe</h1>${dated}`).html],
     ["kişisel blog", page(`<h1>Devrim</h1>${dated}`, { title: "Devrim Mehmet | Kişisel Blog" }).html],
@@ -227,35 +227,61 @@ test("blog-only: 'blog' counts only as the site's name, as the six real blogs us
     "Blog",
     "The blog of Ana Ruiz",
     "Bitácora de Ana",
+    "Ana's blog about Rust",
+    "A blog about Rust and maps",
+    "Ana Ruiz-Blog",
+    // The portfolio words count only in the part that says blog.
+    "Ana's Blog | Thoughts on work and life",
   ]) {
     assert.equal(blogOnly(page(`<h1>Hello</h1>${dated}`, { title: name }))?.flag, "blog-only", name);
   }
-  // A blog mentioned, not named.
-  for (const name of ["Ana Ruiz - Code & Blog", "Ana Ruiz | Design and blog", "Hi, I'm Ana. I build things and blog about them", "Ana writes a blog about Rust", "Blogging tips by Ana"]) {
+  // A blog mentioned, not named, or named beside the work.
+  for (const name of ["Ana Ruiz - Code & Blog", "Ana Ruiz | Design and blog", "Hi, I'm Ana. I build things and blog about them", "Ana writes a blog about Rust", "Blogging tips by Ana", "Ana's portfolio blog"]) {
     assert.equal(blogOnly(page(`<h1>Hello</h1>${dated}`, { title: name })), null, name);
   }
 });
 
-test("blog-only: project links under the person's own section protect a page; links inside posts do not", () => {
-  // (A) A first heading that mentions blogging, projects under "Things I've made", menu Home/About/Blog.
+// Two GitHub repositories and a live demo, shown outside any post.
+const WORK_LINKS = `<ul><li><a href="https://github.com/ana/tidy">Tidy</a></li><li><a href="https://github.com/ana/plot">Plot</a></li>
+  <li><a href="https://plot-demo.example.com">Live demo</a></li></ul>`;
+
+test("blog-only: project links shown outside the posts protect a page, whatever the heading above them says", () => {
+  // The reviewer's two cases.
   const a = page(`<nav><a href="/">Home</a><a href="/about">About</a><a href="/blog">Blog</a></nav>
-    <h1>Hi, I'm Ana. I build things and blog about them</h1>
-    <h2>Things I've made</h2><ul><li><a href="https://github.com/ana/tidy">Tidy</a></li><li><a href="https://github.com/ana/plot">Plot</a></li>
-    <li><a href="https://plot-demo.example.com">Live demo</a></li></ul>
-    <h2>Latest posts</h2>${posts(6)}`);
+    <h1>Hi, I'm Ana. I build things and blog about them</h1><h2>Things I've made</h2>${WORK_LINKS}<h2>Latest posts</h2>${posts(6)}`);
   assert.equal(blogOnly(a), null);
   assert.deepEqual(flagNames(a), []);
-  // (B) A title with "Code & Blog", projects under "Apps I shipped".
-  const b = page(`<h1>Ana Ruiz</h1><h2>Apps I shipped</h2><p><a href="https://github.com/ana/tidy">Tidy</a> <a href="https://tidy.example.com">Tidy, live</a></p>
-    <h2>Writing</h2>${posts(6)}`, { title: "Ana Ruiz - Code & Blog" });
+  const b = page(`<h1>Ana Ruiz</h1><h2>Apps I shipped</h2>${WORK_LINKS}<h2>Writing</h2>${posts(6)}`, { title: "Ana Ruiz - Code & Blog" });
   assert.equal(blogOnly(b), null);
   assert.deepEqual(flagNames(b), []);
-  // The same links inside a pure blog's posts protect nothing: a post's heading does not say "I made".
-  const inPosts = page(`<h1>Patrick</h1><article><h2>New Project</h2><time>March 3, 2026</time><p>I put <a href="https://github.com/x/y">y</a> online.</p></article>`, { title: "Patrick's Blog" });
-  assert.equal(blogOnly(inPosts)?.flag, "blog-only");
-  // A post titled with "I made" is a sentence, not a section of the person's work.
-  const sentence = page(`<h1>Patrick</h1><article><h2>I made the web better today, you can too</h2><time>March 3, 2026</time><p><a href="https://github.com/x/y">y</a></p></article>`, { title: "Patrick's Blog" });
-  assert.equal(blogOnly(sentence)?.flag, "blog-only");
+  // Sites named as blogs, with their work shown outside the posts under any heading, or none.
+  for (const [title, heading] of [
+    ["Ana's Blog", "<h2>Recent builds</h2>"],
+    ["Ana's Blog", "<h2>Things I make</h2>"],
+    ["Ana's Blog", "<h2>Side Project</h2>"],
+    ["Ana Ruiz | Dev Blog", ""],
+  ]) {
+    const s = page(`<h1>Ana</h1>${heading}${WORK_LINKS}<h2>Posts</h2>${posts(6)}`, { title });
+    assert.equal(blogOnly(s), null, `${title} ${heading}`);
+  }
+});
+
+test("blog-only: project links inside posts protect nothing", () => {
+  // A post titled "What I built this week", its repositories inside the <article>.
+  const built = page(`<h1>Ana</h1><article><h2>What I built this week</h2><time>March 3, 2026</time>${WORK_LINKS}</article>${posts(4)}`, { title: "Ana's Blog" });
+  assert.equal(blogOnly(built)?.flag, "blog-only");
+  // A sidebar category list titled "Things I made": links to categories, no project links.
+  const sidebar = page(`<h1>Ana</h1>${posts(6)}<aside><h3>Things I made</h3><ul><li><a href="/category/crafts">Crafts</a></li><li><a href="/category/code">Code</a></li></ul></aside>`, { title: "Ana's Blog" });
+  assert.equal(blogOnly(sidebar)?.flag, "blog-only");
+  // A post category "Work" whose only project links are inside posts.
+  const work = page(`<h1>Ana</h1><h2>Work</h2><article><h3>Shipping v2</h3><time>May 2, 2026</time><p><a href="https://github.com/ana/tidy">Tidy</a></p></article>${posts(4)}`, { title: "Ana's Blog" });
+  assert.equal(blogOnly(work)?.flag, "blog-only");
+  // In a card with a date or a post link but no <article>.
+  const card = page(`<h1>Ana</h1><ul><li><a href="/blog/tidy-v2">Tidy v2 is out</a> March 4, 2026. Code: <a href="https://github.com/ana/tidy">Tidy</a></li></ul>`, { title: "Ana's Blog" });
+  assert.equal(blogOnly(card)?.flag, "blog-only");
+  // A post container marked by its class.
+  const marked = page(`<h1>Ana</h1><time>March 3, 2026</time><div class="post-excerpt"><p>${"Some words about the thing. ".repeat(10)}<a href="https://github.com/ana/tidy">Tidy</a></p></div>`, { title: "Ana's Blog" });
+  assert.equal(blogOnly(marked)?.flag, "blog-only");
 });
 
 test("blog-only: 'read more' links alone are not posts (testimonials have them)", () => {

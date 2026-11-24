@@ -378,30 +378,126 @@ const RESUME_HEADING = /\b(?:experience|work history|employment|career|resume|r�
 // A site that calls itself a blog, in the languages the list has; and the words that make it more than one.
 const BLOG_WORD = String.raw`(?:blog|weblog|dev ?blog|tech ?blog|digital garden|bit[aá]cora|ki[şs]isel blog)`;
 // The blog word as the site's NAME, in one part of a name split at "|", "-", ":", "," and the like: "Patrick's
-// Blog", "Kevinbkdev Blog", "Kişisel Blog", "a blog by Bouwe", "blog of Ana", "Blog" alone. Never "Code & Blog",
-// "Portfolio and blog" or "I build things and blog about them".
-const BLOG_NAME_OWNED = new RegExp(String.raw`^(?:.+['’]s\s+|my\s+|the\s+)?${BLOG_WORD}$`, "iu");
+// Blog", "Ana's blog about Rust", "A blog about Rust", "Kevinbkdev Blog", "Kişisel Blog", "a blog by Bouwe",
+// "blog of Ana", "Ana Ruiz-Blog", "Blog" alone. Never "Code & Blog", "Portfolio and blog" or "I build things and
+// blog about them".
+const BLOG_NAME_OWNED = new RegExp(String.raw`^(?:.+['’]s\s+|my\s+|the\s+|a\s+)?${BLOG_WORD}(?:\s+(?:about|on|for)\s+\S.*)?$`, "iu");
 const BLOG_NAME_BY = new RegExp(String.raw`^(?:a\s+|the\s+)?${BLOG_WORD}\s+(?:by|of|de|von|van|di)\s+\S`, "iu");
 const BLOG_NAME_END = new RegExp(String.raw`(?:^|\s)(\S+)\s+${BLOG_WORD}$`, "iu");
-/** Whether a name the site gives itself (title, og:site_name, first h1) names it as a blog. */
-function namesItselfBlog(name) {
-  return name.split(/\s*[|·:,/\p{Pd}]\s+|\s+[|·:/\p{Pd}]\s*/u).some((part) => {
+const NOT_A_NAME_BEFORE = /^(?:&|and|und|et|e|y|en|\+|or)$/i;
+/**
+ * The part of a name the site gives itself (title, og:site_name, first h1) that names it as a blog, or null.
+ * A dash glued to the blog word ("Ana Ruiz-Blog") splits the name there too.
+ */
+function blogNamePart(name) {
+  const parts = String(name)
+    .replace(new RegExp(String.raw`(\S)\p{Pd}(${BLOG_WORD})\b`, "giu"), "$1 | $2")
+    .split(/\s*[|·:,/\p{Pd}]\s+|\s+[|·:/\p{Pd}]\s*/u);
+  for (const part of parts) {
     const s = part.trim().replace(/[.!]+$/, "");
-    if (BLOG_NAME_OWNED.test(s) || BLOG_NAME_BY.test(s)) return true;
+    if (BLOG_NAME_OWNED.test(s) || BLOG_NAME_BY.test(s)) return s;
     const end = s.match(BLOG_NAME_END);
-    return Boolean(end) && !/^(?:&|and|und|et|e|y|en|\+|or)$/i.test(end[1]);
-  });
+    if (end && !NOT_A_NAME_BEFORE.test(end[1])) return s;
+  }
+  return null;
 }
-// A heading for work the person made, in their own words ("Things I've made", "Apps I shipped", "What I built"):
-// project links under such a heading, or a plural projects section, protect a page that calls itself a blog. A
-// post's singular "New Project" is not one.
-const OWN_MAKING = /\b(?:i|i've|i’ve|i have|we|we've)\s+(?:made|built|build|shipped|ship|created|designed|launched|crafted|coded|wrote|written|released)\b|\b(?:made|built|shipped|created) by me\b/i;
+
+// ---------- project links outside posts ----------
+
+const VOID_TAG = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+// Containers a card can be: the smallest one around a link that holds more than the link itself.
+const CARD_TAG = new Set(["li", "div", "article", "section", "aside", "tr", "td", "dd", "figure", "p", "main"]);
+const CHROME_TAG = new Set(["nav", "header", "footer"]);
+/** The most of a card read for a date or a post link; a bigger block is not one card. */
+const CARD_MAX = 4000;
+/** Links read by the post test. */
+const POST_TEST_LINKS = 3000;
+
+/**
+ * The project links a page shows (code repositories, live demos on project hosting or labelled "live" or "demo",
+ * the site's own project pages), each with whether it sits inside a post: inside an <article>, or in the same
+ * card as a date or a link to a post ("/blog/x"). Links in the page's nav, header and footer are left out. One
+ * linear pass over the tags: [{ href, inPost }].
+ */
+export function projectLinkPlaces(site) {
+  const p = readSite(site);
+  const html = p.html;
+  const self = hostOf(p.finalUrl);
+  const stack = [];
+  const anchors = [];
+  for (const m of html.matchAll(/<(\/?)([a-zA-Z][a-zA-Z0-9-]*)\b([^>]{0,2000})>/g)) {
+    const tag = m[2].toLowerCase();
+    if (m[1]) {
+      const i = stack.findLastIndex((e) => e.tag === tag);
+      if (i >= 0) {
+        for (const e of stack.slice(i)) e.end = m.index;
+        stack.length = i;
+      }
+      if (tag === "a" && anchors.length && anchors.at(-1).textEnd == null) anchors.at(-1).textEnd = m.index;
+      continue;
+    }
+    if (tag === "a" && anchors.length < POST_TEST_LINKS) {
+      const href = m[3].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const raw = href ? (href[1] ?? href[2] ?? href[3]) : "";
+      let abs = "";
+      try {
+        abs = raw ? new URL(decodeEntities(raw), p.finalUrl || undefined).href : "";
+      } catch {}
+      anchors.push({ href: abs, start: m.index, textStart: m.index + m[0].length, ancestors: stack.slice() });
+    }
+    if (!VOID_TAG.has(tag) && !m[3].trimEnd().endsWith("/") && tag !== "script" && tag !== "style") {
+      const cls = m[3].match(/\b(?:class|id)\s*=\s*["']([^"']{0,300})["']/gi)?.join(" ") ?? "";
+      stack.push({ tag, start: m.index, end: null, post: POST_CONTAINER.test(cls) });
+    }
+  }
+  const out = [];
+  for (const a of anchors) {
+    if (!a.href || a.ancestors.some((e) => CHROME_TAG.has(e.tag))) continue;
+    const h = hostOf(a.href);
+    const label = squash(stripTags(html.slice(a.textStart, a.textEnd ?? a.textStart + 200)));
+    const own = h === self && OWN_PROJECT_PATH.test(pathOf(a.href)) && pathOf(a.href) !== pathOf(p.finalUrl);
+    const demo = h && h !== self && !SOCIAL_HOST.test(h) && (PROJECT_HOSTING.test(h) || /\b(?:live|demo|visit site|launch)\b/i.test(label));
+    if (!REPO_URL.test(a.href) && !own && !demo) continue;
+    out.push({ href: a.href, inPost: inPost(html, a, label, self) });
+  }
+  return out;
+}
+
+// A container a blog engine marks as a post by its class or id: "post", "post-excerpt", "entry", "hentry".
+const POST_CONTAINER = /(?:class|id)\s*=\s*["'](?:[^"']*[\s_-])?(?:post|posts|entry|entries|excerpt|hentry|blog-post|post-content|post-body|article-body)(?:[\s_-][^"']*)?["']/i;
+
+/**
+ * Whether a link sits inside a post: an <article> or a container marked as a post around it, or the card around
+ * it carries a date or a post link.
+ */
+function inPost(html, a, label, self) {
+  if (a.ancestors.some((e) => e.tag === "article" || e.post)) return true;
+  for (let i = a.ancestors.length - 1; i >= 0; i--) {
+    const e = a.ancestors[i];
+    if (!CARD_TAG.has(e.tag) || e.end == null) continue;
+    const inner = html.slice(e.start, e.end);
+    const text = squash(stripTags(inner));
+    // The smallest container that holds more than the link itself is its card.
+    if (text.length < label.length + 20 && (inner.match(/<a\b/gi) ?? []).length < 2) continue;
+    // A block too big to be one card says nothing: the link is not taken to be in a post.
+    if (inner.length > CARD_MAX) return false;
+    if (allMatches(text, DATE_RE, 1).length) return true;
+    for (const m of inner.matchAll(/\bhref\s*=\s*["']?([^"'\s>]+)/gi)) {
+      try {
+        const u = new URL(decodeEntities(m[1]), `https://${self}/`);
+        if (hostOf(u.href) === self && (POST_PATH.test(pathOf(u.href)) || /\/blog\//i.test(u.pathname))) return true;
+      } catch {}
+    }
+    return false;
+  }
+  return false;
+}
+
 const SELF_PORTFOLIO = /\b(?:portf[oó]lio|portafolio|projects?|works?|case stud(?:y|ies)|resume|résumé|cv)\b/i;
 // A heading that names projects as a section: the plural, or the projects family's section words.
 const PROJECTS_SECTION = /\b(?:projects|portfolio|works|(?:my|selected|recent|featured|side|client|our|personal|open[- ]source) work|case studies|things i(?:'ve| have)? built|projets|proyectos|projekte|projetos|progetti|projecten|projeler|projelerim|r[eé]alisations|trabajos|trabalhos)\b/i;
-// A heading that is a section's whole title: "Work", "Open source", "Lab" (not "🚀 Project" or "New Project").
-const SECTION_WORD = /^[\W\d_]*(?:work|open[- ]?source|lab|labs|experiments|showcase|portfolio)[\W_]*$/iu;
-const isProjectsSection = (h) => PROJECTS_SECTION.test(h.words) || SECTION_WORD.test(h.words);
+// A bare section heading ("Work", "Open source") no longer protects a page that calls itself a blog on its own: a
+// blog's post category is titled the same. Project links shown outside the posts under it do.
 /** What the site calls itself: its <title>, og:site_name and first h1. */
 function selfNames(p) {
   const title = p.html.match(/<title\b[^>]*>([\s\S]{0,500}?)<\/title>/i)?.[1] ?? "";
@@ -442,17 +538,17 @@ export function blogFacts(site) {
   const what = dates.length >= times.length ? plural(dates.length, "dated post") : plural(times.length, "post", "posts with a reading time");
   const blogLink = p.links.map((l) => squash(l.text)).find((t) => BLOG_LINK.test(t)) ?? null;
   const base = { posts, what, snippets: [...dates.slice(0, 3), ...times.slice(0, 2)], blogLink, hasBlog: posts >= BLOG_MIN_POSTS || Boolean(blogLink) };
-  // The site calls itself a blog (its title, og:site_name or first h1) and has none of a portfolio's own parts:
-  // no projects menu entry, no links to its own project pages, no heading that names projects in the plural or
-  // as a section, no resume heading. Project or repository links inside the posts do not protect it, and a
-  // singular "New Project" heading is a post's, not a section.
-  const calls = selfNames(p).find((n) => namesItselfBlog(n) && !SELF_PORTFOLIO.test(n));
-  // Project links shown on the page under a short section title the person wrote for their work ("Things I've
-  // made", "Apps I shipped") protect it. Links inside posts do not: a post's title is a sentence ("I made the web
-  // better today, you can too", www.patrickhyatt.com), not a section title of five words or fewer.
-  const ownWork = p.headings.some((h) => h.level >= 2 && OWN_MAKING.test(h.words) && h.words.split(/\s+/).length <= 5) && p.projects.shown + p.projects.repos > 0;
-  if (calls && dated >= 1 && !ownWork && !p.projects.nav.length && !p.projects.ownPages.length && !p.headings.some(isProjectsSection) && !p.headings.some(isResumeHeading)) {
-    return { ...base, hasBlog: true, verdict: "blog-only", calls };
+  // The site's name says blog (its title, og:site_name or first h1), the portfolio words are not in that same part
+  // of the name, and it has none of a portfolio's own parts: no projects menu entry, no project link shown outside
+  // its posts (a repository, a live demo, its own project page), no plural projects heading, no resume heading.
+  // Whatever the headings say, project links inside posts (in an <article>, or in a card with a date or a post
+  // link) never protect it. When the structure is unclear a link counts as outside the posts: missing a blog is
+  // the cheaper mistake.
+  const calls = selfNames(p)
+    .map(blogNamePart)
+    .find((part) => part && !SELF_PORTFOLIO.test(part));
+  if (calls && dated >= 1 && !p.projects.nav.length && !p.headings.some((h) => PROJECTS_SECTION.test(h.words)) && !p.headings.some(isResumeHeading)) {
+    if (!projectLinkPlaces(site).some((l) => !l.inPost)) return { ...base, hasBlog: true, verdict: "blog-only", calls };
   }
   if (posts < BLOG_MIN_POSTS) {
     const why = !base.hasBlog ? "no blog" : `a "${blogLink}" link, but fewer than ${BLOG_MIN_POSTS} dated posts on this page: the posts live elsewhere`;
