@@ -135,18 +135,31 @@ export const SPIKE_NEW = 100;
 export const SPIKE_CLASS = 50;
 export const SPIKE_WINDOW_MS = 2 * DAY;
 /**
- * DEFAULT: the freeze for weak verdicts (third review of #292). A fault in our
- * reader that keeps going (blank renders, 24 new a day for a week) never makes
- * a 48-hour spike, and weak verdicts wait 7 days anyway, so they are counted
- * over SPIKE_WEAK_WINDOW_MS (the 7-day confirmation and a day): more than
- * SPIKE_WEAK new weak first failures freezes them. The freeze lifts only when
- * fewer than SPIKE_WEAK of its held sites still fail (the reader fixed, or the
- * sites recovered), never on a timer; the one owner alert stands until then.
- * 8 genuinely blank sites in a week stay under it and drain at
- * HIDE_WEAK_PER_DAY, with no alert.
+ * DEFAULT: the freeze for weak verdicts, per kind (reasonClass; third and
+ * fourth reviews of #292). A fault in our reader that keeps going (blank
+ * renders, 24 new a day for a week) never makes a 48-hour spike, and weak
+ * verdicts wait 7 days anyway, so they are counted over SPIKE_WEAK_WINDOW_MS
+ * (the 7-day confirmation and a day): more than SPIKE_WEAK new weak first
+ * failures of one kind freezes that kind only, so a cluster of blank renders
+ * leaves duplicates and placeholders moving. A frozen kind lifts when fewer
+ * than SPIKE_WEAK of its held sites still fail (the reader fixed, or the sites
+ * recovered); a site held WEAK_HOLD_MAX_MS is released into the weak drain
+ * anyway (sites that really are blank forever), so no freeze holds forever.
+ * The one owner alert stands while a kind is frozen and says so. 8 genuinely
+ * blank sites in a week stay under it and drain at HIDE_WEAK_PER_DAY.
  */
 export const SPIKE_WEAK = 50;
 export const SPIKE_WEAK_WINDOW_MS = 8 * DAY;
+export const WEAK_HOLD_MAX_MS = 14 * DAY;
+/**
+ * DEFAULT: the alert for a slow leak (fourth review of #292): a weak fault
+ * under the freeze (6 new blank renders a day, 48 in 8 days) would hide real
+ * portfolios at 5 a day with nothing said. More than WEAK_HIDES_ALERT weak
+ * verdicts hidden within WEAK_HIDES_WINDOW_MS raises an owner alert, and holds
+ * nothing. 8 genuinely blank sites in a week stay under it.
+ */
+export const WEAK_HIDES_ALERT = 15;
+export const WEAK_HIDES_WINDOW_MS = 7 * DAY;
 /** Whether a failure reason is weak evidence (WEAK_VERDICT). */
 export const isWeakVerdict = (reason) => WEAK_VERDICT.test(String(reason ?? ""));
 /** The kind of a failure reason, for the spike's per-kind count. */
@@ -300,6 +313,8 @@ export function poolOf(row) {
     // stage 2 past its confirming check: "drain" (the day's allowance is used) or "freeze" (a spike).
     firstAt: str(row.pool_first_at) ?? str(row.pool_started_at),
     held: str(row.pool_held),
+    // When a weak freeze first held it, kept while it stays held (WEAK_HOLD_MAX_MS).
+    heldAt: str(row.pool_held_at),
   };
 }
 

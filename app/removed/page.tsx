@@ -59,9 +59,9 @@ export default function RemovedPage() {
             </p>
             <p>
               A site taken off because it was down or gone is checked again at least
-              once a month. When it works again and still shows the same person, it
-              comes back as a new site and starts fresh: its old votes, rank and
-              grade do not come with it.
+              once a month. When it works again and still shows the same person (their
+              name, or clearly a portfolio), it comes back as a new site and starts
+              fresh: its old votes, rank and grade do not come with it.
             </p>
             <p>
               Was your site removed by mistake?{" "}
@@ -74,8 +74,8 @@ export default function RemovedPage() {
                 Submit it again
               </a>{" "}
               and a person will look at it. A site taken off for being down or gone
-              needs nothing: it comes back by itself once one of those checks
-              passes.
+              usually needs nothing: it comes back by itself once one of those
+              checks passes.
             </p>
           </div>
         </div>

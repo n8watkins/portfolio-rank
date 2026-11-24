@@ -377,30 +377,52 @@ async function blankFault({ perDay, days, until, fixed = () => false, spread = n
   const { db } = await setup([], 0);
   for (const s of sites) await site(db, s.url, { rubric: answer(true) });
   let day = 0;
-  const blankNow = (u) => {
+  // A site's failure now: "blank" (the default) or "social" (it redirects to a LinkedIn profile), or null.
+  const failing = (u) => {
     const s = sites.find((x) => u.startsWith(x.url));
-    return Boolean(s && s.day <= day && !fixed(s.url, day));
+    return s && s.day <= day && !fixed(s.url, day) ? (s.kind ?? "blank") : null;
   };
-  const fetchImpl = async (u) => response(200, blankNow(u) ? BLANK_HTML : PORTFOLIO_HTML, u);
-  const render = async (u) => (blankNow(u) ? { status: 200, finalUrl: u, title: "", text: "", media: false, html: BLANK_HTML } : goodPage(u));
+  const LINKEDIN = "https://www.linkedin.com/in/someone";
+  const fetchImpl = async (u) => {
+    const f = failing(u);
+    return f === "social" ? response(200, PORTFOLIO_HTML, LINKEDIN) : response(200, f ? BLANK_HTML : PORTFOLIO_HTML, u);
+  };
+  const render = async (u) => {
+    const f = failing(u);
+    if (f === "social") return { ...goodPage(u), finalUrl: LINKEDIN };
+    return f ? { status: 200, finalUrl: u, title: "", text: "", media: false, html: BLANK_HTML } : goodPage(u);
+  };
   const feed = sites.map((s) => ({ url: s.url, name: "Ann Lee" }));
   const check = (t) => health.runHealthCheck({ db, feed, fetchImpl, render, now: at(t), scheduled: "check", alerts: false, doorLimit: 0, log: quiet });
   const log = [];
+  const hiddenOf = async (prefix) => Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM portfolios WHERE health = 'down' AND url LIKE ?", args: [`${prefix}%`] })).rows[0].n);
   for (day = 0; day <= until; day++) {
     const s = await check(T0 + day * D);
-    await check(T0 + day * D + H);
-    log.push({ day, hidden: await hiddenCount(db), alert: await spikeAlert(db), weakFrozen: s.pace.weakFrozen });
+    const s2 = await check(T0 + day * D + H);
+    const alerts = (await activeAlerts(db)).map((a) => a.key);
+    log.push({
+      day,
+      hidden: await hiddenCount(db),
+      hiddenSocial: await hiddenOf("https://social-"),
+      alert: alerts.includes(health.SPIKE_ALERT_KEY),
+      leak: alerts.includes(health.WEAK_LEAK_ALERT_KEY),
+      frozenKinds: s2.pace.weakFrozenKinds.join(",") || s.pace.weakFrozenKinds.join(","),
+      held: s2.pace.heldWeak,
+      released: s.pace.expired.length + s2.pace.expired.length,
+    });
   }
   return { db, log, sites };
 }
+/** The day-by-day log of a simulation, for the report. */
+const printLog = (name, log) => console.log(`${name}\n${log.map((l) => `  day ${l.day}: hidden ${l.hidden}, held ${l.held}, released ${l.released}, frozen [${l.frozenKinds}], spike alert ${l.alert}, leak alert ${l.leak}`).join("\n")}`);
 
 for (const perDay of [24, 26, 40]) {
-  test(`a weak fault that keeps going: blank renders for ${perDay} new real sites a day for a week, never fixed, hide none and alert until it ends`, async () => {
-    const { log } = await blankFault({ perDay, days: 7, until: 24 });
+  test(`a weak fault that keeps going: blank renders for ${perDay} new real sites a day for a week, never fixed, hide none for two weeks of holding and alert throughout`, async () => {
+    const { log } = await blankFault({ perDay, days: 7, until: 21 });
     assert.deepEqual(
       log.filter((l) => l.hidden > 0).map((l) => l.day),
       [],
-      "no real site hidden on any day",
+      "no real site hidden through day 21 (held from day 8; the 14-day release starts on day 22)",
     );
     // The alert stands from the day the count passes the limit to the end, never cleared while it lasts.
     const first = log.findIndex((l) => l.alert);
@@ -430,7 +452,40 @@ test("8 genuinely blank sites over a week are still hidden, with no alert", asyn
   const sites = Array.from({ length: 8 }, (_, i) => ({ url: `https://really-blank-${i}.example`, day: 1 + Math.floor((i * 7) / 8) }));
   const { log } = await blankFault({ spread: sites, until: 16 });
   assert.equal(log[16].hidden, 8);
-  assert.ok(log.every((l) => !l.alert));
+  assert.ok(log.every((l) => !l.alert && !l.leak), "neither the freeze alert nor the leak alert");
+});
+
+test("the slow leak (fourth review): blank renders for 6 new real sites a day for 30 days never freeze, and the leak alert says so", async () => {
+  const { log } = await blankFault({ perDay: 6, days: 30, until: 30 });
+  printLog("6 new blank a day for 30 days", log);
+  assert.ok(log.every((l) => !l.alert), "6 x 8 = 48: under the freeze, nothing is held");
+  const first = log.findIndex((l) => l.leak);
+  assert.ok(first > 0, "the leak alert is raised");
+  assert.ok(log[first].hidden > pool.WEAK_HIDES_ALERT && log[first].hidden <= pool.WEAK_HIDES_ALERT + pool.HIDE_WEAK_PER_DAY, `on the day the week's weak hides pass ${pool.WEAK_HIDES_ALERT}`);
+  assert.ok(log.slice(first).every((l) => l.leak), "and stays up while the leak goes on");
+});
+
+test("a weak freeze never holds forever: 60 sites blank for good are released after 14 days held and hidden 5 a day", async () => {
+  const sites = Array.from({ length: 60 }, (_, i) => ({ url: `https://forever-${String(i).padStart(2, "0")}.example`, day: 1 }));
+  const { log } = await blankFault({ spread: sites, until: 36 });
+  printLog("60 blank for good", log);
+  assert.equal(log[8].held, 60, "held from day 8");
+  assert.equal(log[21].hidden, 0, "none hidden while held");
+  assert.ok(log[21].alert, "the alert stands while they are held");
+  assert.equal(log[22].released, 60, "released after 14 days held");
+  for (let d = 22; d <= 33; d++) assert.equal(log[d].hidden, Math.min(60, (d - 21) * pool.HIDE_WEAK_PER_DAY), `day ${d}: 5 a day`);
+  assert.equal(log[33].hidden, 60);
+  assert.ok(!log[23].alert, "the kind lifts once its held sites are released");
+});
+
+test("a weak freeze is per kind: a cluster of blank renders leaves another kind's verdicts moving", async () => {
+  const blank = Array.from({ length: 60 }, (_, i) => ({ url: `https://cluster-${String(i).padStart(2, "0")}.example`, day: 1 }));
+  const social = Array.from({ length: 3 }, (_, i) => ({ url: `https://social-${i}.example`, day: 1, kind: "social" }));
+  const { log, db } = await blankFault({ spread: [...blank, ...social], until: 10 });
+  assert.match(String(await col(db, social[0].url, "health_reason")), /^redirects to linkedin\.com, not a portfolio/);
+  assert.equal(log[8].frozenKinds, "blank", "only the blank kind is frozen");
+  assert.equal(log[8].hiddenSocial, 3, "the social redirects are hidden on their own confirming day");
+  assert.equal(log[8].hidden, 3, "and none of the blank cluster");
 });
 
 test("release night: the old rule's failing rows restart with their first failure kept, so 60 of one kind trip no freeze; a dry run counts them first", async () => {
@@ -450,6 +505,7 @@ test("release night: the old rule's failing rows restart with their first failur
   const dry = await check(T0, { dryRun: true });
   assert.equal(dry.restarted.length, 60);
   assert.match(health.healthSummary(dry), /### Restarted on the ladder \(60\)[\s\S]*http-error 60/);
+  assert.match(health.healthSummary(dry), /Inside the spike windows: 0 first failed within 48 hours \(0 of them strong evidence[^)]*\), 0 within 8 days/);
   assert.equal(await col(db, many[0], "health_first_fail_at"), old, "the dry run wrote nothing");
   const s0 = await check(T0);
   assert.equal(s0.restarted.length, 60);
@@ -459,6 +515,16 @@ test("release night: the old rule's failing rows restart with their first failur
   assert.equal(s.pace.frozen, false, "not a spike: none of them is a new failure");
   assert.equal(await spikeAlert(db), false);
   assert.equal(await hiddenCount(db), pool.HIDE_PER_DAY, "the ordinary drain");
+  // Rows that started failing recently are counted inside the windows, by evidence.
+  const mixed = {
+    ...dry,
+    restarted: [
+      { kind: "http-error", weak: false, in48h: true, in8d: true },
+      { kind: "blank", weak: true, in48h: false, in8d: true },
+      { kind: "blank", weak: true, in48h: false, in8d: false },
+    ],
+  };
+  assert.match(health.healthSummary(mixed), /Inside the spike windows: 1 first failed within 48 hours \(1 of them strong evidence, counted by the 48-hour spike\), 2 within 8 days \(1 of them weak verdicts, counted by the 8-day weak freeze\)/);
 });
 
 test("the reading-fixes branch's verdicts: not the site and the browser's error page are weak (a week), parking and gambling forwards keep the next day", () => {

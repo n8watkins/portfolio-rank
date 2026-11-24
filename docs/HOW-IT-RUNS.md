@@ -284,8 +284,10 @@ Nothing at any step writes a row to your review page.
    A spike is different: when more than 100 sites (about 5% of the list), or more than 50 for one kind of reason, start failing within 48 hours, the fault is most likely ours or a host-wide outage, so none of them is hidden while it lasts and you get one alert.
    It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day) before it is hidden, at the same 20 a day.
    Weak verdicts are counted over 8 days instead: a fault in our reader can go on for a week at a steady pace.
-   More than 50 new ones in 8 days holds every weak verdict, still shown and checked daily, with one alert; it lifts only when fewer than 50 of the held sites still fail, never on a timer, and each still failing then needs a full week again.
-   On release night, the sites already failing under the old rule keep their first failure date, so they never look like a spike; `node pipeline/health-check.mjs --dry-run` counts them beforehand ("Restarted on the ladder").
+   More than 50 new ones of one kind (blank pages, say) in 8 days holds that kind's weak verdicts, still shown and checked daily, with one alert; other kinds keep moving.
+   The hold lifts when fewer than 50 of its held sites still fail, and each still failing then needs a full week again; a site held 14 days and still failing is released anyway and hidden at 5 a day, so a hold never lasts forever.
+   A slower leak gets an alert without a hold: more than 15 sites hidden on weak evidence in a week.
+   On release night, the sites already failing under the old rule keep their first failure date, so only those that really started failing recently count toward a spike; `node pipeline/health-check.mjs --dry-run` counts them beforehand ("Restarted on the ladder"), with how many fall inside the 48-hour and 8-day windows.
 4. **Keep re-checking** (hourly, when due): daily for the first 7 days, weekly to day 30, then monthly.
    Every night one plain request also goes to each hidden site; if it answers with words, its full re-check comes within the hour.
    A check that passes brings the site straight back, exactly as it was, tier included.
