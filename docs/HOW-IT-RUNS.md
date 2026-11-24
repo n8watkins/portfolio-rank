@@ -305,13 +305,13 @@ The plan is that a flagged site goes to your review queue, listed meanwhile.
 | `filler-text` | Template filler in the text: "Lorem ipsum", "your name here". |
 | `placeholder-page` | A short page with no projects that says it is coming soon, under construction or a work in progress. |
 | `moved-notice` | A short page with no projects saying the site has moved to another site. |
-| `blog-only` | Dated posts and nothing else the code can see. A portfolio with a blog is never flagged: any project evidence keeps it quiet (a projects section, heading or link, a "Projects" or "Work" menu entry or button, links to the site's own project pages, case studies), and so does a resume or work history. |
+| `blog-only` | Only a blog, found two ways. Dated posts and nothing else the code can see: any project evidence keeps the page quiet (a projects section, heading or link, a "Projects" or "Work" menu entry or button, links to the site's own project pages, case studies), and so does a resume or work history. Or the site calls itself a blog in its title, site name or first heading ("Patrick's Blog", "Kişisel Blog") and has no projects menu entry, no links to its own project pages, no heading that names projects as a section and no resume heading; project links inside its posts do not count. A title such as "Portfolio & Blog" is never flagged, and having a blog is never a negative. |
 | `link-card` | A name, a line and a handful of profile or email links, nothing else: a contact card. You have not ruled on these yet. |
 | `company-voice` | The page speaks as "we" far more than "I" and sells services or names a team or jobs. A freelancer or a one-person studio is protected; a page naming two people says so. |
 | `sells-teaching` | Coaching, courses, speaking or a book for sale, and no projects. |
-| `product-page` | One product's or tool's own site: pricing, sign up, documentation, terms, and no person behind it. A one-person business is protected. |
+| `product-page` | One product's or tool's own site: pricing, sign up, documentation, terms, and no person behind it. A one-person business is protected, and so is a page that speaks as "I" or names its one-word domain as a person ("I'm Kunal" on kunal.dev). |
 | `readme-page` | A code repository's README rendered as the page: install steps, commands, the folder layout. |
-| `hidden-spam-links` | Gambling, adult or pharmacy links hidden in an invisible block: the site appears to have been compromised. |
+| `hidden-spam-links` | Gambling, adult or pharmacy links to two or more other sites, hidden in a block that can never be opened (zero size, zero font size, pushed far off screen): the site appears to have been compromised. Hidden tabs and menus, and links to project hosting such as vercel.app or github.io, never count. |
 | `forwards-elsewhere` | The address forwards to another domain without the person's name or handle: the health check's own "moved" verdict, given a flag's name. |
 | `sub-page` | The listed address is a sub-page that is not itself a portfolio (a blog category page); says in plain words what the site's home page is. A github.io project site, a `/portfolio` or `/portfolio.html` path, a university's `/~name/` page or any sub-page with projects is never flagged, and a code host's or a university's home page is never judged. |
 

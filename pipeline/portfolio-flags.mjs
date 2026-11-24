@@ -375,6 +375,21 @@ const POST_SLUG = /^\/[a-z0-9]+(?:-[a-z0-9]+){4,}$/;
 // Read only in a section title of up to four words (isResumeHeading): "Experience", "Work history", "Education
 // & skills"; a post titled "... an exceptional user experience in retail" is not one.
 const RESUME_HEADING = /\b(?:experience|work history|employment|career|resume|résumé|curriculum|cv|education|skills|deneyim|experiencia|experiência|expérience|berufserfahrung|werkervaring)\b/i;
+// A site that calls itself a blog, in the languages the list has; and the words that make it more than one.
+const SELF_BLOG = /\b(?:blog|weblog|dev ?blog|tech ?blog|digital garden|bit[aá]cora|ki[şs]isel blog)\b/i;
+const SELF_PORTFOLIO = /\b(?:portf[oó]lio|portafolio|projects?|works?|case stud(?:y|ies)|resume|résumé|cv)\b/i;
+// A heading that names projects as a section: the plural, or the projects family's section words.
+const PROJECTS_SECTION = /\b(?:projects|portfolio|works|(?:my|selected|recent|featured|side|client|our|personal|open[- ]source) work|case studies|things i(?:'ve| have)? built|projets|proyectos|projekte|projetos|progetti|projecten|projeler|projelerim|r[eé]alisations|trabajos|trabalhos)\b/i;
+// A heading that is a section's whole title: "Work", "Open source", "Lab" (not "🚀 Project" or "New Project").
+const SECTION_WORD = /^[\W\d_]*(?:work|open[- ]?source|lab|labs|experiments|showcase|portfolio)[\W_]*$/iu;
+const isProjectsSection = (h) => PROJECTS_SECTION.test(h.words) || SECTION_WORD.test(h.words);
+/** What the site calls itself: its <title>, og:site_name and first h1. */
+function selfNames(p) {
+  const title = p.html.match(/<title\b[^>]*>([\s\S]{0,500}?)<\/title>/i)?.[1] ?? "";
+  const og = p.html.match(/<meta\b[^>]*(?:property|name)\s*=\s*["']og:site_name["'][^>]*>/i)?.[0]?.match(/\bcontent\s*=\s*["']([^"']{0,200})["']/i)?.[1] ?? "";
+  const h1 = p.headings.find((h) => h.level === 1)?.words ?? "";
+  return [title, og, h1].map((s) => squash(decodeEntities(s))).filter(Boolean);
+}
 const isResumeHeading = (h) => RESUME_HEADING.test(h.words) && h.words.split(/\s+/).length <= 4;
 // Work shown as dated posts: case studies are projects whatever their dates.
 const CASE_STUDY = /\bcase stud(?:y|ies)\b|\bestudios? de caso\b|\bestudos? de caso\b/i;
@@ -408,6 +423,14 @@ export function blogFacts(site) {
   const what = dates.length >= times.length ? plural(dates.length, "dated post") : plural(times.length, "post", "posts with a reading time");
   const blogLink = p.links.map((l) => squash(l.text)).find((t) => BLOG_LINK.test(t)) ?? null;
   const base = { posts, what, snippets: [...dates.slice(0, 3), ...times.slice(0, 2)], blogLink, hasBlog: posts >= BLOG_MIN_POSTS || Boolean(blogLink) };
+  // The site calls itself a blog (its title, og:site_name or first h1) and has none of a portfolio's own parts:
+  // no projects menu entry, no links to its own project pages, no heading that names projects in the plural or
+  // as a section, no resume heading. Project or repository links inside the posts do not protect it, and a
+  // singular "New Project" heading is a post's, not a section.
+  const calls = selfNames(p).find((n) => SELF_BLOG.test(n) && !SELF_PORTFOLIO.test(n));
+  if (calls && dated >= 1 && !p.projects.nav.length && !p.projects.ownPages.length && !p.headings.some(isProjectsSection) && !p.headings.some(isResumeHeading)) {
+    return { ...base, hasBlog: true, verdict: "blog-only", calls };
+  }
   if (posts < BLOG_MIN_POSTS) {
     const why = !base.hasBlog ? "no blog" : `a "${blogLink}" link, but fewer than ${BLOG_MIN_POSTS} dated posts on this page: the posts live elsewhere`;
     return { ...base, verdict: null, why };
@@ -444,6 +467,9 @@ export function blogFacts(site) {
 export function blogOnly(site) {
   const b = blogFacts(site);
   if (b.verdict !== "blog-only") return null;
+  if (b.calls) {
+    return raised("blog-only", `The site calls itself a blog ("${quote(b.calls, 50)}") and has no projects menu, no project pages, no projects section and no work history: only a blog.`, [b.calls, ...b.snippets]);
+  }
   return raised("blog-only", `The page has ${b.what} and no projects, project links, projects menu, case studies or work history: only a blog.`, b.snippets);
 }
 
@@ -578,10 +604,16 @@ export function productPage(site) {
   const tokens = fold(p.name).split(/[^\p{L}0-9]+/u).filter((t) => t.length >= 3);
   const text = fold(p.text);
   // The listed name on the page is a person, except a one-word name that is the whole of a two-label domain
-  // ("Calzye" on calzye.com): that is the product's own name. Never a name on a shared or personal host
-  // ("Darshan" on darshan.is-a.dev), and the "I" and one-person tests above still apply.
+  // ("Calzye" on calzye.com) on a page that says nothing in the first person and never names that word as a
+  // person ("by Kunal", "I'm Kunal" on kunal.dev): then it is the product's own name. Never a name on a shared
+  // or personal host ("Darshan" on darshan.is-a.dev).
   const labels = hostOf(p.finalUrl).split(".");
-  const productName = tokens.length === 1 && labels.length === 2 && labels[0] === tokens[0];
+  const productName =
+    tokens.length === 1 &&
+    labels.length === 2 &&
+    labels[0] === tokens[0] &&
+    !allMatches(p.text, I, 1).length &&
+    !new RegExp(String.raw`\b(?:by|i'?m|i’m|i am|hi,? i'?m|my name is|meet|about|founder|built by|made by|created by|designed by)\s+${tokens[0]}\b`, "i").test(text);
   if (!productName && tokens.some((t) => text.includes(t))) return null;
   return raised("product-page", `The page has the parts of a product's site (${parts.join(", ")}), and no person behind it: one product or tool, not a portfolio.`, parts);
 }
@@ -621,9 +653,14 @@ export function readmePage(site) {
 
 // ---------- hidden spam links: the site appears to have been compromised ----------
 
-// A container hidden by its own inline style: zero width or height, zero font size, a large negative offset,
-// display none, visibility hidden. Not opacity 0 (an animation's start) and not the hidden attribute.
-const HIDDEN_STYLE = /(?:^|;)\s*(?:(?:width|height|max-width|max-height)\s*:\s*0(?:px|em|rem|%)?\s*(?:!important)?\s*(?:;|$)|font-size\s*:\s*0(?:px|em|rem|%)?\s*(?:!important)?\s*(?:;|$)|(?:left|top|right|text-indent|margin-left|margin-top)\s*:\s*-\d{3,}(?:\.\d+)?(?:px|em|rem)|display\s*:\s*none|visibility\s*:\s*hidden)/i;
+// A container that can never be opened, by its own inline style: zero width or height, zero font size, a large
+// negative offset. Not display none or visibility hidden (tabs, menus and dialogs open from those), not opacity
+// 0 (an animation's start) and not the hidden attribute.
+const HIDDEN_STYLE = /(?:^|;)\s*(?:(?:width|height|max-width|max-height)\s*:\s*0(?:px|em|rem|%)?\s*(?:!important)?\s*(?:;|$)|font-size\s*:\s*0(?:px|em|rem|%)?\s*(?:!important)?\s*(?:;|$)|(?:left|top|right|text-indent|margin-left|margin-top)\s*:\s*-\d{3,}(?:\.\d+)?(?:px|em|rem))/i;
+// Where a developer's own projects live: a "casino-royale-clone.vercel.app" is a project, never injected spam.
+const PROJECT_HOSTING = /(?:^|\.)(?:vercel\.app|netlify\.app|github\.io|gitlab\.io|onrender\.com|pages\.dev|herokuapp\.com|web\.app|firebaseapp\.com|surge\.sh|glitch\.me|railway\.app|fly\.dev|replit\.app|repl\.co|codesandbox\.io|stackblitz\.io|github\.com|gitlab\.com|itch\.io)$/i;
+/** Different spam domains needed: injected links point at several sites. */
+export const SPAM_MIN_DOMAINS = 2;
 // Words of the usual injected spam: gambling, adult content, pharmacy.
 const SPAM_WORD =
   /(?:casino|slots?\b|slot ?gacor|gacor|togel|judi|toto ?4d|poker|baccarat|sbobet|betting|bahis|bet\d{2,}|\bbet\b|grandpashabet|jackpot|lottery|porn|xxx|\bsex\b|escort|hentai|nude|viagra|cialis|kamagra|pharmacy|levitra|tramadol)/i;
@@ -643,6 +680,7 @@ export function hiddenSpamLinks(site) {
   const p = readSite(site);
   const self = hostOf(p.finalUrl);
   const seen = new Set();
+  const domains = new Set();
   let hits = 0;
   const kinds = new Set();
   for (const html of [String(site?.plainHtml ?? "").slice(0, HTML_MAX), p.html]) {
@@ -663,25 +701,27 @@ export function hiddenSpamLinks(site) {
         const href = a[1].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
         const url = href ? (href[1] ?? href[2] ?? href[3]) : "";
         const h = hostOf(url);
-        if (!h || h === self || h.endsWith(`.${self}`) || self.endsWith(`.${h}`)) continue;
+        if (!h || h === self || h.endsWith(`.${self}`) || self.endsWith(`.${h}`) || PROJECT_HOSTING.test(h)) continue;
         const title = a[1].match(/\btitle\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
         const words = `${h} ${title ? (title[1] ?? title[2]) : ""} ${stripTags(a[2])}`;
         const w = words.match(SPAM_WORD);
         const key = `${m.index}:${a.index}:${url}`;
         if (!w || seen.has(key)) continue;
         seen.add(key);
+        domains.add(h);
         hits++;
         kinds.add(/porn|xxx|sex|escort|hentai|nude/i.test(w[0]) ? "adult content" : /viagra|cialis|kamagra|pharmacy|levitra|tramadol/i.test(w[0]) ? "pharmacy" : "gambling");
       }
     }
-    if (hits >= SPAM_MIN_LINKS) break;
+    if (hits >= SPAM_MIN_LINKS && domains.size >= SPAM_MIN_DOMAINS) break;
     seen.clear();
+    domains.clear();
     hits = 0;
     kinds.clear();
   }
-  if (hits < SPAM_MIN_LINKS) return null;
+  if (hits < SPAM_MIN_LINKS || domains.size < SPAM_MIN_DOMAINS) return null;
   const what = [...kinds].sort().join(" and ");
-  return raised("hidden-spam-links", `The page hides ${plural(hits, "link")} to other sites about ${what} in an invisible block: the site appears to have been compromised.`, [`${hits} hidden links`, ...kinds]);
+  return raised("hidden-spam-links", `The page hides ${plural(hits, "link")} to ${domains.size} other sites about ${what} in a block that can never be opened: the site appears to have been compromised.`, [`${hits} hidden links`, ...kinds]);
 }
 
 /**

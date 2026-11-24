@@ -51,10 +51,11 @@ ${[1, 2, 3, 4, 5, 6].map((i) => `<p><a href="/blog/post-${i}">Post ${i}</a> <tim
   { title: "Ana Ruiz - Frontend developer" }
 );
 
-// Only a blog: dated posts, in <article> and <time>, linking to the site's own post pages.
+// Only a blog: dated posts, in <article> and <time>, linking to the site's own post pages. Its h1 does not
+// say "blog", so the post-structure rule is what flags it (the "calls itself a blog" rule has its own test).
 const posts = (n, extra = "") =>
   Array.from({ length: n }, (_, i) => `<article><h2><a href="/blog/post-${i}">Post ${i}</a></h2><time>${months[i % 12]} ${i + 1}, 2026</time>${extra}</article>`).join("\n");
-const BLOG = page(`<nav><a href="/">Home</a><a href="/tags">Tags</a><a href="/about">About</a></nav><h1>Abdul's Blog</h1>${posts(6)}`);
+const BLOG = page(`<nav><a href="/">Home</a><a href="/tags">Tags</a><a href="/about">About</a></nav><h1>Abdul Rauf</h1>${posts(6)}`);
 
 test("a real portfolio with a blog raises no flag, and its blog facts say why", () => {
   assert.deepEqual(flagNames(PORTFOLIO), []);
@@ -119,7 +120,7 @@ test("blog-only: dated posts in a post structure and nothing else", () => {
   assert.equal(r.flag, "blog-only");
   assert.equal(r.reason, "The page has 6 dated posts and no projects, project links, projects menu, case studies or work history: only a blog.");
   // Four posts are not enough.
-  assert.equal(blogOnly(page(`<h1>Blog</h1>${posts(4)}`)), null);
+  assert.equal(blogOnly(page(`<h1>Ana</h1>${posts(4)}`)), null);
   // Posts linked under the site's own blog path count without <time>.
   const linked = page(`<h1>Notes</h1>${Array.from({ length: 6 }, (_, i) => `<p><a href="/posts/n-${i}">N ${i}</a> ${months[i]} ${i + 2}, 2025</p>`).join("")}`);
   assert.equal(blogOnly(linked)?.flag, "blog-only");
@@ -136,7 +137,7 @@ test("blog-only never flags a portfolio with a blog: menu entries, buttons, proj
     const site = page(BLOG.html.replace('<a href="/about">About</a>', swap));
     assert.equal(blogOnly(site), null, what);
   }
-  // 14 posts and three projects under "Work" or "Open source".
+  // 14 posts and three projects under "Work" or "Open source", even on a site whose h1 says "Blog".
   for (const h of ["Work", "Open source"]) {
     const site = page(`<h1>Blog</h1>${posts(14)}<h2>${h}</h2><p><a href="https://github.com/x/a">a</a> <a href="https://github.com/x/b">b</a> <a href="https://github.com/x/c">c</a></p>`);
     assert.equal(blogOnly(site), null, h);
@@ -183,6 +184,34 @@ test("blog-only: a 'Featured essays' heading and root post slugs are a blog's, a
   assert.equal(blogOnly(home)?.flag, "blog-only");
   // The same list under a real projects heading is a portfolio.
   assert.equal(blogOnly(page(home.html.replace("Featured essays, ideas and more", "Featured projects"))), null);
+});
+
+test("blog-only: a site that calls itself a blog and has none of a portfolio's own parts", () => {
+  const dated = `<p><time>March 3, 2026</time> <a href="/2026/03/03/hello.html">Hello</a></p>`;
+  // Title, og:site_name or first h1; project and repository links inside the posts do not protect it.
+  for (const [what, html] of [
+    ["title", page(`<h1>Patrick</h1>${dated}<h3>New Project</h3><p><a href="https://github.com/x/y">y</a></p>`, { title: "Patrick's Blog" }).html],
+    ["og:site_name", `<html><head><meta property="og:site_name" content="Kevinbkdev Blog"></head><body><h1>Hi</h1>${dated}<h2>🚀 Project</h2></body></html>`],
+    ["first h1", page(`<h1>bouwe.io, a blog by Bouwe</h1>${dated}`).html],
+    ["kişisel blog", page(`<h1>Devrim</h1>${dated}`, { title: "Devrim Mehmet | Kişisel Blog" }).html],
+  ]) {
+    const r = blogOnly({ url: "https://ana.dev/", finalUrl: "https://ana.dev/", name: "Ana Ruiz", html });
+    assert.equal(r?.flag, "blog-only", what);
+    assert.match(r.reason, /^The site calls itself a blog \("/, what);
+  }
+  // Having a blog is never a negative: a projects menu entry, own project pages, a projects section, a resume
+  // heading, or a title that also says portfolio keep it quiet.
+  for (const [what, body, title] of [
+    ["menu", `<nav><a href="/projects">Projects</a></nav><h1>Ana</h1>${dated}`, "Ana's Blog"],
+    ["menu label Project", `<nav><a href="/p">Project</a></nav><h1>Ana</h1>${dated}`, "Ana's Blog"],
+    ["own project pages", `<h1>Ana</h1>${dated}<a href="/projects/robot">Robot</a>`, "Ana's Blog"],
+    ["projects section", `<h1>Ana</h1>${dated}<h2>Side projects</h2>`, "Ana's Blog"],
+    ["resume heading", `<h1>Ana</h1>${dated}<h2>Experience</h2>`, "Ana's Blog"],
+    ["Portfolio & Blog", `<h1>Ana</h1>${dated}`, "Ana Ruiz - Portfolio & Blog"],
+    ["no dated post at all", `<h1>Ana</h1><p>Hello.</p>`, "Ana's Blog"],
+  ]) {
+    assert.equal(blogOnly(page(body, { title })), null, what);
+  }
 });
 
 test("blog-only: 'read more' links alone are not posts (testimonials have them)", () => {
@@ -236,6 +265,17 @@ test("product-page: a tool's own site with no person behind it", () => {
   assert.equal(productPage(tool)?.flag, "product-page");
 });
 
+test("product-page: a one-word name on its own domain is a person when the page speaks as one or names them", () => {
+  const product = `<h1>Kunal</h1><p>Kunal is a habit tracker.</p>${PRODUCT_PARTS_HTML}`;
+  for (const [what, body] of [
+    ["first person", `${product}<p>I built it on weekends.</p>`],
+    ["by Kunal", `${product}<p>Made with care, by Kunal.</p>`],
+    ["I'm Kunal", `<h1>Hi, I'm Kunal</h1><p>Kunal is a habit tracker.</p>${PRODUCT_PARTS_HTML}`],
+  ]) {
+    assert.equal(productPage(page(body, { url: "https://kunal.dev/", name: "Kunal" })), null, what);
+  }
+});
+
 test("product-page: a person, a one-person studio or a one-word name on a personal host is never a product", () => {
   const person = page(`<h1>Ana Ruiz</h1><p>I made a calculator. I wrote it in a week. My users like it.</p>${PRODUCT_PARTS_HTML}`);
   assert.equal(productPage(person), null);
@@ -260,13 +300,34 @@ test("hidden-spam-links: spam links in an invisible block; the reason never repe
   const hacked = page(`<h1>Naveed</h1><p>${"An essay. ".repeat(20)}</p>${SPAM("position: absolute; width: 0px;")}`, { url: "https://www.trixum.net/" });
   const r = hiddenSpamLinks(hacked);
   assert.equal(r?.flag, "hidden-spam-links");
-  assert.match(r.reason, /^The page hides 4 links to other sites about adult content and gambling and pharmacy in an invisible block: the site appears to have been compromised\.$/);
+  assert.match(r.reason, /^The page hides 4 links to 4 other sites about adult content and gambling and pharmacy in a block that can never be opened: the site appears to have been compromised\.$/);
   for (const w of ["casino", "gacor", "xxx", "viagra", "spam0"]) assert.ok(!JSON.stringify(r).includes(w), w);
   // The server's own HTML counts when the rendered page dropped it.
   assert.equal(hiddenSpamLinks({ ...page("<h1>Naveed</h1>"), plainHtml: `<body>${SPAM("width:0")}</body>` })?.flag, "hidden-spam-links");
-  for (const style of ["display:none", "visibility: hidden", "font-size:0", "left:-9999px", "height: 0"]) {
+  for (const style of ["font-size:0", "left:-9999px", "height: 0", "width:0px"]) {
     assert.equal(hiddenSpamLinks(page(SPAM(style).replace(/marquee/g, "div")))?.flag, "hidden-spam-links", style);
   }
+});
+
+test("hidden-spam-links: never calls a real developer compromised", () => {
+  // Tabs and menus open from display:none and visibility:hidden.
+  for (const style of ["display:none", "visibility: hidden"]) {
+    assert.equal(hiddenSpamLinks(page(SPAM(style).replace(/marquee/g, "div"))), null, style);
+  }
+  // A game developer's hidden projects tab linking their own casino and poker clones on project hosting.
+  const games = page(`<h1>Ana</h1><div style="width:0;overflow:hidden" id="projects-tab">
+    <a href="https://casino-royale-clone.vercel.app" title="Casino Royale clone">Casino Royale clone</a>
+    <a href="https://slot-machine-react.netlify.app">Slot machine in React</a>
+    <a href="https://poker-night.vercel.app">Poker night</a></div>`);
+  assert.equal(hiddenSpamLinks(games), null);
+  // A hidden mobile menu linking a client's sports-betting analytics site.
+  const client = page(`<h1>Ana</h1><nav style="display:none"><div style="height:0">
+    <a href="https://bet-analytics.example/">Sports betting analytics</a><a href="https://bet-analytics.example/odds">Odds</a>
+    <a href="https://bet-analytics.example/live">Live betting</a></div></nav>`);
+  assert.equal(hiddenSpamLinks(client), null);
+  // Three spam links to one domain are not enough: injected links point at several sites.
+  const one = page(`<marquee style="width:0">${["casino", "slot gacor", "poker"].map((w) => `<a href="https://one.example/${w.replace(/ /g, "")}">${w}</a>`).join("")}</marquee>`);
+  assert.equal(hiddenSpamLinks(one), null);
 });
 
 test("hidden-spam-links: hidden menus, opacity 0, the hidden attribute and fewer than 3 spam links stay quiet", () => {
