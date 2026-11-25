@@ -8,7 +8,7 @@ import { parseJsonc } from "./scripts/check-worker-exports.mjs";
 // so the build must see the values the Worker will run with: the variable
 // when the build environment sets it (the test runs), else wrangler.jsonc's
 // value. Flipping one in wrangler.jsonc ships with a deploy, which rebuilds.
-function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED" | "EMAIL_SIGNIN_ENABLED" | "NEWSLETTER_ENABLED" | "FULLPAGE_PREVIEW_ENABLED"): "true" | "false" {
+function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED" | "EMAIL_SIGNIN_ENABLED" | "NEWSLETTER_ENABLED" | "FULLPAGE_PREVIEW_ENABLED" | "PROFILE_NEXT"): "true" | "false" {
   if (process.env[name] !== undefined) return /^true$/i.test(String(process.env[name])) ? "true" : "false";
   try {
     const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
@@ -18,13 +18,13 @@ function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOL
     return "false";
   }
 }
-// GAMES_V2, RANKING_V2 and TOOLS_ENABLED are read on the server (lib/games/server.ts,
-// lib/leaderboard.ts, lib/home.ts, lib/tools/server.ts), from process.env: setting them here
+// GAMES_V2, RANKING_V2, TOOLS_ENABLED and PROFILE_NEXT are read on the server (lib/games/server.ts,
+// lib/leaderboard.ts, lib/home.ts, lib/tools/server.ts, lib/profile-next/flag.ts), from process.env: setting them here
 // reaches the build's prerender, and the Worker sets the same values at run
 // time. "Grade my portfolio" is also read in the browser (lib/nav.ts
 // ROUTES.grade), so it is inlined as NEXT_PUBLIC_GRADER_ENABLED below, and
 // so are the free tools (ROUTES.tools, NEXT_PUBLIC_TOOLS_ENABLED).
-for (const name of ["GAMES_V2", "RANKING_V2", "TOOLS_ENABLED"] as const) process.env[name] = launchSwitch(name);
+for (const name of ["GAMES_V2", "RANKING_V2", "TOOLS_ENABLED", "PROFILE_NEXT"] as const) process.env[name] = launchSwitch(name);
 
 // Defense-in-depth response headers applied to every route: HSTS (the site is
 // HTTPS-only), clickjacking, MIME sniffing, referrer leakage, and a
