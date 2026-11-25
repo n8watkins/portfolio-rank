@@ -1,6 +1,7 @@
 import { db, ensureSchema } from "./db";
 import { runInBackground } from "./background";
 import { decide, type CheckKind } from "./freshness.mjs";
+import { releaseLease as releaseLeaseRow, takeLease as takeLeaseRow } from "./cache-lease.mjs";
 
 /** Why a stored result is being measured again (lib/freshness.mjs decide). */
 export type StaleReason = "forced" | "max_age" | "failed";
@@ -19,22 +20,11 @@ export type CacheMeta = {
 // same table (`lease:<key>`), and the lease expires so a crashed refresh can't
 // block the key for good. Within an isolate, concurrent refreshes and first
 // fills of the same key share one promise.
-const LEASE_MS = 10 * 60 * 1000;
 const inflight = new Map<string, Promise<unknown>>();
 
-async function takeLease(k: string): Promise<boolean> {
-  const now = Date.now();
-  const res = await db().execute({
-    sql: `INSERT INTO cache (k, v, at) VALUES (?, '', ?)
-          ON CONFLICT(k) DO UPDATE SET at = excluded.at WHERE cache.at < ?`,
-    args: [`lease:${k}`, now, now - LEASE_MS],
-  });
-  return res.rowsAffected > 0;
-}
-
-async function releaseLease(k: string): Promise<void> {
-  await db().execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`lease:${k}`] });
-}
+// The lease rows are shared with the daily prewarm job (lib/cache-lease.mjs).
+const takeLease = (k: string): Promise<boolean> => takeLeaseRow(db(), k);
+const releaseLease = (k: string): Promise<void> => releaseLeaseRow(db(), k);
 
 function once<T>(k: string, run: () => Promise<T>): Promise<T> {
   const running = inflight.get(k) as Promise<T> | undefined;
@@ -186,42 +176,4 @@ export async function cached<T extends object>(
 
   if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(entry.data))));
   return { ...entry.data, ...meta };
-}
-
-/** What a measure asked for by name did: stored a new result, found the key busy, or got a failure. */
-export type MeasureOutcome<T> = { status: "stored" | "busy" | "failed"; data: T & CacheMeta };
-
-/**
- * Measures `compute` now, for the one caller that waits for the answer (the
- * daily prewarm job, app/api/psi): takes the lease, computes, stores the
- * result and releases the lease before it returns, so nothing runs behind
- * the response (on the deployed Worker, work left running after the response
- * is cut off after about 30 seconds). A failure never replaces a good stored
- * result; it is stored only when nothing is stored yet, so a page view can say why.
- */
-export async function measureNow<T extends object>(
-  namespace: string,
-  key: string,
-  { isFailure }: { isFailure: (data: T) => boolean },
-  compute: () => Promise<T>
-): Promise<MeasureOutcome<T>> {
-  await ensureSchema();
-  const k = `${namespace}:${key}`;
-  if (!(await takeLease(k))) return { status: "busy", data: { ok: false, error: "in_progress" } as unknown as T & CacheMeta };
-  try {
-    const data = await compute();
-    if (isFailure(data)) {
-      const have = await readEntry<T>(k, () => Infinity, isFailure);
-      if (!have || isFailure(have.data)) {
-        const at = Date.now();
-        await db().execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(data), at] });
-      }
-      return { status: "failed", data };
-    }
-    const at = Date.now();
-    await db().execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(data), at] });
-    return { status: "stored", data: { ...data, measuredAt: new Date(at).toISOString() } };
-  } finally {
-    await releaseLease(k).catch(() => {});
-  }
 }

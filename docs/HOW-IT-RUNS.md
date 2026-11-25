@@ -51,11 +51,16 @@ Times below are Pacific, with UTC in brackets, for winter.
    It skips when Cloudflare started a run in the last hour.
 5. **01:00 (09:00 UTC)**: warm the speed and polish scores of listed sites, up to 400 a day (`prewarm.yml`).
    Every site Gemini graded "a portfolio" or the capture measured is included, so sites ranked from the code checks get their own Lighthouse.
-   This job is the only thing that measures Lighthouse: a page view or a visit to `/api/psi` never starts a measure and never waits, it shows what is stored or "Not measured yet".
+   This job is the only thing that measures the stored Lighthouse results, and it measures directly: it calls Google PageSpeed from the GitHub runner and writes the results to the database with the Turso credentials it already has.
+   It needs one secret, the repository Actions secret `PSI_API_KEY` (a Google PageSpeed key), given to the prewarm step only; without it the job stops with an error that says so.
+   The app's own secrets (`AUTH_SECRET`) are never given to it.
+   A page view or a visit to `/api/psi` only reads: it shows what is stored or "Not measured yet", never starts a measure and never waits.
+   Like every job that runs the released code, it changes only when a release containing the change is deployed.
    Each site is measured with four PageSpeed runs, two on a phone and two on desktop, and each device's two are averaged; a result that holds one run, or has no desktop result, is measured again.
-   The job picks sites the admin asked to re-measure first, then never-measured ones, then the oldest, and tries a failed site again the next day.
+   The job picks sites the admin asked to re-measure first, then never-measured ones, then the oldest, and only the devices that are due: a site whose phone result is fresh but whose desktop result is missing, one run, or a failure older than 20 hours costs two runs, not four.
+   A device that keeps failing is tried again at most once a day (two runs), so 100 such sites cost at most 400 runs a day.
+   A per-minute refusal from Google is waited out and tried again up to three times; only the day's quota stops the job (and ten sites in a row refused per minute, which means something is wrong).
    Three sites go at a time, about 3 hours for 400 sites if a run takes 25 s (not measured yet), 1,600 of the day's 25,000 runs; the first full pass over 2,159 sites takes about 6 days.
-   It needs the repository secret `AUTH_SECRET` (the app's own), which proves to `/api/psi` that the request may measure; without it the job stops with an error.
    Running.
 6. **04:00 (12:00 UTC)**: the GitHub fallback for the nightly health check (`health.yml`).
    It skips when Cloudflare started one in the last 30 hours, which is normal.

@@ -1,16 +1,16 @@
 import type { CacheMeta } from "@/lib/cache";
-import { fixFor } from "./fixes";
-import { measureSite as measureSiteWith } from "../psi-runs.mjs";
-import { DEFAULT_RUN_GAP_MS } from "../psi-pacing.mjs";
+import { runPsiCall } from "../psi-core.mjs";
 import { countPsiCall } from "../psi-calls.mjs";
 import { db } from "../db";
 
-// Google PageSpeed Insights (Lighthouse in Google's cloud), shared by the
-// profile's diagnostics (app/api/psi, listed portfolios, mobile) and the
-// free speed check (app/api/tools/speed, any address, mobile and desktop).
-// PSI_API_KEY is a key in a Google project with no billing account: 25,000
-// runs a day, and past that Google refuses instead of charging. Keyless
-// calls have a quota of zero today, so without the key every run fails.
+// Google PageSpeed Insights (Lighthouse in Google's cloud) from the Worker:
+// the free speed check (app/api/tools/speed) and "Add" and "Re-check"
+// (lib/tools/run.ts) make single runs here, mobile and desktop, for any
+// address. How a call is made and its answer read is lib/psi-core.mjs, which
+// the daily prewarm job shares (it makes the stored two-run averages, lib/psi-job.mjs);
+// a profile only reads what is stored (app/api/psi). PSI_API_KEY is a key in a
+// Google project with no billing account: 25,000 runs a day, and past that
+// Google refuses instead of charging.
 
 export type Strategy = "mobile" | "desktop";
 
@@ -50,132 +50,16 @@ export type PsiResult = CacheMeta & {
   fetchedAt?: string;
 };
 
-export const CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
-
-const METRICS: { id: string; label: string }[] = [
-  { id: "largest-contentful-paint", label: "Largest Contentful Paint" },
-  { id: "first-contentful-paint", label: "First Contentful Paint" },
-  { id: "total-blocking-time", label: "Total Blocking Time" },
-  { id: "cumulative-layout-shift", label: "Cumulative Layout Shift" },
-  { id: "speed-index", label: "Speed Index" },
-];
-
-type Audit = {
-  title?: string;
-  score?: number | null;
-  scoreDisplayMode?: string;
-  displayValue?: string;
-  numericValue?: number;
-  metricSavings?: Record<string, number>;
-  details?: { items?: unknown[] };
-};
-
-// The slice of the PageSpeed Insights v5 response this reads.
-type PsiResponse = {
-  lighthouseResult?: {
-    finalDisplayedUrl?: string;
-    fetchTime?: string;
-    categories?: Record<string, { score?: number | null; auditRefs?: { id: string; weight?: number; group?: string }[] } | undefined>;
-    audits?: Record<string, Audit | undefined>;
-  };
-};
-
-const MAX_FIXES = 6;
-
-/** The failing audits of a Lighthouse result that have a plain-words fix, biggest win first. */
-export function pickFixes(lhr: NonNullable<PsiResponse["lighthouseResult"]>): PsiFix[] {
-  const out: (PsiFix & { rank: number })[] = [];
-  const seen = new Set<string>();
-  for (const category of CATEGORIES) {
-    for (const ref of lhr.categories?.[category]?.auditRefs ?? []) {
-      if (seen.has(ref.id) || ref.group === "metrics" || ref.group === "hidden") continue;
-      const a = lhr.audits?.[ref.id];
-      if (!a || typeof a.score !== "number" || a.score >= 0.9) continue;
-      if (a.scoreDisplayMode === "notApplicable" || a.scoreDisplayMode === "manual" || a.scoreDisplayMode === "informative") continue;
-      const tip = fixFor(ref.id);
-      if (!tip) continue;
-      seen.add(ref.id);
-      const savedMs = Object.values(a.metricSavings ?? {}).reduce((s, v) => s + (Number(v) || 0), 0);
-      // Speed fixes rank by time saved; the others by the weight Lighthouse gives them, after a fast win.
-      const rank = category === "performance" ? savedMs + (1 - a.score) * 100 : (ref.weight ?? 1) * 40;
-      out.push({ id: ref.id, title: tip.title ?? a.title ?? ref.id, savings: a.displayValue || undefined, tip: tip.tip, category, rank });
-    }
-  }
-  return out
-    .sort((x, y) => y.rank - x.rank)
-    .slice(0, MAX_FIXES)
-    .map(({ rank, ...f }) => (void rank, f));
-}
-
-/** Turns one PageSpeed response into the stored result of a single run. */
-export function readPsi(data: PsiResponse, strategy: Strategy): PsiResult {
-  const lhr = data.lighthouseResult;
-  if (!lhr) return { ok: false, error: "no_data", strategy };
-  const scores: Record<string, number | null> = {};
-  for (const id of CATEGORIES) {
-    const raw = lhr.categories?.[id]?.score;
-    scores[id] = typeof raw === "number" ? Math.round(raw * 100) : null;
-  }
-  const metrics = METRICS.flatMap(({ id, label }) => {
-    const a = lhr.audits?.[id];
-    return a?.displayValue ? [{ id, label, value: a.displayValue.replace(/ /g, " "), score: typeof a.score === "number" ? a.score : null, numeric: typeof a.numericValue === "number" ? a.numericValue : null }] : [];
-  });
-  // From audits the same run already returns (no extra request).
-  const bytes = lhr.audits?.["total-byte-weight"]?.numericValue;
-  const requests = lhr.audits?.["network-requests"]?.details?.items?.length;
-  const weight = { bytes: typeof bytes === "number" ? Math.round(bytes) : null, requests: typeof requests === "number" ? requests : null };
-  return {
-    ok: true,
-    strategy,
-    scores,
-    metrics,
-    fixes: pickFixes(lhr),
-    weight,
-    ...(lhr.finalDisplayedUrl ? { finalUrl: lhr.finalDisplayedUrl } : {}),
-    runs: 1,
-    runsAttempted: 1,
-    runScores: [scores.performance],
-    ranAt: new Date().toISOString(),
-    ...(lhr.fetchTime ? { fetchedAt: lhr.fetchTime } : {}),
-  };
-}
-
-/** One PageSpeed run. Never throws: a quota, timeout or site error is { ok: false, error }. */
+/**
+ * One PageSpeed run, counted for the admin limits page. Never throws: a quota,
+ * rate limit, timeout or site error is { ok: false, error }, and a counter
+ * that cannot be written changes nothing.
+ */
 export async function runPsi(target: string, strategy: Strategy = "mobile"): Promise<PsiResult> {
-  // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
-  const psiUrl = new URL(process.env.PSI_API_BASE ?? "https://www.googleapis.com/pagespeedonline/v5/runPagespeed");
-  psiUrl.searchParams.set("url", target);
-  psiUrl.searchParams.set("strategy", strategy);
-  if (process.env.PSI_API_KEY) psiUrl.searchParams.set("key", process.env.PSI_API_KEY);
-  for (const cat of CATEGORIES) psiUrl.searchParams.append("category", cat);
-  // Counted when the call starts, so a run whose result is never stored still shows on the admin limits page.
-  await countPsiCall(db());
-
-  let data: PsiResponse;
   try {
-    const res = await fetch(psiUrl.toString(), { signal: AbortSignal.timeout(90_000) });
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      // 429 is the day's quota; 400/500 usually mean Lighthouse couldn't load the page.
-      const error = res.status === 429 ? "quota" : res.status >= 500 || res.status === 400 ? "unreachable" : `psi_${res.status}`;
-      console.log(JSON.stringify({ event: "psi.error", status: res.status, strategy, message: String(err?.error?.message ?? "").slice(0, 200) }));
-      return { ok: false, error, strategy };
-    }
-    data = (await res.json()) as PsiResponse;
-  } catch (e) {
-    return { ok: false, error: (e as Error)?.name === "TimeoutError" ? "timeout" : "fetch_error", strategy };
+    await countPsiCall(db());
+  } catch {
+    // Counting must never stop a run.
   }
-  return readPsi(data, strategy);
-}
-
-/** The wait between a device's runs (ms): PSI_RUN_GAP_MS, else the default. */
-function runGapMs(): number {
-  const raw = process.env.PSI_RUN_GAP_MS;
-  const v = Number(raw);
-  return raw != null && raw !== "" && Number.isFinite(v) && v >= 0 ? v : DEFAULT_RUN_GAP_MS;
-}
-
-/** A site's measure: two runs on a phone and two on desktop, averaged per device (lib/psi-runs.mjs measureSite). */
-export function measureSite(target: string): Promise<{ mobile: PsiResult; desktop: PsiResult }> {
-  return measureSiteWith(target, { run: runPsi, gapMs: runGapMs() }) as Promise<{ mobile: PsiResult; desktop: PsiResult }>;
+  return (await runPsiCall(target, strategy)) as PsiResult;
 }

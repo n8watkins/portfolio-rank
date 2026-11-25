@@ -8,7 +8,10 @@
 //
 // Needs PSI_API_KEY in the environment; it makes exactly 2 PageSpeed calls and
 // stops without a key. Run it before the first release that measures with two
-// runs, with gaps of 0 and 30 for example, and read the verdict lines.
+// runs, once with gap 0 and once with gap 30, and read the verdict lines
+// (a gap of 0 starts the second call as soon as the first returns).
+import { CATEGORIES } from "../../lib/psi-core.mjs";
+
 const [url, gapArg = "30", strategy = "mobile"] = process.argv.slice(2);
 const key = process.env.PSI_API_KEY;
 if (!key || !url) {
@@ -26,7 +29,8 @@ async function run(n) {
   api.searchParams.set("url", url);
   api.searchParams.set("strategy", strategy);
   api.searchParams.set("key", key);
-  api.searchParams.append("category", "performance");
+  // The same four categories production requests (lib/psi-core.mjs), so a run costs what a real one costs.
+  for (const cat of CATEGORIES) api.searchParams.append("category", cat);
   const started = Date.now();
   const res = await fetch(api, { signal: AbortSignal.timeout(120_000) });
   const seconds = (Date.now() - started) / 1000;

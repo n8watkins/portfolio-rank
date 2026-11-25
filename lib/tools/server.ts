@@ -6,7 +6,7 @@ import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
 import { fail, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
 import { reserveTool, toolCaps } from "./caps.mjs";
 import type { PsiResult } from "./psi";
-import { runCount } from "@/lib/psi-runs.mjs";
+import { storeIfBetter as storeIfBetterRow } from "@/lib/psi-store.mjs";
 import { addPending } from "@/lib/discovery/sites.mjs";
 import { addRefusal } from "@/lib/ownership/same-site.mjs";
 
@@ -125,18 +125,9 @@ export async function store(key: string, value: object, at = Date.now()): Promis
 /**
  * Saves a Lighthouse result unless the stored one is better: a result of one
  * run (a visitor's speed check) never replaces an average of two, and a
- * failure never replaces a good result (it is stored only where nothing good
- * is, so a page can say why). Returns whether it wrote.
+ * failure never replaces a good result. One SQL statement, the rule the daily
+ * prewarm job writes with too (lib/psi-store.mjs). Returns whether it wrote.
  */
-export async function storeIfBetter(key: string, value: PsiResult, at = Date.now()): Promise<boolean> {
-  const row = (await db().execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [key] })).rows[0];
-  let have: PsiResult | null = null;
-  try {
-    have = row?.v ? (JSON.parse(String(row.v)) as PsiResult) : null;
-  } catch {
-    have = null;
-  }
-  const better = value.ok ? runCount(value) >= runCount(have) : !have?.ok;
-  if (better) await store(key, value, at);
-  return better;
+export function storeIfBetter(key: string, value: PsiResult, at = Date.now()): Promise<boolean> {
+  return storeIfBetterRow(db(), key, value, at);
 }

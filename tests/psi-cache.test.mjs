@@ -1,14 +1,11 @@
-// /api/psi end to end: a page view never measures; only a request with the
-// internal token (the daily prewarm job) does, and it waits for the answer.
-// The app (started by scripts/test-e2e.sh with PSI_API_BASE pointed here)
-// calls a local stand-in for Google PageSpeed that answers slowly and counts
-// its calls. /api/inspect keeps its stale-while-revalidate (one test below).
-//
-// Against `next start` nothing is cut off after the response, which the
-// deployed Worker does after about 30 seconds (waitUntil). So these tests
-// assert what a view must never do (call PageSpeed, hold a lease) and what the
-// token path must have finished before it answers (the results stored, the
-// lease gone), not how long background work may live.
+// /api/psi end to end: it is a pure read. A page view, with or without any
+// header, never measures: it returns what is stored or "not_measured", never
+// calls PageSpeed, never takes a lease and never waits. The measuring is the
+// daily prewarm job's, direct from its runner (tests/prewarm.test.mjs,
+// tests/psi-job.test.mjs). The app (started by scripts/test-e2e.sh with
+// PSI_API_BASE pointed here) has a local stand-in for Google PageSpeed that
+// counts its calls: the tests assert it is never called. /api/inspect keeps
+// its stale-while-revalidate (one test below).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -16,32 +13,27 @@ import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
 import { listen } from "./helpers/listen.mjs";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
-import { INTERNAL_TOKEN_HEADER, MEASURE_PSI, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
+import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 // Shares the server's SQLite file: wait for its locks instead of SQLITE_BUSY.
 const db = createClient({ url: process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/e2e.db`, timeout: 10000 });
 const PSI_PORT = Number(process.env.E2E_PSI_PORT ?? 7692);
 const SLOW_MS = 1500;
-// A measure is two runs a phone and two on desktop, the devices side by side (the run gap is 0 here: scripts/test-e2e.sh).
-const RUNS = 4;
 const DAY = 24 * 3600 * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const TOKEN = await internalToken(process.env.AUTH_SECRET ?? "", MEASURE_PSI);
 
 let calls = 0;
-let failNext = false;
 const lighthouse = (perf) => ({
   lighthouseResult: {
     categories: { performance: { score: perf }, accessibility: { score: 0.9 }, "best-practices": { score: 0.8 }, seo: { score: 1 } },
     audits: {},
   },
 });
-let perf = 0.5;
+const perf = 0.5;
 const psi = createServer(async (_req, res) => {
   calls++;
   await sleep(SLOW_MS);
-  if (failNext) { res.writeHead(500, { "content-type": "application/json" }); return res.end("{}"); }
   res.writeHead(200, { "content-type": "application/json" });
   res.end(JSON.stringify(lighthouse(perf)));
 });
@@ -61,10 +53,8 @@ async function get(kind, url, headers = {}) {
   const r = await fetch(`${BASE}/api/${kind}?url=${encodeURIComponent(url)}`, { headers });
   return { ms: Date.now() - t, status: r.status, body: await r.json() };
 }
-const measure = (url) => get("psi", url, { [INTERNAL_TOKEN_HEADER]: TOKEN });
 const row = async (kind, url) =>
   (await db.execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [`${kind}:${url}`] })).rows[0];
-const callsToday = async () => Number((await db.execute("SELECT COALESCE(SUM(n), 0) AS n FROM psi_calls")).rows[0].n);
 // Each test starts from no cached result and no lease for its site. Earlier
 // test files share this database and server.
 const clean = async (url) => {
@@ -124,130 +114,49 @@ test("a stored failure is returned too, and a view does not retry it", async () 
   assert.equal(calls, 0);
 });
 
-test("without the token, or with a wrong one, the request is only a view", async () => {
+test("no header changes it: even a valid internal token only reads", async () => {
   const url = feed[103].url;
   await clean(url);
   calls = 0;
-  for (const headers of [{}, { [INTERNAL_TOKEN_HEADER]: "" }, { [INTERNAL_TOKEN_HEADER]: "nope" }, { [INTERNAL_TOKEN_HEADER]: await internalToken(process.env.AUTH_SECRET ?? "", REVALIDATE_PROFILES) }]) {
+  const other = await internalToken(process.env.AUTH_SECRET ?? "", REVALIDATE_PROFILES);
+  for (const headers of [{}, { [INTERNAL_TOKEN_HEADER]: "" }, { [INTERNAL_TOKEN_HEADER]: "nope" }, { [INTERNAL_TOKEN_HEADER]: other }, { "x-portfoliorank-internal": other, authorization: "Bearer x" }]) {
     const h = await get("psi", url, headers);
     assert.equal(h.body.error, "not_measured");
     assert.ok(h.ms < 1000);
   }
+  const wait = await fetch(`${BASE}/api/psi?url=${encodeURIComponent(url)}&wait=1`);
+  assert.equal((await wait.json()).error, "not_measured", "there is no measure-and-wait mode");
   await sleep(SLOW_MS + 500);
   assert.equal(calls, 0);
   assert.equal(await row("psi", url), undefined);
-});
-
-test("with the token a measure is four runs, finished and stored before the answer: phone average, desktop average, the lease released", async () => {
-  const url = feed[104].url;
-  await clean(url);
-  perf = 0.6;
-  calls = 0;
-  const before = await callsToday();
-  const r = await measure(url);
-  assert.ok(r.ms >= SLOW_MS - 100, `took ${r.ms}ms: it waited for the runs`);
-  assert.equal(r.body.ok, true);
-  assert.equal(r.body.measured, true);
-  assert.equal(r.body.runs, 2);
-  assert.equal(r.body.runsAttempted, 2);
-  assert.deepEqual(r.body.runScores, [60, 60]);
-  assert.equal(r.body.strategy, "mobile");
-  assert.ok(Date.parse(r.body.ranAt) > Date.now() - 60000);
-  assert.equal(calls, RUNS, "two phone runs and two desktop runs");
-  // Everything is already stored when the answer arrives.
-  const phone = JSON.parse((await row("psi", url)).v);
-  const desktop = JSON.parse((await row("psi-desktop", url)).v);
-  assert.equal(phone.runs, 2);
-  assert.equal(desktop.strategy, "desktop");
-  assert.equal(desktop.runs, 2);
-  assert.equal(desktop.scores.performance, 60);
-  assert.equal(await row("lease:psi", url), undefined, "the lease is released");
-  assert.equal((await callsToday()) - before, RUNS, "the admin counter counts calls made");
-  // A view now returns it.
-  const view = await get("psi", url);
-  assert.equal(view.body.runs, 2);
-  assert.equal(view.body.measured, undefined);
-  assert.equal(view.body.scores.performance, 60);
-  assert.equal(calls, RUNS);
-});
-
-test("the token path measures again whatever is stored (the queue decides what is due)", async () => {
-  const url = feed[105].url;
-  await clean(url);
-  perf = 0.9;
-  await seedPsi(url, Date.now() - DAY, 0.5);
-  calls = 0;
-  const r = await measure(url);
-  assert.equal(r.body.measured, true);
-  assert.equal(r.body.scores.performance, 90);
-  assert.equal(calls, RUNS);
-});
-
-test("a measure while another holds the site answers in_progress and calls nothing", async () => {
-  const url = feed[106].url;
-  await clean(url);
-  await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '', ?)", args: [`lease:psi:${url}`, Date.now()] });
-  calls = 0;
-  const r = await measure(url);
-  assert.equal(r.body.ok, false);
-  assert.equal(r.body.error, "in_progress");
-  assert.equal(calls, 0);
-  assert.ok(await row("lease:psi", url), "the other's lease is left alone");
-  await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`lease:psi:${url}`] });
-});
-
-test("a failed measure says why, keeps a good stored result, and releases the lease", async () => {
-  const url = feed[107].url;
-  await clean(url);
-  const at = Date.now() - 100 * DAY;
-  await seedPsi(url, at, 0.4);
-  await seedPsi(url, at, 0.4, { key: "psi-desktop" });
-  calls = 0;
-  failNext = true;
-  try {
-    const r = await measure(url);
-    assert.equal(r.body.ok, false);
-    assert.equal(r.body.error, "unreachable");
-    assert.equal(r.body.measured, undefined);
-    assert.equal(calls, RUNS);
-  } finally {
-    failNext = false;
-  }
-  const kept = JSON.parse((await row("psi", url)).v);
-  assert.equal(kept.ok, true);
-  assert.equal(kept.scores.performance, 40);
-  assert.equal(Number((await row("psi", url)).at), at, "not replaced");
-  assert.equal(JSON.parse((await row("psi-desktop", url)).v).ok, true);
+  assert.equal(await row("psi-desktop", url), undefined);
   assert.equal(await row("lease:psi", url), undefined);
 });
 
-test("a failed first measure is stored, so a view can say why", async () => {
-  const url = feed[108].url;
+test("a view while a lease is held still just reads", async () => {
+  const url = feed[104].url;
   await clean(url);
-  failNext = true;
-  try {
-    assert.equal((await measure(url)).body.ok, false);
-  } finally {
-    failNext = false;
-  }
+  await seedPsi(url, Date.now() - DAY, 0.7);
+  await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '', ?)", args: [`lease:psi:${url}`, Date.now()] });
+  calls = 0;
   const h = await get("psi", url);
-  assert.equal(h.body.ok, false);
-  assert.equal(h.body.error, "unreachable");
+  assert.equal(h.body.scores.performance, 70);
+  assert.equal(calls, 0);
+  await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`lease:psi:${url}`] });
 });
 
-test("a site the health check found dead is never sent to PageSpeed, token or not", async () => {
+test("a site the health check found dead is never shown, and nothing is measured", async () => {
   const url = feed[109].url;
   await clean(url);
   await db.execute({ sql: "INSERT OR REPLACE INTO portfolios (url, status) VALUES (?, 'dead')", args: [url] });
   calls = 0;
   assert.equal((await get("psi", url)).body.error, "site_down");
-  assert.equal((await measure(url)).body.error, "site_down");
   assert.equal(calls, 0);
   await db.execute({ sql: "DELETE FROM portfolios WHERE url = ?", args: [url] });
 });
 
-test("an address that is not on the roster is refused, token or not", async () => {
-  const r = await measure("https://not-listed.example/");
+test("an address that is not on the roster is refused", async () => {
+  const r = await get("psi", "https://not-listed.example/");
   assert.equal(r.status, 403);
   assert.equal(r.body.error, "unknown_url");
 });

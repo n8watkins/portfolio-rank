@@ -170,6 +170,8 @@ export function Socials({ url, initial = null }: { url: string; initial?: Inspec
 /** What a PageSpeed failure means for the visitor, and whether trying again can help. */
 function psiProblem(error: string | undefined): { text: string; retry: boolean } {
   if (error === "site_down") return { text: "This site is down or parked, so there's nothing to measure.", retry: false };
+  // This browser could not load the answer (offline, or the server answered something that is not JSON): nothing is known about the site.
+  if (error === "failed") return { text: "Couldn't load this.", retry: true };
   // A page view never measures (app/api/psi): the daily job does, and tries a failed site again the next day.
   if (error === "timeout") return { text: "Google's Lighthouse timed out on this site the last time. It is tried again daily.", retry: false };
   if (/429|quota|rate/i.test(error ?? "")) return { text: "Google's Lighthouse quota was used up the last time. It is tried again daily.", retry: false };
