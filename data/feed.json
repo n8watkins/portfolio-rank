@@ -781,6 +781,11 @@
     "tagline": "Full Stack Developer"
   },
   {
+    "name": "Alan Babychan",
+    "url": "https://www.alanbabychan.online",
+    "tagline": "Software Development Engineer"
+  },
+  {
     "name": "Alan Hamlett",
     "url": "https://ahamlett.com",
     "tagline": "Founder & Ceo @Wakatime"
@@ -1072,6 +1077,11 @@
   {
     "name": "Andrew Woods",
     "url": "https://andrewwoods.net"
+  },
+  {
+    "name": "Andrews Mintah",
+    "url": "https://codemintah.dev",
+    "tagline": "Software Developer | CEO of AmpedDevs"
   },
   {
     "name": "Andrey Perestoronin",
@@ -1573,6 +1583,11 @@
     "name": "Ashmit Borawake",
     "url": "https://ashmit-borawake.vercel.app",
     "tagline": "Software Engineer | Full Stack Developer"
+  },
+  {
+    "name": "Ashrit Anshuman",
+    "url": "https://ashritanshuman.cv",
+    "tagline": "Full Stack Developer"
   },
   {
     "name": "Ashutosh Dash",
@@ -5426,6 +5441,11 @@
     "tagline": "Software Engineer | Full Stack Developer"
   },
   {
+    "name": "Md Moniruzzaman Tonoy",
+    "url": "https://md-moniruzzaman-tonoy.web.app",
+    "tagline": "Full Stack Developer"
+  },
+  {
     "name": "Md Muhaiminul Islam Shihab",
     "url": "https://muhaiminShihab.github.io",
     "tagline": "Software Developer | Php, Laravel, Next.Js, Mysql."
@@ -5550,6 +5570,10 @@
   {
     "name": "Michel De Freitas",
     "url": "https://michelfreitas.com"
+  },
+  {
+    "name": "Michelle Brenner",
+    "url": "https://michellebrenner.com"
   },
   {
     "name": "Miguel Rodriguez",
@@ -5980,6 +6004,10 @@
     "name": "Naved Alam",
     "url": "https://naved.xyz",
     "tagline": "Design Engineer | Design Systems & Front-End"
+  },
+  {
+    "name": "Naveed Ahmed",
+    "url": "https://www.trixum.net"
   },
   {
     "name": "Naveed Sohail Gung",
