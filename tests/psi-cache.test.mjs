@@ -14,6 +14,9 @@ const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const db = createClient({ url: process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/e2e.db`, timeout: 10000 });
 const PSI_PORT = Number(process.env.E2E_PSI_PORT ?? 7692);
 const SLOW_MS = 2500;
+// A measure is two runs a phone and two on desktop, the devices side by side (the run gap is 0 here: scripts/test-e2e.sh).
+const RUNS = 4;
+const MEASURE_MS = 2 * SLOW_MS;
 const DAY = 24 * 3600 * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -58,11 +61,15 @@ const row = async (kind, url) =>
 // whose diagnostics ask /api/psi for whatever sites they show, and with no
 // PageSpeed stand-in running then, a failure is cached for an hour.
 const clean = async (url) => {
-  await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?, ?, ?)", args: [`psi:${url}`, `inspect:${url}`, `lease:psi:${url}`, `lease:inspect:${url}`] });
+  await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?, ?, ?, ?)", args: [`psi:${url}`, `psi-desktop:${url}`, `inspect:${url}`, `lease:psi:${url}`, `lease:inspect:${url}`] });
   await db.execute({ sql: "DELETE FROM site_freshness WHERE url = ?", args: [url] });
 };
-const seedPsi = (url, at, perf = 0.5) =>
-  db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [`psi:${url}`, JSON.stringify({ ok: true, scores: { performance: Math.round(perf * 100) }, metrics: [] }), at] });
+// A result of the current method (two runs); `runs: null` seeds an old row, stored before runs were counted.
+const seedPsi = (url, at, perf = 0.5, { runs = 2 } = {}) =>
+  db.execute({
+    sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)",
+    args: [`psi:${url}`, JSON.stringify({ ok: true, scores: { performance: Math.round(perf * 100) }, metrics: [], ...(runs ? { runs, runsAttempted: runs } : {}) }), at],
+  });
 const page = (url, cols) =>
   db.execute({
     sql: `INSERT INTO site_freshness (url, hash, checked_at, changed_at, forced_at) VALUES (?, 'h', ?, ?, ?)
@@ -82,7 +89,63 @@ test("only the first request for a never-measured site waits", async () => {
   assert.equal(first.body.stale, undefined);
   const second = await get("psi", url);
   assert.ok(second.ms < 1000, `cached hit took ${second.ms}ms`);
-  assert.equal(calls, 1);
+  assert.equal(calls, RUNS);
+});
+
+test("a measure is two runs a device: the phone average is the answer, the desktop average is stored beside it", async () => {
+  const url = feed[110].url;
+  await clean(url);
+  perf = 0.6;
+  calls = 0;
+  const first = await get("psi", url);
+  assert.equal(calls, 4, "two phone runs and two desktop runs");
+  assert.equal(first.body.runs, 2);
+  assert.equal(first.body.runsAttempted, 2);
+  assert.deepEqual(first.body.runScores, [60, 60]);
+  assert.equal(first.body.strategy, "mobile");
+  assert.ok(Date.parse(first.body.ranAt) > Date.now() - 60000);
+  const desktop = JSON.parse((await row("psi-desktop", url)).v);
+  assert.equal(desktop.strategy, "desktop");
+  assert.equal(desktop.runs, 2);
+  assert.equal(desktop.scores.performance, 60);
+  assert.equal(JSON.parse((await row("psi", url)).v).runs, 2);
+});
+
+test("a result of one run is measured again, once: an old row reads as one run until then", async () => {
+  const url = feed[111].url;
+  await clean(url);
+  perf = 0.8;
+  await seedPsi(url, Date.now() - 3 * DAY, 0.5, { runs: null });
+  calls = 0;
+  const h = await get("psi", url);
+  assert.equal(h.body.stale, true);
+  assert.equal(h.body.staleReason, "upgrade");
+  assert.equal(h.body.scores.performance, 50, "the old result shows at once");
+  assert.equal(h.body.runs, undefined);
+  await sleep(MEASURE_MS + 1500);
+  assert.equal(calls, RUNS);
+  const after = await get("psi", url);
+  assert.equal(after.body.stale, undefined);
+  assert.equal(after.body.scores.performance, 80);
+  assert.equal(after.body.runs, 2);
+  await sleep(300);
+  assert.equal(calls, RUNS, "two runs a device are not measured again");
+});
+
+test("with wait=1 (the prewarm) a due result is measured before the answer", async () => {
+  const url = feed[112].url;
+  await clean(url);
+  perf = 0.9;
+  await seedPsi(url, Date.now() - 3 * DAY, 0.5, { runs: null });
+  calls = 0;
+  const t = Date.now();
+  const r = await fetch(`${BASE}/api/psi?url=${encodeURIComponent(url)}&wait=1`);
+  const body = await r.json();
+  assert.ok(Date.now() - t >= MEASURE_MS - 200, "it waited for the runs");
+  assert.equal(body.scores.performance, 90);
+  assert.equal(body.runs, 2);
+  assert.equal(body.stale, undefined);
+  assert.equal(calls, RUNS);
 });
 
 test("a stale result returns at once, and concurrent requests schedule one refresh", async () => {
@@ -102,8 +165,8 @@ test("a stale result returns at once, and concurrent requests schedule one refre
     assert.equal(h.body.scores.performance, 50);
     assert.equal(h.body.measuredAt, new Date(oldAt).toISOString());
   }
-  await sleep(SLOW_MS + 1500);
-  assert.equal(calls, 1, `expected one refresh, saw ${calls}`);
+  await sleep(MEASURE_MS + 1500);
+  assert.equal(calls, RUNS, `expected one refresh (${RUNS} runs), saw ${calls}`);
   const fresh = await get("psi", url);
   assert.equal(fresh.body.stale, undefined);
   assert.equal(fresh.body.scores.performance, 70);
@@ -120,7 +183,7 @@ test("a failed refresh keeps the old result and is not retried on every request"
   failNext = true;
   try {
     await get("psi", url);
-    await sleep(SLOW_MS + 1500);
+    await sleep(MEASURE_MS + 1500);
     for (let i = 0; i < 3; i++) {
       const h = await get("psi", url);
       assert.equal(h.body.ok, true);
@@ -128,7 +191,7 @@ test("a failed refresh keeps the old result and is not retried on every request"
       assert.equal(h.body.scores.performance, 40);
     }
     await sleep(500);
-    assert.equal(calls, 1);
+    assert.equal(calls, RUNS);
   } finally {
     failNext = false;
   }
@@ -156,15 +219,15 @@ test("a failed PageSpeed run is cached for an hour, then retried", async () => {
     const first = await get("psi", url);
     assert.equal(first.body.ok, false);
     for (let i = 0; i < 3; i++) assert.equal((await get("psi", url)).body.ok, false);
-    assert.equal(calls, 1, "a failure was asked again within the hour");
+    assert.equal(calls, RUNS, "a failure was asked again within the hour");
   } finally {
     failNext = false;
   }
   await age("psi", url, 61 * 60 * 1000);
   const stale = await get("psi", url);
   assert.equal(stale.body.stale, true);
-  await sleep(SLOW_MS + 1500);
-  assert.equal(calls, 2);
+  await sleep(MEASURE_MS + 1500);
+  assert.equal(calls, 2 * RUNS);
   // The retry succeeded, so the good result replaced the failure.
   assert.equal((await get("psi", url)).body.ok, true);
 });
@@ -245,7 +308,7 @@ test("the admin's Re-measure makes Lighthouse run again; nobody else may ask", a
   const h = await get("psi", url);
   assert.equal(h.body.stale, true);
   assert.equal(h.body.staleReason, "forced");
-  await sleep(SLOW_MS + 1500);
-  assert.equal(calls, 1);
+  await sleep(MEASURE_MS + 1500);
+  assert.equal(calls, RUNS);
   assert.equal((await get("psi", url)).body.stale, undefined);
 });

@@ -232,7 +232,7 @@ The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mj
 
 | Check | Where it is stored | Maximum age | A failure is retried after | When a due result runs again |
 | --- | --- | --- | --- | --- |
-| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` |
+| Lighthouse (PageSpeed) | `cache` `psi:<url>` (phone) and `psi-desktop:<url>`: each the average of two runs, with the run count, each run's performance score and the date | 90 days (a result of one run, stored before two runs a device or by a visitor's speed check, is due at once) | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml`, which waits for the new result (`/api/psi?wait=1`) |
 | Polish checklist and share card | `cache` `inspect:<url>` | 30 days (the share image and favicon can break on their own) | 1 hour | On the next view, and `prewarm.yml` |
 | Project link checks | `portfolios.facts` (`facts_at`) | 30 days (links rot without the page changing) | the next night | Tonight's free checks (`evidence.mjs --links`, up to 120 a night) |
 | Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | a growing backoff (`refresh_failures`) | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, asked-for sites first) |
@@ -712,7 +712,7 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
   About 0.6 GB for 2,300 sites, plus ~0.2 MB/day of backups: under the cap, $0.
   Lean, 10,000 sites take 1.4 GB and 50,000 take 7.2 GB (`lib/admin/limits.mjs` PROJECTIONS).
 - **GitHub Actions:** unlimited (public repo).
-- **PSI/Lighthouse:** 25k runs/day - ample.
+- **PSI/Lighthouse:** 25k runs/day and 240 a minute. A site's measure is four runs (two phone, two desktop), so the prewarm's 400 sites a day are 1,600 runs (6.4% of the day), about 15 calls a minute at most, and about 3 hours with three sites at a time (`lib/psi-pacing.mjs`). Measuring the whole list of 2,159 sites once takes about 6 days at 400 a day (8,636 runs); after that, every site every 90 days is about 96 runs a day. The 30-second wait between a device's two runs stops PageSpeed's own 30-second result cache from answering the second run with the first.
 - **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.
 
 ## AI judge (Gemini)

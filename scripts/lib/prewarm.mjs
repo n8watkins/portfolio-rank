@@ -6,16 +6,25 @@
 
 import { GEMINI_YES_SQL, SIGNALS_SQL } from "../../lib/tiers-store.mjs";
 import { STRONG_SIGNALS } from "../../pipeline/portfolio-guard.mjs";
+import { CHECK_KINDS } from "../../lib/freshness.mjs";
+import { PREWARM_CONCURRENCY, pacing } from "../../lib/psi-pacing.mjs";
 
 export const KINDS = ["inspect", "psi"];
 
-// Sites a daily run measures at most: one PageSpeed call each, far inside
-// PageSpeed's 25,000 a day, and about 3 hours at ~25 s a site, inside the
-// job's 330 minutes. With results fresh for 30 days this covers about
-// 12,000 graded sites, and clears a backlog of never-measured ones in days.
+// Sites a daily run measures at most. A site's PageSpeed measure is four
+// runs (two phone, two desktop, lib/psi-runs.mjs), so 400 sites are 1,600
+// runs, 6.4% of PageSpeed's 25,000 a day (lib/psi-pacing.mjs pacing()). A
+// measure takes about 80 s (two ~25 s runs a device with a 30 s gap, the two
+// devices side by side), so the sites go PREWARM_CONCURRENCY at a time: 400
+// sites take about 2.9 hours, inside the job's 330 minutes (one at a time
+// they would take 8.9 hours and the job would be cut off).
 export const PREWARM_LIMIT = 400;
-// Same TTL as app/api/psi/route.ts: a PSI result younger than this is fresh.
-export const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
+// Same rule as app/api/psi/route.ts (lib/freshness.mjs): a PSI result younger than this is fresh.
+export const PSI_TTL_MS = CHECK_KINDS.lighthouse.maxAgeMs;
+/** What the schedule above costs, for the job summary and the tests. */
+export const PREWARM_PLAN = pacing({ sites: PREWARM_LIMIT, concurrency: PREWARM_CONCURRENCY });
+/** The wait for one /api/psi answer (ms): it measures four runs before it answers. */
+export const PSI_TIMEOUT_MS = 300_000;
 
 /**
  * The sites to prewarm: listed (active(p)), live, not graded "not a
@@ -25,7 +34,8 @@ export const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
  * portfolio signals, or a member already (the owner kept it), so every
  * member gets its own Lighthouse whether Gemini graded it or not (owner,
  * 2026-11-22: the Starting rank comes from code); without a fresh PSI
- * result; never measured first, then the oldest.
+ * result, or whose result is one run (stored before two runs a device, or by
+ * a visitor's speed check); never measured first, then the oldest.
  * @param {{ execute: Function }} db
  * @param {{ active: (p: string) => string, limit?: number, now?: number }} options
  */
@@ -40,7 +50,8 @@ export async function prewarmQueue(db, { active, limit = PREWARM_LIMIT, now = Da
             AND (${GEMINI_YES_SQL("p")}
               OR (p.shot_key IS NOT NULL AND COALESCE(json_valid(p.facts), 0) AND ${SIGNALS_SQL("p")} >= ${STRONG_SIGNALS})
               ${member})
-            AND (c.at IS NULL OR c.at < ?)
+            AND (c.at IS NULL OR c.at < ?
+              OR (json_valid(c.v) AND json_extract(c.v, '$.ok') = 1 AND COALESCE(json_extract(c.v, '$.runsAttempted'), 1) < 2))
           ORDER BY COALESCE(c.at, 0), p.url
           LIMIT ?`,
     args: [now - PSI_TTL_MS, limit],
@@ -67,7 +78,9 @@ export function classify(error) {
 /** One lookup: a success only if the endpoint answered 200 with `ok: true`. */
 async function lookup(fetchFn, base, kind, url, timeoutMs) {
   try {
-    const res = await fetchFn(`${base}/api/${kind}?url=${encodeURIComponent(url)}`, {
+    // wait=1: /api/psi measures a due result before answering (the refresh
+    // would otherwise run behind the answer, and 400 of them at once).
+    const res = await fetchFn(`${base}/api/${kind}?url=${encodeURIComponent(url)}${kind === "psi" ? "&wait=1" : ""}`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
     const body = await res.json().catch(() => null);
@@ -87,25 +100,34 @@ export async function runPrewarm({
   fetchFn = fetch,
   pauseMs = 1200,
   timeoutMs = 60_000,
+  psiTimeoutMs = PSI_TIMEOUT_MS,
+  concurrency = 1,
   log = console.log,
 }) {
   const stats = Object.fromEntries(
     KINDS.map((k) => [k, { attempted: 0, ok: 0, failed: 0, errors: {} }])
   );
-  for (const [i, url] of urls.entries()) {
-    for (const kind of KINDS) {
-      const r = await lookup(fetchFn, base, kind, url, timeoutMs);
-      const s = stats[kind];
-      s.attempted++;
-      if (r.ok) s.ok++;
-      else {
-        s.failed++;
-        s.errors[r.error] = (s.errors[r.error] ?? 0) + 1;
+  // `concurrency` sites at a time; one site's lookups stay in order.
+  let next = 0;
+  const worker = async () => {
+    while (next < urls.length) {
+      const i = next++;
+      const url = urls[i];
+      for (const kind of KINDS) {
+        const r = await lookup(fetchFn, base, kind, url, kind === "psi" ? psiTimeoutMs : timeoutMs);
+        const s = stats[kind];
+        s.attempted++;
+        if (r.ok) s.ok++;
+        else {
+          s.failed++;
+          s.errors[r.error] = (s.errors[r.error] ?? 0) + 1;
+        }
+        log(`[${i + 1}/${urls.length}] ${kind} ${url} -> ${r.ok ? "ok" : r.error}`);
+        if (pauseMs) await new Promise((res) => setTimeout(res, pauseMs));
       }
-      log(`[${i + 1}/${urls.length}] ${kind} ${url} -> ${r.ok ? "ok" : r.error}`);
-      if (pauseMs) await new Promise((res) => setTimeout(res, pauseMs));
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, urls.length || 1)) }, worker));
 
   const attempted = KINDS.reduce((n, k) => n + stats[k].attempted, 0);
   const ok = KINDS.reduce((n, k) => n + stats[k].ok, 0);

@@ -89,10 +89,16 @@ test("live usage: today's counts from the app's own tables, nothing before they 
     { sql: "INSERT INTO cache (k, v, at) VALUES ('psi-desktop:https://a.example', '{}', ?)", args: [now.getTime()] },
     { sql: "INSERT INTO cache (k, v, at) VALUES ('psi:https://b.example', '{}', ?)", args: [0] },
     { sql: "INSERT INTO cache (k, v, at) VALUES ('inspect:https://a.example', '{}', ?)", args: [now.getTime()] },
+    // A site's measure: two runs a device. Each stored result counts the runs it took.
+    { sql: "INSERT INTO cache (k, v, at) VALUES ('psi:https://c.example', '{\"ok\":true,\"runs\":2,\"runsAttempted\":2}', ?)", args: [now.getTime()] },
+    { sql: "INSERT INTO cache (k, v, at) VALUES ('psi-desktop:https://c.example', '{\"ok\":true,\"runs\":1,\"runsAttempted\":2}', ?)", args: [now.getTime()] },
+    // Not JSON at all still counts as one run, and the lease row is not a result.
+    { sql: "INSERT INTO cache (k, v, at) VALUES ('psi:https://d.example', 'oops', ?)", args: [now.getTime()] },
+    { sql: "INSERT INTO cache (k, v, at) VALUES ('lease:psi:https://c.example', '', ?)", args: [now.getTime()] },
   ]);
   const live = await liveUsage(db, { now });
   assert.equal(live.gemini.used, 1);
-  assert.equal(live.psi.used, 2);
+  assert.equal(live.psi.used, 2 + 2 + 2 + 1);
   const all = await adminLimits(db, { now, env: { TAVILY_MONTHLY_CREDITS: "150" } });
   assert.equal(row(all.rows, "tavily").cap, 150);
   assert.equal(all.snapshotAt, null);

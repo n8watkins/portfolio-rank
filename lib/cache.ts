@@ -3,7 +3,7 @@ import { runInBackground } from "./background";
 import { decide, type CheckKind } from "./freshness.mjs";
 
 /** Why a stored result is being measured again (lib/freshness.mjs decide). */
-export type StaleReason = "forced" | "max_age" | "failed";
+export type StaleReason = "forced" | "max_age" | "failed" | "upgrade";
 
 /** What every cached lookup returns on top of its own fields. */
 export type CacheMeta = {
@@ -66,6 +66,16 @@ export type CacheOptions<T> = {
    * failure keeps its short retry window.
    */
   freshness?: { kind: CheckKind; url: string };
+  /**
+   * A good result that is not due by age but should be measured again anyway
+   * (it was made by an older, lesser method): due now, reason "upgrade".
+   */
+  upgrade?: (data: T) => boolean;
+  /**
+   * A due result is measured again before answering (the daily prewarm wants
+   * the new result stored, not a refresh left running behind the answer).
+   */
+  awaitRefresh?: boolean;
 };
 
 type Entry<T> = { data: T; at: number; due: { run: boolean; reason: StaleReason | "missing" | null } };
@@ -143,7 +153,7 @@ export async function cached<T extends object>(
   options: CacheOptions<T>,
   compute: () => Promise<T>
 ): Promise<T & CacheMeta> {
-  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss, freshness } = options;
+  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss, freshness, upgrade, awaitRefresh } = options;
   const ttlOf = (data: T) => (isFailure(data) ? failureTtlMs : ttlMs);
   await ensureSchema();
   const k = `${namespace}:${key}`;
@@ -181,9 +191,18 @@ export async function cached<T extends object>(
 
   const entry = await readEntry<T>(k, ttlOf, isFailure, freshness);
   if (!entry) return once(k, fill);
+  if (!entry.due.run && !isFailure(entry.data) && upgrade?.(entry.data)) entry.due = { run: true, reason: "upgrade" };
   const meta = metaOf(entry);
   if (!entry.due.run) return { ...entry.data, ...meta };
 
-  if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(entry.data))));
+  if (!inflight.has(k)) {
+    const running = once(k, () => refresh(isFailure(entry.data)));
+    if (!awaitRefresh) runInBackground(running);
+    else {
+      await running.catch(() => {});
+      const again = await readEntry<T>(k, ttlOf, isFailure, freshness);
+      if (again) return { ...again.data, ...metaOf(again) };
+    }
+  }
   return { ...entry.data, ...meta };
 }

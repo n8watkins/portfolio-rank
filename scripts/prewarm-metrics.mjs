@@ -12,6 +12,7 @@
 import { appendFileSync, existsSync, readFileSync } from "fs";
 import path from "path";
 import { PREWARM_LIMIT, prewarmQueue, runPrewarm } from "./lib/prewarm.mjs";
+import { PREWARM_CONCURRENCY } from "../lib/psi-pacing.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb, syncRoster } from "../pipeline/roster.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
@@ -41,6 +42,8 @@ const { exitCode, summary, verdict } = await runPrewarm({
   urls,
   base: PROD,
   pauseMs: Number(process.env.PREWARM_PAUSE_MS ?? 1200), // gentle pacing
+  // Four PageSpeed runs a site (two phone, two desktop): sites go a few at a time (lib/psi-pacing.mjs).
+  concurrency: Number(process.env.PREWARM_CONCURRENCY ?? PREWARM_CONCURRENCY),
 });
 console.log(`\n${summary}`);
 // The Actions job summary shows the table on the run page.

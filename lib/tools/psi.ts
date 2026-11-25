@@ -1,5 +1,7 @@
 import type { CacheMeta } from "@/lib/cache";
 import { fixFor } from "./fixes";
+import { measureSite as measureSiteWith } from "../psi-runs.mjs";
+import { DEFAULT_RUN_GAP_MS } from "../psi-pacing.mjs";
 
 // Google PageSpeed Insights (Lighthouse in Google's cloud), shared by the
 // profile's diagnostics (app/api/psi, listed portfolios, mobile) and the
@@ -10,7 +12,14 @@ import { fixFor } from "./fixes";
 
 export type Strategy = "mobile" | "desktop";
 
-export type PsiMetric = { id: string; label: string; value: string; score?: number | null };
+export type PsiMetric = {
+  id: string;
+  label: string;
+  value: string;
+  score?: number | null;
+  /** The raw value (milliseconds, or unitless for layout shift): what several runs are averaged from. */
+  numeric?: number | null;
+};
 export type PsiFix = { id: string; title: string; savings?: string; tip: string; category: string };
 
 export type PsiResult = CacheMeta & {
@@ -25,6 +34,18 @@ export type PsiResult = CacheMeta & {
   finalUrl?: string;
   /** Page weight and request count from the same run. */
   weight?: { bytes: number | null; requests: number | null };
+  // Run details (lib/psi-runs.mjs). Everything above is the average of the
+  // runs that succeeded. A row stored before these existed is one run.
+  /** How many runs succeeded and went into the numbers. */
+  runs?: number;
+  /** How many runs were made (what counted against the PageSpeed quota). */
+  runsAttempted?: number;
+  /** The performance score of each attempted run, null where that run failed. */
+  runScores?: (number | null)[];
+  /** When it was measured (ISO 8601). */
+  ranAt?: string;
+  /** Lighthouse's own time stamp of a single run: two runs with the same one are the same run. */
+  fetchedAt?: string;
 };
 
 export const CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
@@ -51,6 +72,7 @@ type Audit = {
 type PsiResponse = {
   lighthouseResult?: {
     finalDisplayedUrl?: string;
+    fetchTime?: string;
     categories?: Record<string, { score?: number | null; auditRefs?: { id: string; weight?: number; group?: string }[] } | undefined>;
     audits?: Record<string, Audit | undefined>;
   };
@@ -83,7 +105,7 @@ export function pickFixes(lhr: NonNullable<PsiResponse["lighthouseResult"]>): Ps
     .map(({ rank, ...f }) => (void rank, f));
 }
 
-/** Turns a PageSpeed response into the stored result. */
+/** Turns one PageSpeed response into the stored result of a single run. */
 export function readPsi(data: PsiResponse, strategy: Strategy): PsiResult {
   const lhr = data.lighthouseResult;
   if (!lhr) return { ok: false, error: "no_data", strategy };
@@ -94,13 +116,26 @@ export function readPsi(data: PsiResponse, strategy: Strategy): PsiResult {
   }
   const metrics = METRICS.flatMap(({ id, label }) => {
     const a = lhr.audits?.[id];
-    return a?.displayValue ? [{ id, label, value: a.displayValue.replace(/ /g, " "), score: typeof a.score === "number" ? a.score : null }] : [];
+    return a?.displayValue ? [{ id, label, value: a.displayValue.replace(/ /g, " "), score: typeof a.score === "number" ? a.score : null, numeric: typeof a.numericValue === "number" ? a.numericValue : null }] : [];
   });
   // From audits the same run already returns (no extra request).
   const bytes = lhr.audits?.["total-byte-weight"]?.numericValue;
   const requests = lhr.audits?.["network-requests"]?.details?.items?.length;
   const weight = { bytes: typeof bytes === "number" ? Math.round(bytes) : null, requests: typeof requests === "number" ? requests : null };
-  return { ok: true, strategy, scores, metrics, fixes: pickFixes(lhr), weight, ...(lhr.finalDisplayedUrl ? { finalUrl: lhr.finalDisplayedUrl } : {}) };
+  return {
+    ok: true,
+    strategy,
+    scores,
+    metrics,
+    fixes: pickFixes(lhr),
+    weight,
+    ...(lhr.finalDisplayedUrl ? { finalUrl: lhr.finalDisplayedUrl } : {}),
+    runs: 1,
+    runsAttempted: 1,
+    runScores: [scores.performance],
+    ranAt: new Date().toISOString(),
+    ...(lhr.fetchTime ? { fetchedAt: lhr.fetchTime } : {}),
+  };
 }
 
 /** One PageSpeed run. Never throws: a quota, timeout or site error is { ok: false, error }. */
@@ -127,4 +162,16 @@ export async function runPsi(target: string, strategy: Strategy = "mobile"): Pro
     return { ok: false, error: (e as Error)?.name === "TimeoutError" ? "timeout" : "fetch_error", strategy };
   }
   return readPsi(data, strategy);
+}
+
+/** The wait between a device's runs (ms): PSI_RUN_GAP_MS, else the default. */
+function runGapMs(): number {
+  const raw = process.env.PSI_RUN_GAP_MS;
+  const v = Number(raw);
+  return raw != null && raw !== "" && Number.isFinite(v) && v >= 0 ? v : DEFAULT_RUN_GAP_MS;
+}
+
+/** A site's measure: two runs on a phone and two on desktop, averaged per device (lib/psi-runs.mjs measureSite). */
+export function measureSite(target: string): Promise<{ mobile: PsiResult; desktop: PsiResult }> {
+  return measureSiteWith(target, { run: runPsi, gapMs: runGapMs() }) as Promise<{ mobile: PsiResult; desktop: PsiResult }>;
 }

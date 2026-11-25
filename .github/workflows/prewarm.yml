@@ -3,7 +3,9 @@ name: Prewarm metrics
 # Fill the PSI (Lighthouse) + inspect (polish) caches for every graded portfolio
 # (whatever Gemini's letter), so check points and comparisons have objective
 # metrics (the cache is otherwise only populated lazily by visitors). Hits the prod API endpoints,
-# which cache to Turso; PSI quota is 25k/day so this is comfortably free.
+# which cache to Turso; PSI quota is 25k/day. A site is four runs (two phone, two
+# desktop, averaged per device), so 400 sites are 1,600 runs, about 3 hours with
+# three sites at a time (lib/psi-pacing.mjs).
 on:
   workflow_dispatch:
     inputs:

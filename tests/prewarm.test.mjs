@@ -56,6 +56,30 @@ test("network errors and timeouts are counted, not thrown", async () => {
   assert.deepEqual(r.stats.inspect.errors, { timeout: 1 });
 });
 
+test("sites go several at a time, one site's lookups stay in order, and /api/psi is asked to measure before answering", async () => {
+  const seen = [];
+  let inFlight = 0;
+  let peak = 0;
+  const fetchFn = async (u, init) => {
+    seen.push({ u, timeout: init?.signal?.aborted });
+    inFlight++;
+    peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 15));
+    inFlight--;
+    return json(200, { ok: true });
+  };
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, concurrency: 3, log: quiet });
+  assert.equal(r.exitCode, 0);
+  assert.equal(r.stats.psi.attempted, 4);
+  assert.equal(r.stats.inspect.attempted, 4);
+  assert.equal(peak, 3, "three sites at once, no more");
+  for (const { u } of seen) assert.equal(u.includes("/api/psi"), u.includes("&wait=1"), u);
+  for (const url of urls) {
+    const mine = seen.filter((s) => s.u.includes(encodeURIComponent(url)));
+    assert.deepEqual(mine.map((s) => (s.u.includes("/api/psi") ? "psi" : "inspect")), ["inspect", "psi"]);
+  }
+});
+
 test("error classes", () => {
   assert.equal(classify("unknown_url"), "not_on_roster");
   assert.equal(classify("psi_403"), "http_403");
@@ -66,7 +90,7 @@ test("error classes", () => {
 
 // A tier-C site (prewarmed: Gemini's letter no longer gates Lighthouse),
 // roster sites that must never be prewarmed, and one with an old PSI result.
-const [tierC, fresh, down, old, notPortfolio, failedGrade] = feed.slice(4, 10).map((p) => p.url);
+const [tierC, fresh, down, old, notPortfolio, failedGrade, oneRun, twoRuns, failedBefore] = feed.slice(4, 13).map((p) => p.url);
 const DAY = 86400000;
 
 async function runScript(handler, { limit = 4 } = {}) {
@@ -96,7 +120,14 @@ async function runScript(handler, { limit = 4 } = {}) {
   for (const u of ["https://left-upstream.example", `${urls[0]}/`]) await add(u, "S");
   const now = Date.now();
   await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${fresh}`, now - DAY] });
-  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${old}`, now - 40 * DAY] });
+  // Older than the 90 days /api/psi keeps a result (lib/freshness.mjs): due.
+  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${old}`, now - 100 * DAY] });
+  // A result of one run (stored before two runs a device, or by a speed check) is
+  // measured again at once; one of two runs, or a failure, waits for its age.
+  for (const [u, v] of [[oneRun, { ok: true, scores: {} }], [twoRuns, { ok: true, runs: 2, runsAttempted: 2 }], [failedBefore, { ok: false, error: "timeout" }]]) {
+    await add(u, "A");
+    await db.execute({ sql: "INSERT INTO cache VALUES (?, ?, ?)", args: [`psi:${u}`, JSON.stringify(v), now - 2 * DAY] });
+  }
   db.close();
   const summaryFile = join(dir, "summary.md");
   const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", `--limit=${limit}`], {
@@ -107,6 +138,8 @@ async function runScript(handler, { limit = 4 } = {}) {
       PROD_BASE_URL: `http://127.0.0.1:${server.address().port}`,
       GITHUB_STEP_SUMMARY: summaryFile,
       PREWARM_PAUSE_MS: "0",
+      // One site at a time, so the order requested is the queue's order.
+      PREWARM_CONCURRENCY: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -153,8 +186,9 @@ test("the script picks every listed graded portfolio without a fresh PSI result,
     res.end(JSON.stringify({ ok: true }));
   }, { limit: 50 });
   assert.equal(r.code, 0);
-  // Never measured (by URL, tier C included), then the 40-day-old result.
-  // Not: fresh, confirmed down, "not a portfolio", a failed grade, delisted,
-  // or not on the roster.
-  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), old]);
+  // Never measured (by URL, tier C included), then the 100-day-old result,
+  // then the one-run result. Not: fresh, two runs, an earlier failure
+  // (retried when it ages), confirmed down, "not a portfolio", a failed
+  // grade, delisted, or not on the roster.
+  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), old, oneRun]);
 });
