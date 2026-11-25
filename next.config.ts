@@ -98,6 +98,9 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       { source: "/grade/:path+", headers: noindex },
       { source: "/claim", headers: noindex },
+      // The redesigned profile while it is tried out behind PROFILE_NEXT (lib/profile-next/flag.ts).
+      { source: "/p/:slug/next", headers: noindex },
+      { source: "/p/:slug/next/card", headers: noindex },
     ];
   },
   // The face-off moved into Play; old links and bookmarks still land on it.

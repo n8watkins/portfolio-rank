@@ -99,14 +99,16 @@ const ELO_TIER_FRAME: Record<string, React.CSSProperties> = {
 };
 
 const ELO_SIZE = {
+  xs: { box: "h-7 w-7 rounded-lg", letter: "text-sm", sss: "text-[9.5px] tracking-tighter" },
   md: { box: "h-8 w-8 rounded-lg", letter: "text-sm", sss: "text-[11px] tracking-tighter" },
+  hero: { box: "h-12 w-12 rounded-[13px]", letter: "text-2xl", sss: "text-sm tracking-tight" },
   lg: { box: "h-16 w-16 rounded-2xl", letter: "text-3xl", sss: "text-xl tracking-tight" },
 } as const;
 
 const MOD_NAME: Record<string, string> = { "+": "plus", "-": "minus" };
 
 /** A tier by ELO (SSS, S+ ... D) as a square badge: the letter with a typeset plus or minus beside it (a real minus sign). */
-export function EloTierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "lg" }) {
+export function EloTierBadge({ tier, size = "md" }: { tier: string; size?: keyof typeof ELO_SIZE }) {
   const z = ELO_SIZE[size];
   const family = tier === "SSS" ? "S" : tier[0];
   const mod = tier !== "SSS" && tier.length === 2 ? tier[1] : "";

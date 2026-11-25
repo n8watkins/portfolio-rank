@@ -23,7 +23,21 @@ const ERRORS: Record<string, string> = {
   unknown_site: "We couldn't find this site any more. Reload the page.",
 };
 
-export function ReportProblem({ url, domain, className = "" }: { url: string; domain: string; className?: string }) {
+export function ReportProblem({
+  url,
+  domain,
+  className = "",
+  buttonClassName,
+  children,
+}: {
+  url: string;
+  domain: string;
+  className?: string;
+  /** Only the button, in this look (no "Taken automatically" beside it): the redesigned profile's screenshot controls. */
+  buttonClassName?: string;
+  /** With buttonClassName: the button's content. */
+  children?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -122,18 +136,28 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
   const left = NOTE_MAX - [...note].length;
 
   return (
-    <div className={`flex items-center justify-between gap-3 ${className}`}>
-      <p className="min-w-0 truncate text-xs text-mute">Taken automatically</p>
+    <div className={buttonClassName ? className : `flex items-center justify-between gap-3 ${className}`}>
+      {!buttonClassName && <p className="min-w-0 truncate text-xs text-mute">Taken automatically</p>}
       <button
         type="button"
         onClick={show}
         onPointerEnter={prefetchTurnstile}
         aria-haspopup="dialog"
-        className="-mr-2 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-mute transition hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        aria-label={buttonClassName ? "Report a problem" : undefined}
+        className={
+          buttonClassName ??
+          "-mr-2 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-mute transition hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        }
         data-report-open
       >
-        <Flag className="h-3.5 w-3.5" aria-hidden />
-        Report a problem
+        {buttonClassName && children ? (
+          children
+        ) : (
+          <>
+            <Flag className="h-3.5 w-3.5" aria-hidden />
+            Report a problem
+          </>
+        )}
       </button>
 
       <Modal
