@@ -209,6 +209,22 @@ test("a listed portfolio is refreshed in place: its profile's Lighthouse, no dis
   assert.equal(profile.scores.performance, 42, "the profile reads what the tool saved");
 });
 
+test("a visitor's single run never replaces a listed site's stored average of two runs", { skip: !enabled }, async () => {
+  const listed = feed[206].url;
+  const average = { ok: true, strategy: "mobile", scores: { performance: 77 }, metrics: [], runs: 2, runsAttempted: 2, runScores: [70, 84] };
+  const at = Date.now() - 5 * 24 * 3600 * 1000;
+  for (const k of [`psi:${listed}`, `psi-desktop:${listed}`]) await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(average), at] });
+  const r = await post("speed", { url: listed, fresh: true });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.mobile.scores.performance, 42, "the visitor sees their own run");
+  assert.equal(r.body.mobile.runs, 1);
+  for (const k of [`psi:${listed}`, `psi-desktop:${listed}`]) {
+    const stored = await cacheRow(k);
+    assert.equal(Number(stored.at), at, `${k} was left alone`);
+    assert.equal(JSON.parse(String(stored.v)).runs, 2);
+  }
+});
+
 test("an unlisted site that loads joins the discovery seen-set as pending, once", { skip: !enabled }, async () => {
   const url = `https://seen-${RUN}.example.dev/`;
   const a = await post("share-preview", { url });

@@ -2,6 +2,8 @@ import type { CacheMeta } from "@/lib/cache";
 import { fixFor } from "./fixes";
 import { measureSite as measureSiteWith } from "../psi-runs.mjs";
 import { DEFAULT_RUN_GAP_MS } from "../psi-pacing.mjs";
+import { countPsiCall } from "../psi-calls.mjs";
+import { db } from "../db";
 
 // Google PageSpeed Insights (Lighthouse in Google's cloud), shared by the
 // profile's diagnostics (app/api/psi, listed portfolios, mobile) and the
@@ -146,6 +148,8 @@ export async function runPsi(target: string, strategy: Strategy = "mobile"): Pro
   psiUrl.searchParams.set("strategy", strategy);
   if (process.env.PSI_API_KEY) psiUrl.searchParams.set("key", process.env.PSI_API_KEY);
   for (const cat of CATEGORIES) psiUrl.searchParams.append("category", cat);
+  // Counted when the call starts, so a run whose result is never stored still shows on the admin limits page.
+  await countPsiCall(db());
 
   let data: PsiResponse;
   try {

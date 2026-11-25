@@ -3,7 +3,7 @@ import { runInBackground } from "./background";
 import { decide, type CheckKind } from "./freshness.mjs";
 
 /** Why a stored result is being measured again (lib/freshness.mjs decide). */
-export type StaleReason = "forced" | "max_age" | "failed" | "upgrade";
+export type StaleReason = "forced" | "max_age" | "failed";
 
 /** What every cached lookup returns on top of its own fields. */
 export type CacheMeta = {
@@ -66,16 +66,6 @@ export type CacheOptions<T> = {
    * failure keeps its short retry window.
    */
   freshness?: { kind: CheckKind; url: string };
-  /**
-   * A good result that is not due by age but should be measured again anyway
-   * (it was made by an older, lesser method): due now, reason "upgrade".
-   */
-  upgrade?: (data: T) => boolean;
-  /**
-   * A due result is measured again before answering (the daily prewarm wants
-   * the new result stored, not a refresh left running behind the answer).
-   */
-  awaitRefresh?: boolean;
 };
 
 type Entry<T> = { data: T; at: number; due: { run: boolean; reason: StaleReason | "missing" | null } };
@@ -153,7 +143,7 @@ export async function cached<T extends object>(
   options: CacheOptions<T>,
   compute: () => Promise<T>
 ): Promise<T & CacheMeta> {
-  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss, freshness, upgrade, awaitRefresh } = options;
+  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss, freshness } = options;
   const ttlOf = (data: T) => (isFailure(data) ? failureTtlMs : ttlMs);
   await ensureSchema();
   const k = `${namespace}:${key}`;
@@ -191,18 +181,47 @@ export async function cached<T extends object>(
 
   const entry = await readEntry<T>(k, ttlOf, isFailure, freshness);
   if (!entry) return once(k, fill);
-  if (!entry.due.run && !isFailure(entry.data) && upgrade?.(entry.data)) entry.due = { run: true, reason: "upgrade" };
   const meta = metaOf(entry);
   if (!entry.due.run) return { ...entry.data, ...meta };
 
-  if (!inflight.has(k)) {
-    const running = once(k, () => refresh(isFailure(entry.data)));
-    if (!awaitRefresh) runInBackground(running);
-    else {
-      await running.catch(() => {});
-      const again = await readEntry<T>(k, ttlOf, isFailure, freshness);
-      if (again) return { ...again.data, ...metaOf(again) };
-    }
-  }
+  if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(entry.data))));
   return { ...entry.data, ...meta };
+}
+
+/** What a measure asked for by name did: stored a new result, found the key busy, or got a failure. */
+export type MeasureOutcome<T> = { status: "stored" | "busy" | "failed"; data: T & CacheMeta };
+
+/**
+ * Measures `compute` now, for the one caller that waits for the answer (the
+ * daily prewarm job, app/api/psi): takes the lease, computes, stores the
+ * result and releases the lease before it returns, so nothing runs behind
+ * the response (on the deployed Worker, work left running after the response
+ * is cut off after about 30 seconds). A failure never replaces a good stored
+ * result; it is stored only when nothing is stored yet, so a page view can say why.
+ */
+export async function measureNow<T extends object>(
+  namespace: string,
+  key: string,
+  { isFailure }: { isFailure: (data: T) => boolean },
+  compute: () => Promise<T>
+): Promise<MeasureOutcome<T>> {
+  await ensureSchema();
+  const k = `${namespace}:${key}`;
+  if (!(await takeLease(k))) return { status: "busy", data: { ok: false, error: "in_progress" } as unknown as T & CacheMeta };
+  try {
+    const data = await compute();
+    if (isFailure(data)) {
+      const have = await readEntry<T>(k, () => Infinity, isFailure);
+      if (!have || isFailure(have.data)) {
+        const at = Date.now();
+        await db().execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(data), at] });
+      }
+      return { status: "failed", data };
+    }
+    const at = Date.now();
+    await db().execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(data), at] });
+    return { status: "stored", data: { ...data, measuredAt: new Date(at).toISOString() } };
+  } finally {
+    await releaseLease(k).catch(() => {});
+  }
 }

@@ -51,8 +51,11 @@ Times below are Pacific, with UTC in brackets, for winter.
    It skips when Cloudflare started a run in the last hour.
 5. **01:00 (09:00 UTC)**: warm the speed and polish scores of listed sites, up to 400 a day (`prewarm.yml`).
    Every site Gemini graded "a portfolio" or the capture measured is included, so sites ranked from the code checks get their own Lighthouse.
-   Each site is measured with four PageSpeed runs, two on a phone and two on desktop, and each device's two are averaged; a result that holds one run is measured again.
-   Three sites go at a time, about 3 hours for 400 sites, 1,600 of the day's 25,000 runs.
+   This job is the only thing that measures Lighthouse: a page view or a visit to `/api/psi` never starts a measure and never waits, it shows what is stored or "Not measured yet".
+   Each site is measured with four PageSpeed runs, two on a phone and two on desktop, and each device's two are averaged; a result that holds one run, or has no desktop result, is measured again.
+   The job picks sites the admin asked to re-measure first, then never-measured ones, then the oldest, and tries a failed site again the next day.
+   Three sites go at a time, about 3 hours for 400 sites if a run takes 25 s (not measured yet), 1,600 of the day's 25,000 runs; the first full pass over 2,159 sites takes about 6 days.
+   It needs the repository secret `AUTH_SECRET` (the app's own), which proves to `/api/psi` that the request may measure; without it the job stops with an error.
    Running.
 6. **04:00 (12:00 UTC)**: the GitHub fallback for the nightly health check (`health.yml`).
    It skips when Cloudflare started one in the last 30 hours, which is normal.

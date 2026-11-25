@@ -232,7 +232,7 @@ The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mj
 
 | Check | Where it is stored | Maximum age | A failure is retried after | When a due result runs again |
 | --- | --- | --- | --- | --- |
-| Lighthouse (PageSpeed) | `cache` `psi:<url>` (phone) and `psi-desktop:<url>`: each the average of two runs, with the run count, each run's performance score and the date | 90 days (a result of one run, stored before two runs a device or by a visitor's speed check, is due at once) | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml`, which waits for the new result (`/api/psi?wait=1`) |
+| Lighthouse (PageSpeed) | `cache` `psi:<url>` (phone) and `psi-desktop:<url>`: each the average of two runs, with the run count, each run's performance score and the date | 90 days (a result of one run, stored before two runs a device or by a visitor's speed check, is measured again too) | 1 hour | Only in the daily `prewarm.yml`, never on a view: a page view shows what is stored, or "Not measured yet". The prewarm puts sites the admin asked to re-measure first, then never-measured sites, then the oldest, and retries a failure the next day. |
 | Polish checklist and share card | `cache` `inspect:<url>` | 30 days (the share image and favicon can break on their own) | 1 hour | On the next view, and `prewarm.yml` |
 | Project link checks | `portfolios.facts` (`facts_at`) | 30 days (links rot without the page changing) | the next night | Tonight's free checks (`evidence.mjs --links`, up to 120 a night) |
 | Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | a growing backoff (`refresh_failures`) | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, asked-for sites first) |
@@ -244,8 +244,8 @@ The state is `site_freshness`: per address `forced_at`.
 Its other columns (`hash`, `checked_at`, `attempted_at`, `changed_at` and the rest) held the removed fingerprints: nothing writes or reads them any more, and their rows stay.
 An old row's `changed_at` never makes anything due.
 
-**What people see:** under Lighthouse and the polish checklist, "Measured on <date>", with "updating in the background" while a due result runs again.
-**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`).
+**What people see:** under Lighthouse and the polish checklist, "Measured on <date>", with "updating in the background" while a due polish result runs again. Lighthouse never updates in the background: a site the daily job has not measured says "Not measured yet".
+**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`): it asks, and the next daily prewarm measures Lighthouse for that site first.
 
 ## End-of-day run
 
@@ -712,7 +712,7 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
   About 0.6 GB for 2,300 sites, plus ~0.2 MB/day of backups: under the cap, $0.
   Lean, 10,000 sites take 1.4 GB and 50,000 take 7.2 GB (`lib/admin/limits.mjs` PROJECTIONS).
 - **GitHub Actions:** unlimited (public repo).
-- **PSI/Lighthouse:** 25k runs/day and 240 a minute. A site's measure is four runs (two phone, two desktop), so the prewarm's 400 sites a day are 1,600 runs (6.4% of the day), about 15 calls a minute at most, and about 3 hours with three sites at a time (`lib/psi-pacing.mjs`). Measuring the whole list of 2,159 sites once takes about 6 days at 400 a day (8,636 runs); after that, every site every 90 days is about 96 runs a day. The 30-second wait between a device's two runs stops PageSpeed's own 30-second result cache from answering the second run with the first.
+- **PSI/Lighthouse:** 25k runs/day (the key's daily quota). A site's measure is four runs (two phone, two desktop), so the prewarm's 400 sites a day are 1,600 runs (6.4% of the day) and, with three sites at a time, about 15 calls a minute at most and about 3 hours if a run takes 25 s (`lib/psi-pacing.mjs`). Measuring the whole list of 2,159 sites once takes about 6 days at 400 a day (8,636 runs); after that, every site every 90 days is about 96 runs a day. The admin limits page counts PageSpeed calls made (`psi_calls`), not results stored. **Unverified until `scripts/experiments/psi-two-runs.mjs` has been run once with a key (`pass-env run -- node scripts/experiments/psi-two-runs.mjs <url> 30`):** the per-minute limit (240 is assumed, not read from a Google page), how long a run takes, and whether two runs of one URL 0 or 30 seconds apart are different runs. A run that comes back with the same `fetchTime` as the one before counts once, whatever the gap.
 - **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.
 
 ## AI judge (Gemini)

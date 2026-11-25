@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { runPrewarm, classify } from "../scripts/lib/prewarm.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
+import { FRESHNESS_TABLES } from "../lib/freshness.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -19,15 +20,42 @@ const urls = feed.slice(0, 4).map((p) => p.url);
 const quiet = () => {};
 
 test("every lookup failing exits 1 and names the most common error", async () => {
-  const fetchFn = async (u) =>
-    u.includes("/api/psi")
-      ? json(200, { ok: false, error: "Quota exceeded for quota metric 'Queries' and limit 'Queries per day'" })
-      : json(200, { ok: false, error: "unreachable" });
+  const fetchFn = async (u) => (u.includes("/api/psi") ? json(200, { ok: false, error: "timeout" }) : json(200, { ok: false, error: "unreachable" }));
   const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, log: quiet });
   assert.equal(r.exitCode, 1);
-  assert.match(r.verdict, /8 of 8 lookups failed; most common error: (quota|unreachable) \(4\)/);
-  assert.deepEqual(r.stats.psi, { attempted: 4, ok: 0, failed: 4, errors: { quota: 4 } });
-  assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| quota 4 \|/);
+  assert.match(r.verdict, /8 of 8 lookups failed; most common error: (timeout|unreachable) \(4\)/);
+  assert.deepEqual(r.stats.psi, { attempted: 4, ok: 0, failed: 4, errors: { timeout: 4 } });
+  assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| timeout 4 \|/);
+  assert.match(r.summary, /PageSpeed: 0 site\(s\) measured \(a new result stored\), 4 not measured \(timeout 4\)\./);
+});
+
+test("a quota refusal stops the job at once: no more sites are started, and it reports why", async () => {
+  const asked = [];
+  const fetchFn = async (u) => {
+    asked.push(u);
+    return u.includes("/api/psi") ? json(200, { ok: false, error: "quota" }) : json(200, { ok: true });
+  };
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, log: quiet });
+  assert.equal(r.exitCode, 1);
+  assert.match(r.verdict, /^STOPPED: PageSpeed refused \(quota\) at site 1 of 4; 3 site\(s\) not tried; 0 measured\./);
+  assert.equal(r.stats.psi.attempted, 1);
+  assert.equal(asked.length, 2, "one site's inspect and psi, nothing after");
+  assert.match(r.summary, /3 not tried/);
+});
+
+test("a site counts as measured only when a new result was stored", async () => {
+  const bodies = [
+    { ok: true, measured: true }, // stored
+    { ok: true }, // answered with a result it did not just measure
+    { ok: false, error: "in_progress" }, // another measure holds the site
+    { ok: false, error: "unreachable" }, // the measure failed
+  ];
+  let i = 0;
+  const fetchFn = async (u) => (u.includes("/api/psi") ? json(200, bodies[i++]) : json(200, { ok: true }));
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, log: quiet });
+  assert.equal(r.stats.psi.ok, 1);
+  assert.deepEqual(r.stats.psi.errors, { not_stored: 1, in_progress: 1, unreachable: 1 });
+  assert.match(r.summary, /PageSpeed: 1 site\(s\) measured \(a new result stored\), 3 not measured \(/);
 });
 
 test("more than half failing exits 1; half or fewer exits 0", async () => {
@@ -41,10 +69,10 @@ test("more than half failing exits 1; half or fewer exits 0", async () => {
   assert.deepEqual(bad.stats.inspect.errors, { http_500: 1 });
 
   // psi all fail (4), inspect all fine -> exactly half: not "more than half".
-  const half = async (u) => (u.includes("/api/psi") ? json(429, {}) : json(200, { ok: true }));
+  const half = async (u) => (u.includes("/api/psi") ? json(503, {}) : json(200, { ok: true }));
   const ok = await runPrewarm({ urls, base: "http://x", fetchFn: half, pauseMs: 0, log: quiet });
   assert.equal(ok.exitCode, 0);
-  assert.equal(ok.stats.psi.errors.quota, 4);
+  assert.equal(ok.stats.psi.errors.http_503, 4);
 });
 
 test("network errors and timeouts are counted, not thrown", async () => {
@@ -56,24 +84,24 @@ test("network errors and timeouts are counted, not thrown", async () => {
   assert.deepEqual(r.stats.inspect.errors, { timeout: 1 });
 });
 
-test("sites go several at a time, one site's lookups stay in order, and /api/psi is asked to measure before answering", async () => {
+test("sites go several at a time, one site's lookups stay in order, and only /api/psi carries the internal token", async () => {
   const seen = [];
   let inFlight = 0;
   let peak = 0;
   const fetchFn = async (u, init) => {
-    seen.push({ u, timeout: init?.signal?.aborted });
+    seen.push({ u, headers: init?.headers });
     inFlight++;
     peak = Math.max(peak, inFlight);
     await new Promise((r) => setTimeout(r, 15));
     inFlight--;
-    return json(200, { ok: true });
+    return json(200, { ok: true, measured: true });
   };
-  const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, concurrency: 3, log: quiet });
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, concurrency: 3, psiToken: "tok", log: quiet });
   assert.equal(r.exitCode, 0);
   assert.equal(r.stats.psi.attempted, 4);
   assert.equal(r.stats.inspect.attempted, 4);
   assert.equal(peak, 3, "three sites at once, no more");
-  for (const { u } of seen) assert.equal(u.includes("/api/psi"), u.includes("&wait=1"), u);
+  for (const { u, headers } of seen) assert.equal(headers?.["x-portfoliorank-internal"], u.includes("/api/psi") ? "tok" : undefined, u);
   for (const url of urls) {
     const mine = seen.filter((s) => s.u.includes(encodeURIComponent(url)));
     assert.deepEqual(mine.map((s) => (s.u.includes("/api/psi") ? "psi" : "inspect")), ["inspect", "psi"]);
@@ -90,10 +118,10 @@ test("error classes", () => {
 
 // A tier-C site (prewarmed: Gemini's letter no longer gates Lighthouse),
 // roster sites that must never be prewarmed, and one with an old PSI result.
-const [tierC, fresh, down, old, notPortfolio, failedGrade, oneRun, twoRuns, failedBefore] = feed.slice(4, 13).map((p) => p.url);
+const [tierC, fresh, down, old, notPortfolio, failedGrade, oneRun, twoRuns, failedLong, failedRecent, noDesktop, singleDesktop, forced] = feed.slice(4, 17).map((p) => p.url);
 const DAY = 86400000;
 
-async function runScript(handler, { limit = 4 } = {}) {
+async function runScript(handler, { limit = 4, env = {} } = {}) {
   const requested = [];
   const server = createServer((req, res) => {
     requested.push(req.url);
@@ -119,15 +147,30 @@ async function runScript(handler, { limit = 4 } = {}) {
   // Gone from the roster (delisted on start), or a variant of a roster URL.
   for (const u of ["https://left-upstream.example", `${urls[0]}/`]) await add(u, "S");
   const now = Date.now();
-  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${fresh}`, now - DAY] });
-  // Older than the 90 days /api/psi keeps a result (lib/freshness.mjs): due.
-  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${old}`, now - 100 * DAY] });
-  // A result of one run (stored before two runs a device, or by a speed check) is
-  // measured again at once; one of two runs, or a failure, waits for its age.
-  for (const [u, v] of [[oneRun, { ok: true, scores: {} }], [twoRuns, { ok: true, runs: 2, runsAttempted: 2 }], [failedBefore, { ok: false, error: "timeout" }]]) {
+  const good = { ok: true, runs: 2, runsAttempted: 2 };
+  const put = (k, v, at) => db.execute({ sql: "INSERT INTO cache VALUES (?, ?, ?)", args: [k, JSON.stringify(v), at] });
+  const both = async (u, phone, at, desktop = good) => {
     await add(u, "A");
-    await db.execute({ sql: "INSERT INTO cache VALUES (?, ?, ?)", args: [`psi:${u}`, JSON.stringify(v), now - 2 * DAY] });
-  }
+    await put(`psi:${u}`, phone, at);
+    if (desktop) await put(`psi-desktop:${u}`, desktop, at);
+  };
+  // Not due: measured a day ago with two runs a device; and one whose failure is 10 minutes old (retried after an hour).
+  await put(`psi:${fresh}`, good, now - DAY);
+  await put(`psi-desktop:${fresh}`, good, now - DAY);
+  await both(twoRuns, good, now - 2 * DAY);
+  await both(failedRecent, { ok: false, error: "timeout" }, now - 10 * 60 * 1000, null);
+  // Due, oldest first: older than the 90 days a result is kept; no desktop result; a desktop result of one run;
+  // a phone result of one run (stored before two runs a device, or by a speed check); a failure older than its hour.
+  await put(`psi:${old}`, good, now - 100 * DAY);
+  await put(`psi-desktop:${old}`, good, now - 100 * DAY);
+  await both(noDesktop, good, now - 5 * DAY, null);
+  await both(singleDesktop, good, now - 4 * DAY, { ok: true });
+  await both(oneRun, { ok: true, scores: {} }, now - 3 * DAY);
+  await both(failedLong, { ok: false, error: "timeout" }, now - 2 * DAY, null);
+  // Asked for again by the admin (Re-measure) after its good result: first, though its result is newer than all of those.
+  await both(forced, good, now - 10 * DAY);
+  for (const sql of FRESHNESS_TABLES) await db.execute(sql);
+  await db.execute({ sql: "INSERT INTO site_freshness (url, forced_at) VALUES (?, ?)", args: [forced, now - DAY] });
   db.close();
   const summaryFile = join(dir, "summary.md");
   const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", `--limit=${limit}`], {
@@ -138,8 +181,10 @@ async function runScript(handler, { limit = 4 } = {}) {
       PROD_BASE_URL: `http://127.0.0.1:${server.address().port}`,
       GITHUB_STEP_SUMMARY: summaryFile,
       PREWARM_PAUSE_MS: "0",
+      AUTH_SECRET: "prewarm-test-secret",
       // One site at a time, so the order requested is the queue's order.
       PREWARM_CONCURRENCY: "1",
+      ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -153,15 +198,16 @@ async function runScript(handler, { limit = 4 } = {}) {
   return { code, summary: readFileSync(summaryFile, "utf8"), err, psi };
 }
 
-test("the script exits 1 and writes the job summary when PageSpeed has no key", async () => {
+test("the script exits 1 and writes the job summary when PageSpeed refuses (quota), after the first site", async () => {
   const r = await runScript((req, res) => {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(req.url.startsWith("/api/psi") ? { ok: false, error: "Quota exceeded for quota metric 'Queries'" } : { ok: false, error: "unreachable" }));
   });
   assert.equal(r.code, 1);
   assert.match(r.summary, /## Prewarm metrics/);
-  assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| quota 4 \|/);
-  assert.match(r.err, /::error::FAILED: 8 of 8 lookups failed/);
+  assert.match(r.summary, /\| psi \| 1 \| 0 \| 1 \| quota 1 \|/);
+  assert.match(r.err, /::error::STOPPED: PageSpeed refused \(quota\) at site 1 of 4; 3 site\(s\) not tried/);
+  assert.equal(r.psi.length, 1, "no site after the refusal");
 });
 
 test("roster rejections are reported as their own reason", async () => {
@@ -174,21 +220,30 @@ test("roster rejections are reported as their own reason", async () => {
 test("the script exits 0 when lookups succeed", async () => {
   const r = await runScript((req, res) => {
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ ok: true }));
+    res.end(JSON.stringify({ ok: true, measured: true }));
   });
   assert.equal(r.code, 0);
   assert.match(r.summary, /OK: 8 of 8 lookups succeeded/);
+  assert.match(r.summary, /PageSpeed: 4 site\(s\) measured/);
 });
 
-test("the script picks every listed graded portfolio without a fresh PSI result, whatever its letter, never-measured first, then the oldest", async () => {
+test("the script picks what is due by the check rule, whatever the letter: asked-for first, never measured, then the oldest", async () => {
   const r = await runScript((req, res) => {
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ ok: true }));
+    res.end(JSON.stringify({ ok: true, measured: true }));
   }, { limit: 50 });
   assert.equal(r.code, 0);
-  // Never measured (by URL, tier C included), then the 100-day-old result,
-  // then the one-run result. Not: fresh, two runs, an earlier failure
-  // (retried when it ages), confirmed down, "not a portfolio", a failed
-  // grade, delisted, or not on the roster.
-  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), old, oneRun]);
+  // The admin's Re-measure first; never measured (by URL, tier C included);
+  // then by age: past 90 days, no desktop result, a desktop result of one run,
+  // a phone result of one run, a failure older than an hour. Not: measured with
+  // two runs a device, a failure 10 minutes old, confirmed down, "not a
+  // portfolio", a failed grade, delisted, or not on the roster.
+  assert.deepEqual(r.psi, [forced, ...[...urls, tierC].sort(), old, noDesktop, singleDesktop, oneRun, failedLong]);
+});
+
+test("the script cannot measure without AUTH_SECRET: it says so and fails before any call", async () => {
+  const r = await runScript((req, res) => res.end("{}"), { env: { AUTH_SECRET: "" } });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /AUTH_SECRET is not set/);
+  assert.equal(r.psi.length, 0);
 });

@@ -37,6 +37,9 @@ jobs:
       # The site whose API it calls (repository variable; unset,
       # scripts/prewarm-metrics.mjs uses https://portfoliorank.dev).
       PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+      # The app's AUTH_SECRET (the production Worker's value): the job proves with a token made from it that it
+      # may start a Lighthouse measure; page views never measure (app/api/psi).
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
     steps:
       - uses: actions/checkout@v7
       # Production runs the last release's code (.github/actions/release-code).

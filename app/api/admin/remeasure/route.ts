@@ -5,8 +5,9 @@ import { isKnownPortfolio } from "@/lib/roster";
 import { markForced, readFreshness } from "@/lib/freshness.mjs";
 
 // The admin's "Re-measure" on a portfolio page (lib/freshness.mjs): every
-// check of the site is due again at once. Lighthouse and the polish check
-// run on the next view (the portfolio page asks again right away), the
+// check of the site is due again at once. The polish check runs on the next
+// view (the portfolio page asks again right away), Lighthouse in the next daily
+// prewarm (which puts asked-for sites first; a view never measures it), the
 // screenshots and link checks in tonight's free checks.
 //   GET  /api/admin/remeasure?url=<listed portfolio>   { forcedAt }
 //   POST /api/admin/remeasure { url }                  { forcedAt }

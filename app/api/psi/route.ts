@@ -1,28 +1,39 @@
 import { NextResponse } from "next/server";
-import { cached } from "@/lib/cache";
+import { measureNow, peekCached } from "@/lib/cache";
 import { measureSite, type PsiResult } from "@/lib/tools/psi";
 import { psiKey } from "@/lib/tools/keys";
-import { store } from "@/lib/tools/server";
-import { needsMoreRuns } from "@/lib/psi-runs.mjs";
+import { storeIfBetter } from "@/lib/tools/server";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
-import { CHECK_KINDS } from "@/lib/freshness.mjs";
+import { INTERNAL_TOKEN_HEADER, MEASURE_PSI, internalToken } from "@/lib/internal-token.mjs";
 
-// Lighthouse for a listed portfolio's profile, from lib/tools/psi.ts, which
-// the free speed check (app/api/tools/speed) shares: a check there saves
-// under the same "psi:<url>" key, so it refreshes this too. A measure is two
-// runs on a phone and two on desktop, averaged per device (lib/psi-runs.mjs).
-// The answer and "psi:<url>" are the phone average (what the profile always
-// read, with the run details beside it); the desktop average is saved under
-// "psi-desktop:<url>", where the scores and the profile read it. A row with
-// fewer than two runs attempted (stored before this, or by the speed check)
-// is measured again on the next view.
-// ?wait=1 (the daily prewarm): a due result is measured before answering.
+// Lighthouse for a listed portfolio's profile, stored by lib/tools/psi.ts,
+// which the free speed check (app/api/tools/speed) shares.
+//
+// A view never measures. GET /api/psi?url=<listed site> returns what is
+// stored: the phone result ("psi:<url>", the average of two runs, or one run
+// for a row stored before two runs a device or by a visitor's speed check; the
+// run details are in the result, lib/psi-runs.mjs), or { ok: false, error:
+// "not_measured" } when nothing is. It never starts PageSpeed and never makes
+// the visitor wait: on the deployed Worker, work left running after the
+// response is cut off after about 30 seconds, and a measure of four runs takes
+// longer than that.
+//
+// Only the daily prewarm job (scripts/prewarm-metrics.mjs) measures, and it
+// waits for the answer. It sends the internal token (lib/internal-token.mjs,
+// purpose MEASURE_PSI); without it the same request is a plain view. A measure
+// is two runs on a phone and two on desktop, averaged per device: the phone
+// average is stored in "psi:<url>" and the answer ({ ..., measured: true }),
+// the desktop average in "psi-desktop:<url>", where the scores and the profile
+// read it. The answer says { ok: false, error } when nothing new was stored:
+// "in_progress" (another measure holds the site), or the failure's reason.
 export type { PsiResult };
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { "cache-control": "private, no-store" };
+
 export async function GET(req: Request) {
-  const params = new URL(req.url).searchParams;
-  const url = params.get("url");
-  const wait = params.get("wait") === "1";
+  const url = new URL(req.url).searchParams.get("url");
   // Only audit sites on the roster - keeps strangers from burning the PSI
   // quota or pointing our server at arbitrary URLs.
   if (!url || !isKnownPortfolio(url)) {
@@ -33,32 +44,21 @@ export async function GET(req: Request) {
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
-  // When Lighthouse runs again (lib/freshness.mjs, AUTOMATION.md "When checks
-  // re-run"): a result is reused until the admin pressed "Re-measure" or it
-  // is 90 days old. A failure (quota, timeout, a site that won't load)
-  // is retried after an hour, so a broken site can't burn the quota by being
-  // asked again and again, and a good result is never replaced by a failure.
-  // A miss takes the lease first: one PageSpeed run per site at a time, the
-  // other callers hear "in_progress" and retry. A due result is served at
-  // once and refreshed in the background (lib/cache.ts).
-  const data = await cached<PsiResult>(
-    "psi",
-    url,
-    {
-      ttlMs: CHECK_KINDS.lighthouse.maxAgeMs,
-      isFailure: (d) => !d.ok,
-      failureTtlMs: CHECK_KINDS.lighthouse.failureRetryMs,
-      leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
-      freshness: { kind: "lighthouse", url },
-      upgrade: needsMoreRuns,
-      awaitRefresh: wait,
-    },
-    async () => {
-      const { mobile, desktop } = await measureSite(url);
-      // Only a good desktop result is saved: a failure never replaces what a profile shows.
-      if (desktop.ok) await store(psiKey("desktop", url), desktop);
-      return mobile;
-    }
-  );
-  return NextResponse.json(data);
+
+  const secret = process.env.AUTH_SECRET;
+  const sent = req.headers.get(INTERNAL_TOKEN_HEADER) ?? "";
+  const mayMeasure = Boolean(secret) && sent !== "" && sent === (await internalToken(secret, MEASURE_PSI));
+
+  if (!mayMeasure) {
+    const stored = await peekCached<PsiResult>("psi", url);
+    return NextResponse.json(stored ?? ({ ok: false, error: "not_measured" } satisfies PsiResult), { headers: NO_STORE });
+  }
+
+  const { status, data } = await measureNow<PsiResult>("psi", url, { isFailure: (d) => !d.ok }, async () => {
+    const { mobile, desktop } = await measureSite(url);
+    // The desktop average is stored beside the phone one; a failure never replaces a good result.
+    await storeIfBetter(psiKey("desktop", url), desktop);
+    return mobile;
+  });
+  return NextResponse.json(status === "stored" ? { ...data, measured: true } : data, { headers: NO_STORE });
 }

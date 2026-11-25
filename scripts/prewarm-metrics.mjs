@@ -1,4 +1,4 @@
-// Prewarm the PSI (Lighthouse) + inspect (polish) caches for every graded
+// Prewarm the PSI (Lighthouse, four runs a site: the only thing that measures it) + inspect (polish) caches for every graded
 // portfolio (not only Gemini's S/A/B: check points, the seed of every ELO, are
 // 35% Lighthouse, and Gemini's letter no longer decides tiers) by hitting the
 // prod API endpoints, which cache results to Turso (shared with
@@ -13,6 +13,7 @@ import { appendFileSync, existsSync, readFileSync } from "fs";
 import path from "path";
 import { PREWARM_LIMIT, prewarmQueue, runPrewarm } from "./lib/prewarm.mjs";
 import { PREWARM_CONCURRENCY } from "../lib/psi-pacing.mjs";
+import { MEASURE_PSI, internalToken } from "../lib/internal-token.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb, syncRoster } from "../pipeline/roster.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
@@ -38,7 +39,15 @@ await syncRoster(db, feed);
 const urls = await prewarmQueue(db, { active: ACTIVE, limit: LIMIT });
 
 console.log(`prewarming PSI + inspect for ${urls.length} graded site(s) without fresh metrics via ${PROD}`);
+// Only this job measures Lighthouse: /api/psi measures for a request that carries the internal token
+// (an HMAC of AUTH_SECRET, the app's own secret), and is a plain view for anyone else.
+if (!process.env.AUTH_SECRET) {
+  console.error("::error::AUTH_SECRET is not set: /api/psi would treat these requests as page views and measure nothing. Add the app's AUTH_SECRET to this repository's Actions secrets.");
+  process.exit(1);
+}
+const psiToken = await internalToken(process.env.AUTH_SECRET, MEASURE_PSI);
 const { exitCode, summary, verdict } = await runPrewarm({
+  psiToken,
   urls,
   base: PROD,
   pauseMs: Number(process.env.PREWARM_PAUSE_MS ?? 1200), // gentle pacing

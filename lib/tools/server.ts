@@ -5,6 +5,8 @@ import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
 import { fail, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
 import { reserveTool, toolCaps } from "./caps.mjs";
+import type { PsiResult } from "./psi";
+import { runCount } from "@/lib/psi-runs.mjs";
 import { addPending } from "@/lib/discovery/sites.mjs";
 import { addRefusal } from "@/lib/ownership/same-site.mjs";
 
@@ -118,4 +120,23 @@ export const answerHead = (g: Gate) => ({ url: g.url, listed: Boolean(g.listed),
 /** Saves a result under its cache key (the same keys the profile reads). */
 export async function store(key: string, value: object, at = Date.now()): Promise<void> {
   await db().execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [key, JSON.stringify(value), at] });
+}
+
+/**
+ * Saves a Lighthouse result unless the stored one is better: a result of one
+ * run (a visitor's speed check) never replaces an average of two, and a
+ * failure never replaces a good result (it is stored only where nothing good
+ * is, so a page can say why). Returns whether it wrote.
+ */
+export async function storeIfBetter(key: string, value: PsiResult, at = Date.now()): Promise<boolean> {
+  const row = (await db().execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [key] })).rows[0];
+  let have: PsiResult | null = null;
+  try {
+    have = row?.v ? (JSON.parse(String(row.v)) as PsiResult) : null;
+  } catch {
+    have = null;
+  }
+  const better = value.ok ? runCount(value) >= runCount(have) : !have?.ok;
+  if (better) await store(key, value, at);
+  return better;
 }

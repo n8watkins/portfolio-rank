@@ -211,7 +211,7 @@ test("the admin limits page states the new use and projects four runs a measure"
   const psi = LIMITS.find((l) => l.key === "psi");
   assert.equal(psi.cap, PSI_DAILY_CAP);
   assert.match(psi.label, /four a site/);
-  assert.match(psi.over, /240 a minute/);
+  assert.match(psi.over, /240 assumed/);
   for (const size of [5000, 20000, 50000]) assert.ok(PROJECTIONS.psi[size] >= steadyRunsPerDay(size), `${size}`);
   assert.ok(PROJECTIONS.psi[50000] < PSI_DAILY_CAP);
 });
