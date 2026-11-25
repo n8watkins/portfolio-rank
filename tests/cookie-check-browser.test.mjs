@@ -19,7 +19,9 @@ let embedBase;
 const pages = () => ({
   "/generic": `<!doctype html><body>${SITE}${BANNER}</body>`,
   "/french": `<!doctype html><html lang="fr"><body>${SITE}${bar(`<p>Ce site utilise des cookies pour mesurer l'audience.</p><button>Tout refuser</button> <button>Personnaliser</button> <button>Tout accepter</button>`)}</body></html>`,
-  "/german": `<!doctype html><html lang="de"><body>${SITE}${bar(`<p>Wir verwenden Cookies, um unsere Website zu verbessern.</p><button>Ablehnen</button> <button>Alle akzeptieren</button>`)}</body></html>`,
+  // A notice in the corner (sskd.tech, 2026-11-25): it says what its cookies do, with an OK.
+  "/notice": `<!doctype html><body>${SITE}<div style="position:fixed;right:16px;bottom:16px;border:1px solid">this site counts visits with <a href="/cookies">cookies</a> <button>ok</button></div></body>`,
+  "/german":`<!doctype html><html lang="de"><body>${SITE}${bar(`<p>Wir verwenden Cookies, um unsere Website zu verbessern.</p><button>Ablehnen</button> <button>Alle akzeptieren</button>`)}</body></html>`,
   // A footer that is about not tracking: no use of cookies, so not a banner, even with an OK.
   "/no-cookies-footer": `<!doctype html><body>${SITE}${bar(`<p>No cookies, no tracking. This site respects your privacy.</p><button>OK</button>`)}</body>`,
   "/cookiebot": `<!doctype html><body>${SITE}<div id="CybotCookiebotDialog" style="position:fixed;bottom:0;padding:20px;background:#fff">We use cookies <button>Allow all</button></div></body>`,
@@ -88,6 +90,7 @@ test("a fixed bar that says it uses cookies, with a choice button, is a banner",
 test("a French and a German banner are banners", async () => {
   assert.equal((await consentOn("/french")).banner, "generic");
   assert.equal((await consentOn("/german")).banner, "generic");
+  assert.equal((await consentOn("/notice")).banner, "generic", "a notice that says what its cookies do");
 });
 
 test("false-positive guard: 'No cookies, no tracking. OK', a project card, a blog post, a footer link and a fixed nav are not banners", async () => {

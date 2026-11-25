@@ -629,7 +629,9 @@ export function findConsent([tools, frameHosts]) {
   const USES = new RegExp(
     [
       String.raw`\b(we|this (web)?site|our (web)?site|this page)\s+(also\s+)?(use|uses|place|store|set)\b`,
-      String.raw`\b(uses?|using)\s+(cookies|trackers)`,
+      String.raw`\b(uses?|using)\s+(analytics\s+|tracking\s+)?(cookies|trackers)`,
+      // A notice that says what the cookies do: "this site counts visits with cookies".
+      String.raw`\b(counts?|measures?|tracks?|remembers?)\b[^.]{0,40}\bwith (analytics |tracking )?cookies\b`,
       String.raw`\bwe and our (\d+ )?(partners|vendors)\b`,
       String.raw`\bby (using|continuing|browsing)\b[^.]{0,80}\b(agree|accept|consent)`,
       String.raw`nous utilisons|ce site( web)? utilise|utilise des cookies|nous et nos partenaires|en poursuivant (votre )?navigation`,
