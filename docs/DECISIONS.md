@@ -254,6 +254,26 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A listed site's verified owner's "Re-grade" asks for a new capture; the night's "grade new sites" stage grades the site once from a capture newer than the request, ahead of new sites and inside the same cap, keeps the old grade in `rubric_history` and closes the request, so it can be asked again later.
   Nothing else re-grades a listed site.
 
+### The cookie check (2026-11-25)
+
+- **Whether a site tracks visitors, and whether it asks first, measured by code** (owner, 2026-11-25: "tracking cookies itself is not something to fix, tracking cookies and not asking for permission to track cookies is something to fix."). Status: building (`feat/cookie-check`).
+  The capture reads it on arrival, before it clicks or dismisses anything (`pipeline/cookie-check.mjs`): the cookies (name, domain, first or third party, whether each is a known tracking cookie; never their values), the requests to known tracker hosts, cookieless analytics apart, and a consent banner (a known consent tool, or a generic banner with a stated false-positive guard).
+  It stores one of five states in `facts.privacy`: `none`, `after-consent`, `with-banner` (a fix), `no-consent` (a fix) and `unknown`, with the reason.
+  Plain observed facts: no score, no AI, no legal verdict, and no profile, score, rank or tier changes with it yet.
+  The owner approved how the profile will show it (2026-11-25), in `lib/cookie-check.mjs` `cookieCheckView`, which a follow-up wires into the profile:
+  1, no tracking cookies and no tracker requests: pass, "No tracking cookies" (cookieless analytics alone is this case, with a note);
+  2, a consent tool or banner is shown and nothing tracked before a choice: information, "Asks before tracking";
+  3, tracking started and no consent tool anywhere on the page: fix, "Sets tracking cookies without asking";
+  4, a banner or consent tool is present but tracking started before any choice: fix, "Tracks before you answer the banner";
+  5, a consent tool is in the page's code but no banner was shown to our visit and nothing tracked: information, "Has a consent tool; banner not shown to a United States visitor", never a fix.
+  The two fix cases carry a short recommendation for the profile's "What we recommend changing" list; old captures and failed readings are "Not measured".
+  Cookieless analytics (Plausible, Fathom, Simple Analytics, Umami, Cloudflare Web Analytics, Vercel Analytics, GoatCounter and a few more) are not tracking: they set no cookies and keep no identifier on the device.
+  A tag manager's or a pixel's script alone, and Google consent mode's pings sent with storage denied, are not tracking either: what the tags do shows as a cookie or a beacon.
+  Readings are kept by vantage: `US`, the runner's address, and, when the first reading saw a consent tool or a tracker, `US+eu-browser`, a second visit from the same address with a European browser (Europe/Paris, fr-FR, a Paris location).
+  The second one only catches consent tools that decide in the browser; most decide by the network address, so it is never called a reading from Europe, and a runner in Europe can store `EU` beside them later without a change of shape.
+  The capture does not click Accept or Reject: whether the capture may click such things is the owner's open "guard the clicks" decision.
+  The facts version stays 4: the cookie check has its own version (`facts.privacy.v`), and a row without `privacy` reads as not measured, never as no tracking, so nothing else about the facts changes and the Capture problems page does not treat every next re-capture as new measuring code.
+
 ### Capture problems the owner can see (2026-11-22)
 
 - **A Capture problems page in the admin, and one line in the nightly alert** (owner, 2026-11-22: yes to a "Capture problems" list). Status: building (#275).

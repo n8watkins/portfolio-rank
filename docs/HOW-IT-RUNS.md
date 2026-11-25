@@ -182,6 +182,8 @@ Each chain is a list of steps in the order they happen.
    Each link counts once, in the highest place it is seen in: a link in a work list that the projects list links again is a project; but what the home page shows outside its projects is raised by the projects page only when that page links it more than once, as a project card does.
    A menu is found by its shape, whatever it is built from: the links beside a link to the home page or to the projects page itself, at the same depth, mostly to the site's own pages and mostly naming its sections; only its own pages are left out, never a demo or a repository.
    When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
+   On arrival, before the capture clicks or closes anything, the cookie check reads the cookies, the requests to tracker hosts and any consent banner, and stores one of `none`, `after-consent`, `with-banner`, `no-consent` or `unknown` in `facts.privacy` (`pipeline/cookie-check.mjs`, docs/DECISIONS.md "The cookie check").
+   When it saw a consent tool or a tracker, a second visit from the same address with European browser settings (Europe/Paris, fr-FR) reads it once more, stored beside it as its own vantage; nothing shows either reading yet.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`), `lib/freshness.mjs` `screenshotsDue`.
    A capture is due again for one of two reasons only: it is 90 days old, or a person asked for a new one (your "Re-measure", or a re-grade an owner asked for).
    Asked-for sites go first, then the oldest captures.

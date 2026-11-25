@@ -110,6 +110,13 @@
     "requests": ["https://u.example.com/"],
     "dom": null
   },
+  "none-tool-shows-no-banner": {
+    "expect": "none",
+    "pageUrl": "https://ct.example.com/",
+    "cookies": [{ "name": "OptanonConsent", "domain": ".ct.example.com", "value": "isGpcEnabled=0" }],
+    "requests": ["https://ct.example.com/", "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js", "https://cdn.cookielaw.org/consent/abc.json"],
+    "dom": { "tools": [{ "name": "OneTrust", "shown": false }], "banner": null, "sample": null, "scripts": [] }
+  },
   "none-dom-unreadable": {
     "expect": "none",
     "pageUrl": "https://n.example.com/",

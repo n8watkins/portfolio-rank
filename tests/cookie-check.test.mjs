@@ -2,8 +2,8 @@
 // each state from fixtures of what the browser saw on arrival
 // (tests/fixtures/cookie-check/readings.json), cookieless analytics never
 // counted as tracking, a banner whose tracker fires anyway, first and third
-// party, cookie values never kept, readings kept by vantage, and the three
-// display levels a profile will show.
+// party, cookie values never kept, readings kept by vantage, and the owner's
+// five display cases a profile will show (lib/cookie-check.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -183,59 +183,100 @@ test("the region is the runner's, US unless CAPTURE_REGION says otherwise", () =
   assert.equal(captureRegion({ CAPTURE_REGION: "eu" }), "EU");
 });
 
-test("display: pass, information and fix, each with its plain sentence", () => {
-  const view = (name) => cookieCheckView(factsWith(read(name)));
-  assert.deepEqual(
-    Object.fromEntries(cases.map(([name]) => [name, view(name).level])),
-    {
-      "none-cookieless": "pass",
-      "none-plain": "pass",
-      "after-consent-tool": "pass",
-      "after-consent-generic": "pass",
-      "with-banner-tracker-fires-anyway": "fix",
-      "with-banner-third-party-only": "fix",
-      "no-consent": "fix",
-      "no-consent-tool-shows-no-banner": "fix",
-      "no-consent-requests-only": "fix",
-      "none-loader-only": "pass",
-      "unknown-dom-unreadable": "information",
-      "none-dom-unreadable": "pass",
-    }
-  );
-  assert.equal(view("none-plain").sentence, "No tracking cookies or trackers. Checked from the US.");
+// The owner's five display cases (2026-11-25), one test each, with their exact titles.
+const view = (...names) => cookieCheckView(factsWith(...names.map((n) => (typeof n === "string" ? read(n) : n))));
+const shown = (v) => ({ level: v.level, case: v.case, title: v.title, recommendation: v.recommendation });
+
+test("display case 1: no tracking cookies and no tracker requests is a pass", () => {
+  for (const name of ["none-plain", "none-loader-only", "none-dom-unreadable"]) {
+    assert.deepEqual(shown(view(name)), { level: "pass", case: 1, title: "No tracking cookies", recommendation: null }, name);
+  }
+  assert.equal(view("none-plain").sentence, "No tracking cookies or trackers. Checked from the United States.");
+});
+
+test("display case 1: cookieless analytics alone is a pass with a note, never a fix", () => {
+  const v = view("none-cookieless");
+  assert.deepEqual(shown(v), { level: "pass", case: 1, title: "No tracking cookies", recommendation: null });
   assert.equal(
-    view("none-cookieless").sentence,
-    "No tracking cookies or trackers; visits are counted with Plausible, Vercel Analytics, GoatCounter and Cloudflare Web Analytics, which set no cookies. Checked from the US."
+    v.sentence,
+    "No tracking cookies or trackers. Visits are counted with Plausible, Vercel Analytics, GoatCounter and Cloudflare Web Analytics, which set no cookies. Checked from the United States."
   );
-  assert.equal(view("after-consent-tool").sentence, "Asks before tracking: a cookie banner (Cookiebot) is shown and nothing tracks the visit before a choice. Checked from the US.");
-  assert.equal(
-    view("with-banner-tracker-fires-anyway").sentence,
-    "Tracking (Google Analytics) starts before the visitor answers the cookie banner. Start it only after the visitor accepts. Checked from the US."
-  );
+});
+
+test("display case 2: a banner and nothing tracked before a choice is information", () => {
+  for (const name of ["after-consent-tool", "after-consent-generic"]) {
+    assert.deepEqual(shown(view(name)), { level: "information", case: 2, title: "Asks before tracking", recommendation: null }, name);
+  }
+  assert.equal(view("after-consent-tool").sentence, "A cookie banner (Cookiebot) is shown and nothing tracks the visit before a choice. Checked from the United States.");
+});
+
+test("display case 3: tracking with no consent tool anywhere is a fix, with its recommendation", () => {
+  for (const name of ["no-consent", "no-consent-requests-only"]) {
+    assert.deepEqual(
+      shown(view(name)),
+      {
+        level: "fix",
+        case: 3,
+        title: "Sets tracking cookies without asking",
+        recommendation: "Ask visitors before setting tracking cookies, or switch to analytics that set no cookies (such as Plausible or Cloudflare Web Analytics).",
+      },
+      name
+    );
+  }
   assert.equal(
     view("no-consent").sentence,
-    "Tracks visitors without asking (Google Analytics and Hotjar): no cookie banner was shown. Ask first, or use analytics that set no cookies. Checked from the US."
+    "Tracks visitors without asking (Google Analytics and Hotjar): no cookie banner or consent tool was found. Checked from the United States."
   );
-  assert.match(view("no-consent-tool-shows-no-banner").sentence, /OneTrust loaded but showed none/);
-  assert.match(view("unknown-dom-unreadable").sentence, /^Could not tell whether the site asks before tracking: tracking started, but/);
 });
 
-test("display: a banner shown only to European browser settings is said, the US verdict stands", () => {
-  const us = read("no-consent");
+test("display case 4: a banner or consent tool with tracking before any choice is a fix, with its recommendation", () => {
+  const expected = { level: "fix", case: 4, title: "Tracks before you answer the banner", recommendation: "Load tracking only after the visitor accepts the cookie banner, not before they answer it." };
+  // The banner shown and the tracker firing anyway.
+  assert.deepEqual(shown(view("with-banner-tracker-fires-anyway")), expected);
+  assert.deepEqual(shown(view("with-banner-third-party-only")), expected);
+  assert.equal(
+    view("with-banner-tracker-fires-anyway").sentence,
+    "Tracking (Google Analytics) starts before the visitor answers the cookie banner. Checked from the United States."
+  );
+  // A consent tool in the page's code that showed this visit no banner, and tracking anyway.
+  const hidden = view("no-consent-tool-shows-no-banner");
+  assert.deepEqual(shown(hidden), expected);
+  assert.match(hidden.sentence, /while OneTrust is in the page's code but showed no banner to this visit/);
+  // A banner only a browser with European settings is shown (same address): the page has a consent tool.
   const eu = makeReading({ ...fixtures["with-banner-tracker-fires-anyway"], vantage: EU_SETTINGS, at: AT });
-  const v = cookieCheckView(factsWith(us, eu));
-  assert.equal(v.level, "fix");
-  assert.match(v.sentence, /A banner does appear for a browser set to European settings\./);
-  const second = cookieCheckView(factsWith(us, eu), "US+eu-browser");
-  assert.equal(second.level, "fix");
-  assert.match(second.sentence, /Checked from the US with European browser settings\.$/);
+  const v = view("no-consent", eu);
+  assert.deepEqual(shown(v), expected);
+  assert.match(v.sentence, /a cookie banner appears only for a browser set to European settings/);
+  const second = cookieCheckView(factsWith(read("no-consent"), eu), "US+eu-browser");
+  assert.equal(second.case, 4);
+  assert.match(second.sentence, /Checked from the United States with European browser settings\.$/);
 });
 
-test("display: facts from before the cookie check are not measured, never 'no tracking'", () => {
-  assert.equal(cookieCheckView({ v: 4, resume: true }), null);
-  assert.equal(cookieCheckView(null), null);
-  assert.equal(cookieCheckView("not json"), null);
-  assert.equal(cookieCheckView(JSON.stringify({ v: 4, privacy: { v: 99, readings: { US: { state: "none" } } } })), null);
-  assert.equal(cookieCheckView(factsWith(read("none-plain")), "EU"), null, "no reading from that vantage");
+test("display case 5: a consent tool with no banner shown and nothing tracked is information, never a fix", () => {
+  const v = view("none-tool-shows-no-banner");
+  assert.deepEqual(shown(v), { level: "information", case: 5, title: "Has a consent tool; banner not shown to a United States visitor", recommendation: null });
+  assert.equal(v.sentence, "OneTrust is in the page's code, but no banner was shown to this visit, and nothing tracked it. Checked from the United States.");
+});
+
+test("display: old captures and failed readings are not measured, never 'no tracking'", () => {
+  const notMeasured = (v) => ({ level: v.level, case: v.case, title: v.title, recommendation: v.recommendation });
+  const expected = { level: "not-measured", case: null, title: "Not measured", recommendation: null };
+  assert.deepEqual(notMeasured(cookieCheckView({ v: 4, resume: true })), expected, "facts from before the cookie check");
+  assert.deepEqual(notMeasured(cookieCheckView(null)), expected);
+  assert.deepEqual(notMeasured(cookieCheckView("not json")), expected);
+  assert.deepEqual(notMeasured(cookieCheckView(JSON.stringify({ v: 4, privacy: { v: 99, readings: { US: { state: "none" } } } }))), expected, "another version");
+  assert.deepEqual(notMeasured(cookieCheckView(factsWith(read("none-plain")), "EU")), expected, "no reading from that vantage");
+  const failed = cookieCheckView(factsWith(read("unknown-dom-unreadable")));
+  assert.deepEqual(notMeasured(failed), expected, "a reading that could not tell");
+  assert.match(failed.sentence, /^The cookie check could not tell: tracking started, but/);
+  assert.deepEqual(notMeasured(cookieCheckView(factsWith(makeReading({ error: "the cookies could not be read (Target closed)", at: AT })))), expected, "a failed reading");
   assert.equal(cookieReading(JSON.stringify(factsWith(read("none-plain")))).state, "none");
+});
+
+test("display: every fixture maps to one of the five cases or not measured", () => {
+  for (const [name] of cases) {
+    const v = view(name);
+    assert.ok([1, 2, 3, 4, 5, null].includes(v.case), name);
+    assert.equal(v.level === "fix", v.recommendation != null, `${name}: a recommendation exactly for a fix`);
+  }
 });
