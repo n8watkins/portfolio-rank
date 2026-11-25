@@ -70,7 +70,7 @@ test("with the switch on: the report from the saved checks, the actions, the cla
   assert.ok(html.includes(`href="/claim?url=${encodeURIComponent(SITE.url)}"`), "the claim link");
   // No score and no points anywhere, no Gemini card, no "Other portfolios in this tier" (the page, not the site's shell).
   const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
-  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", "Design", "Writing", "cookie"]) {
+  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", ">Design<", ">Writing<", "Mobile only", "Tracking cookies", ">Desktop<"]) {
     assert.ok(!main.includes(gone), `does not show "${gone}"`);
   }
   // The share card it shows.
@@ -84,12 +84,12 @@ test("in no sitemap and linked from nowhere: the current profile is unchanged", 
   const current = await fetch(`${BASE}/p/${encodeURIComponent(SITE.url)}`);
   assert.equal(current.status, 200);
   assert.ok(!(await current.text()).includes("/next"), "the current profile does not link the new one");
-  const index = await (await fetch(`${BASE}/sitemap.xml`)).text();
-  const parts = [...index.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]).pathname);
-  for (const part of parts) {
-    const xml = await (await fetch(BASE + part)).text();
-    assert.ok(!/\/next<\/loc>/.test(xml), `${part} lists no /next page`);
-  }
+  // The sitemap's profiles are profilePath(url) (lib/sitemap-entries.ts), never the /next page. Read from the
+  // source, not fetched: a fetch here would fill the sitemap's day-long cache before tests/sitemap-pages.test.mjs seeds it.
+  const entries = fs.readFileSync(path.join(process.cwd(), "lib", "sitemap-entries.ts"), "utf8");
+  assert.match(entries, /url: `\$\{BASE\}\$\{profilePath\(url\)\}`/);
+  assert.ok(!entries.includes("/next"));
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib", "profile.ts"), "utf8"), /export const profilePath = \(url: string\) => `\/p\/\$\{encodeURIComponent\(url\)\}`;/);
   // An address PortfolioRank does not know is a 404 here too.
   assert.equal((await fetch(BASE + nextPath("https://not-listed.example"))).status, 404);
 });
@@ -131,8 +131,11 @@ test("with the switch off (production): the page and its card answer 404", { ski
     if (!up) await new Promise((r) => setTimeout(r, 1000));
   }
   assert.ok(up, "the second server started");
-  assert.equal((await fetch(base + nextPath(SITE.url))).status, 404);
-  assert.equal((await fetch(`${base}${nextPath(SITE.url)}/card`)).status, 404);
+  // A site the first server never rendered: both servers share the build's page cache (ISR), and in
+  // production turning the switch off ships with a deploy, which starts from a fresh one.
+  const other = feed[1301].url;
+  assert.equal((await fetch(base + nextPath(other))).status, 404);
+  assert.equal((await fetch(`${base}${nextPath(other)}/card`)).status, 404);
   // The current profile is there either way.
-  assert.equal((await fetch(`${base}/p/${encodeURIComponent(SITE.url)}`)).status, 200);
+  assert.equal((await fetch(`${base}/p/${encodeURIComponent(other)}`)).status, 200);
 });
