@@ -906,29 +906,30 @@
   color: var(--ink-mobile);
 }
 
-/* Cards: one column on phones; two on wide screens, the odd last one across both; three side by side
-   when there are three and room. Cards in a row stretch to one height, so no card ends in a gap. */
+/* Cards: one column on phones; on wide screens two columns that end level, the cards of the shorter
+   one sharing its extra height, so no card ends in a deep empty band and no gap is ragged. */
 .cards {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
+.col {
+  display: contents;
+}
 @media (min-width: 760px) {
-  .cards {
+  .cards[data-cols="2"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
     align-items: stretch;
   }
-  .cards > .card:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
   }
-}
-@media (min-width: 1100px) {
-  .cards[data-n="3"] {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .cards[data-n="3"] > .card:last-child:nth-child(odd) {
-    grid-column: auto;
+  .col > .card {
+    flex: 1 1 auto;
   }
 }
 .card {
@@ -1072,6 +1073,7 @@
   transform: rotate(180deg);
 }
 .explain ul {
+  list-style: disc;
   margin: 4px 0 6px;
   padding: 0 10px 0 28px;
   display: grid;
@@ -1274,10 +1276,14 @@
   text-wrap: balance;
 }
 .dvRun svg {
+  display: inline-block;
   width: 11px;
   height: 11px;
   margin-left: 3px;
   vertical-align: -1px;
+}
+.nowrap {
+  white-space: nowrap;
 }
 .dvRun:hover {
   text-decoration: underline;
@@ -1313,6 +1319,7 @@
 }
 .recsList {
   margin: 0;
+  list-style: decimal;
   padding-left: 22px;
   display: grid;
   gap: 10px;
@@ -1717,6 +1724,13 @@
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
   color: var(--color-mute);
+}
+/* Phones: the switch, zoom out and in, and Close on one line ("Fit" is zoom out to 100%). */
+@media (max-width: 440px) {
+  .vwFit,
+  .vwPct {
+    display: none;
+  }
 }
 .vwStage {
   position: relative;

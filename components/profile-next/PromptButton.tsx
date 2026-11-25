@@ -54,12 +54,13 @@ export function PromptButton({ prompt, className, children }: { prompt: string; 
             A prompt to fix this
           </h3>
           <p className={s.dlgP}>Paste it into your AI coding tool, opened on this site&apos;s code. It lists only what was measured here and falls short, with the numbers.</p>
-          <textarea className={s.fixText} readOnly rows={12} aria-label="The prompt" value={prompt} onFocus={(e) => e.currentTarget.select()} />
+          <textarea className={s.fixText} readOnly rows={12} aria-label="The prompt" value={prompt} />
           <div className={s.dlgActs}>
             <span className={s.copyStatus} role="status">
               {status}
             </span>
-            <button type="button" className={s.doneBtn} onClick={copy}>
+            {/* The dialog opens on its main action, not inside the text. */}
+            <button type="button" className={s.doneBtn} onClick={copy} autoFocus>
               <Copy className={s.icS} aria-hidden />
               Copy prompt
             </button>

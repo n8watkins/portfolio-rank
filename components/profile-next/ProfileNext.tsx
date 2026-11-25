@@ -261,8 +261,11 @@ function LighthouseBody({ speed, rows, measuredOn, testUrl }: { speed: number; r
             </span>
             <Gauge n={speed} label="Mobile" />
             <a className={s.dvRun} href={testUrl} target="_blank" rel="noopener noreferrer">
-              Run this test yourself
-              <SquareArrowOutUpRight aria-hidden />
+              Run this test{" "}
+              <span className={s.nowrap}>
+                yourself
+                <SquareArrowOutUpRight aria-hidden />
+              </span>
             </a>
           </th>
         </tr>
@@ -296,7 +299,14 @@ function CardBody({ card }: { card: Card }) {
 
 function ReportSection({ report, prompt }: { report: Report; prompt: string }) {
   const { cards, recommendations, checkedOn } = report;
+  // Wide screens: two columns that end level, the Lighthouse card on its own beside the others (on
+  // phones the columns drop away and the cards keep the tiles' order).
+  const side = cards.filter((c) => c.kind === "lighthouse");
+  const main = cards.filter((c) => c.kind !== "lighthouse");
+  const columns =
+    cards.length < 2 ? [cards] : side.length && main.length ? [main, side] : [cards.filter((_, i) => i % 2 === 0), cards.filter((_, i) => i % 2 === 1)];
   return (
+
     <section className={s.reportSec} aria-labelledby="pn-report">
       <div className={s.repHead}>
         <div>
@@ -327,25 +337,29 @@ function ReportSection({ report, prompt }: { report: Report; prompt: string }) {
           );
         })}
       </nav>
-      <div className={s.cards} data-n={cards.length}>
-        {cards.map((c) => {
-          const Icon = CARD_ICON[c.id] ?? ClipboardCheck;
-          return (
-            <article key={c.id} id={`pn-card-${c.id}`} className={s.card} aria-labelledby={`pn-card-${c.id}-h`}>
-              <div className={`${s.th} ${tint(c.id)}`}>
-                <span className={s.thIc}>
-                  <Icon aria-hidden />
-                </span>
-                <h3 className={s.thN} id={`pn-card-${c.id}-h`}>
-                  {c.name}
-                </h3>
-              </div>
-              <div className={s.cardB}>
-                <CardBody card={c} />
-              </div>
-            </article>
-          );
-        })}
+      <div className={s.cards} data-cols={columns.length}>
+        {columns.map((col, i) => (
+          <div key={i} className={s.col}>
+            {col.map((c) => {
+              const Icon = CARD_ICON[c.id] ?? ClipboardCheck;
+              return (
+                <article key={c.id} id={`pn-card-${c.id}`} className={s.card} aria-labelledby={`pn-card-${c.id}-h`}>
+                  <div className={`${s.th} ${tint(c.id)}`}>
+                    <span className={s.thIc}>
+                      <Icon aria-hidden />
+                    </span>
+                    <h3 className={s.thN} id={`pn-card-${c.id}-h`}>
+                      {c.name}
+                    </h3>
+                  </div>
+                  <div className={s.cardB}>
+                    <CardBody card={c} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ))}
       </div>
       {recommendations.length > 0 && (
         <section className={s.recs} aria-labelledby="pn-recs">
