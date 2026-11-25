@@ -4,10 +4,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { factsVersion, pickShard, shardOf } from "../scripts/remeasure-shard.mjs";
+import { PRIVACY_VERSION } from "../pipeline/cookie-check.mjs";
 
 const urls = Array.from({ length: 500 }, (_, i) => `https://site-${i}.example/`);
 const feed = urls.map((url) => ({ url, name: url }));
-const rows = urls.map((url, i) => ({ url, facts: JSON.stringify({ v: i % 2 === 0 ? 1 : 2 }) }));
+// Every row has a cookie check reading, so the facts version alone decides (the cookie check's own test is below).
+const CHECKED = { v: PRIVACY_VERSION, readings: { US: { state: "none" } } };
+const rows = urls.map((url, i) => ({ url, facts: JSON.stringify({ v: i % 2 === 0 ? 1 : 2, privacy: CHECKED }) }));
 const all = (shards, extra = {}) =>
   Array.from({ length: shards }, (_, i) => pickShard({ feed, rows, shard: i + 1, shards, ...extra }));
 
@@ -80,6 +83,23 @@ test("skip is applied before the limit, so a trial run still has sites to do", (
   const got = pickShard({ feed, rows, shard: 1, shards: 1, skipVersion: 2, limit: 10 });
   assert.equal(got.urls.length, 10);
   for (const u of got.urls) assert.equal(factsVersion(rows.find((r) => r.url === u).facts), 1);
+});
+
+test("a row without a cookie check reading at its current version is still to do; a re-run skips the rows done", () => {
+  const some = [
+    { url: "https://done.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED }) },
+    { url: "https://no-check.example/", facts: JSON.stringify({ v: 4 }) },
+    { url: "https://old-check.example/", facts: JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION + 1, readings: { US: { state: "none" } } } }) },
+    { url: "https://empty-check.example/", facts: JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION, readings: {} } }) },
+  ];
+  const got = pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4 });
+  assert.deepEqual(got.urls, ["https://empty-check.example/", "https://no-check.example/", "https://old-check.example/"]);
+  assert.equal(got.skipped, 1);
+  // The run filled them in: a re-run after a failure has nothing left.
+  const after = some.map((r) => ({ ...r, facts: JSON.stringify({ v: 4, privacy: CHECKED }) }));
+  assert.deepEqual(pickShard({ feed: after, rows: after, shard: 1, shards: 1, skipVersion: 4 }).urls, []);
+  // skip-version 0 still takes everything.
+  assert.equal(pickShard({ feed: after, rows: after, shard: 1, shards: 1, skipVersion: 0 }).urls.length, 4);
 });
 
 test("a bad shard number or count is refused", () => {

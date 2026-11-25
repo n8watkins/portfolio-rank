@@ -12,13 +12,16 @@
 // delisted one is not on the list). The split is by a hash of the address, so
 // the shards never overlap, together they cover the list, and a re-run gives
 // the same split. --skip-version V leaves out sites whose stored facts
-// already carry version V or newer (the `v` field of portfolios.facts), so a
-// re-run after a failure only does what is left. --limit caps the shard (a
+// already carry version V or newer (the `v` field of portfolios.facts) and a
+// cookie check reading at its current version (facts.privacy,
+// pipeline/cookie-check.mjs), so a re-run after a failure only does what is
+// left, and the whole-list run fills in the cookie check where it is missing. --limit caps the shard (a
 // small trial run); it keeps the first addresses in address order.
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { hasCookieCheck } from "../pipeline/cookie-check.mjs";
 
 /** The shard (0-based) an address belongs to, out of `shards`. Stable: a hash of the address alone. */
 export function shardOf(url, shards) {
@@ -48,7 +51,9 @@ export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 
   const facts = new Map(rows.map((r) => [String(r.url), r.facts]));
   const urls = [...new Set(feed.map((p) => String(p.url)))].filter((u) => facts.has(u)).sort();
   const mine = urls.filter((u) => shardOf(u, shards) === shard - 1);
-  const wanted = skipVersion > 0 ? mine.filter((u) => factsVersion(facts.get(u)) < skipVersion) : mine;
+  // Still to do: facts older than skipVersion, or facts with no cookie check reading at its current version
+  // (pipeline/cookie-check.mjs hasCookieCheck), so the whole-list run fills the readings in.
+  const wanted = skipVersion > 0 ? mine.filter((u) => factsVersion(facts.get(u)) < skipVersion || !hasCookieCheck(facts.get(u))) : mine;
   const capped = limit > 0 ? wanted.slice(0, limit) : wanted;
   return { urls: capped, listed: urls.length, inShard: mine.length, skipped: mine.length - wanted.length };
 }
@@ -84,7 +89,7 @@ async function main() {
   console.log(
     `shard ${shard} of ${shards}: ${urls.length} site(s) to re-capture ` +
       `(${inShard} of the ${listed} listed, live and captured sites belong to it; ` +
-      `${skipped} skipped for facts already at version ${skipVersion} or newer; limit ${limit || "none"})`
+      `${skipped} skipped for facts already at version ${skipVersion} or newer, with a cookie check; limit ${limit || "none"})`
   );
 }
 

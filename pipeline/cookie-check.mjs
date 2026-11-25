@@ -5,70 +5,73 @@
 // during the capture's own visit (pipeline/capture.mjs), before the capture
 // clicks or dismisses anything: no score, no AI, no legal verdict.
 //
-// What is read, once the page has loaded and settled (and once more, 2
-// seconds later, when tracking was seen and no banner yet: a banner that
-// slides in late):
-//   - the cookies in the browser (name, domain, first or third party, and
-//     whether each is a known tracking cookie: TRACKING_COOKIES, or any cookie
-//     an advertising or tracking network sets from its own domain,
-//     TRACKER_HOSTS). Cookie values are never read into the result.
-//   - the requests made so far to known tracker hosts (TRACKER_HOSTS), by host
-//     and count. A tag manager's or pixel's script alone (its `loader` paths:
-//     gtm.js, gtag/js, fbevents.js) is recorded apart as `loaders` and does not
-//     count as tracking: a consent tool can hold the tags it loads, and what
-//     they do shows as a cookie or a beacon. Google's consent-mode pings sent
-//     with both storages denied (gcs=G100) are counted apart too.
-//   - cookieless analytics (COOKIELESS_ANALYTICS: Plausible, Fathom, Simple
-//     Analytics, Umami, Cloudflare Web Analytics, Vercel Analytics,
-//     GoatCounter, Pirsch, Tinylytics, OpenPanel): recorded as `cookieless`, never as
-//     tracking. They set no cookies and keep no identifier on the device.
-//   - a consent banner: a known consent tool (CONSENT_TOOLS) from its script
-//     hosts and its page markers, and a generic banner (findConsent): a
-//     visible element that is fixed, sticky, a dialog, or named cookie or
-//     consent, holds under 1,500 characters, says cookies, consent, GDPR or
-//     privacy choices, and has a short choice button (Accept, Agree, Allow,
-//     Reject, Decline, OK, Got it, Manage, Preferences). The false-positive
-//     guard: the wording and a choice button must both be in that one small
-//     element, so a blog post about cookies, a "Cookie Clicker" project card or
-//     a cookie policy link in a footer is not a banner.
+// The guiding rule (review of #305): a wrong public "tracks without asking"
+// on someone's profile is the costly error, a miss is cheap. So only the
+// site's own evidence can make a fix (lib/cookie-check.mjs), and every rule
+// below leans toward "not seen" when it cannot tell.
 //
-// The state (stateOf):
-//   none           no tracking cookie and no tracking request;
-//   after-consent  a banner is shown and nothing tracked the visit before a choice;
-//   with-banner    a banner is shown but tracking started before any choice (a fix);
-//   no-consent     tracking started and no banner was shown (a fix);
+// What is read, once the page has loaded and settled (and once more, 2
+// seconds later, when the site's own tracking was seen and no banner yet: a
+// banner that slides in late), bounded in time (readCookieCheck):
+//   - every request so far, with where it came from (watchRequests): the
+//     main frame, a same-site frame (or a blank frame a page script made),
+//     or a third-party embed (a YouTube player, a Calendly widget), named by
+//     its host.
+//   - the cookies in the browser (name, domain, first or third party, and
+//     whether each is a known tracking cookie: TRACKING_COOKIES by name, or
+//     any cookie a tracker sets from its own domain). Cookie values are never
+//     read into the result. A third-party cookie belongs to an embed when
+//     every request to its site came from that embed's frame.
+//   - tracker requests (TRACKERS): a request counts as tracking only when it
+//     is a known beacon (a /g/collect, a /tr, a /v1/t), never a script or a
+//     configuration fetch, which is recorded apart as a loader.
+//   - cookieless analytics (COOKIELESS_ANALYTICS): recorded apart, never
+//     tracking. They set no cookies and keep no identifier on the device.
+//   - a consent tool (CONSENT_TOOLS) from the main frame or same-site frames
+//     only (its script host, a script address on the page, its banner
+//     element), and whether a banner is shown: a known tool's element, a
+//     consent tool's own frame, or a generic banner (findConsent).
+//
+// The site's own tracking (`own`): a first-party tracking cookie, or a beacon
+// from the main frame or a same-site frame to an analytics or pixel tracker.
+// An ad network's cookie or request from the main frame (a rotating ad
+// creative) is kept as `ads`; an embed's cookies and beacons as `embeds`.
+// Neither is the site's own tracking, so neither changes the state.
+//
+// The state (stateOf), from the site's own tracking only:
+//   none           no own tracking (ads or embeds may still be recorded);
+//   after-consent  a banner is shown and no own tracking before a choice;
+//   with-banner    a banner is shown and own tracking started before any choice;
+//   no-consent     own tracking and no banner shown (with or without a consent tool);
 //   unknown        the capture could not tell, with the reason.
 //
 // Each reading records where it was made from: `region`, the capture
 // runner's network address (CAPTURE_REGION, "US" by default: GitHub's
-// runners), and `vantage`, its key in facts.privacy.readings with a plain
-// `label`. The plain reading's vantage is the region ("US"). When it saw a
-// consent tool or a tracker, the capture makes a second reading in a fresh
-// browser context of its own with European browser settings (EU_SETTINGS:
-// Europe/Paris time zone, fr-FR, a Paris location) from the same address,
-// vantage "US+eu-browser", labelled "address in US, European browser
-// settings": most consent tools decide by network address and are not fooled
-// by it, so it only catches the minority that decide in the browser, and it
-// is never called a reading from Europe. A capture keeps the readings of
-// other vantages it finds (withReading), so a reading from a runner in Europe
-// ("EU") can sit beside them later with no change to the shape. Many consent
-// tools show their banner only to visitors in some regions, so a US reading
-// of a site that asks Europeans can be no-consent: that is what a US visitor met.
+// runners), which is also its key in facts.privacy.readings. A capture keeps
+// the readings of other regions it finds (withReading), so a reading from a
+// runner in Europe ("EU") can sit beside it later with no change of shape.
+// Many consent tools show their banner only to visitors in some regions, so
+// a US reading of a site that asks Europeans can be no-consent with a tool:
+// that is what a US visitor met, and lib/cookie-check.mjs shows it as
+// information, not a fix.
 //
 // The lists are fixed and written out here, so a reading is repeatable and a
-// reviewer can see why a cookie or host counted. They hold the well-known
-// analytics, advertising, session-recording and social pixels; a tracker not
-// on them is not seen (a false negative, never a false positive).
+// reviewer can see why a cookie or request counted; a tracker not on them is
+// not seen (a miss, never a false accusation).
 
 /** The shape of facts.privacy; a reader of another version treats it as not measured. */
 export const PRIVACY_VERSION = 1;
 /** Where the capture runs, unless CAPTURE_REGION says otherwise. */
 export const DEFAULT_REGION = "US";
 export const STATES = ["none", "after-consent", "with-banner", "no-consent", "unknown"];
-/** At most this many cookies and hosts are stored per reading (the counts are kept whole). */
+/** At most this many cookies and hosts are stored per list (the counts are kept whole). */
 export const MAX_LISTED = 40;
-/** How long a reading waits once more for a late banner, when it saw tracking and no banner. */
+/** How long a reading waits once more for a late banner, when it saw the site's own tracking and no banner. */
 export const LATE_BANNER_MS = 2000;
+/** The most a reading may take, the late look included. */
+export const READ_LIMIT_MS = 12000;
+/** What a reading leaves of the capture's own time limit, for the rest of the capture. */
+export const READ_MARGIN_MS = 120000;
 
 /** The region a reading is made from: CAPTURE_REGION, else DEFAULT_REGION. */
 export const captureRegion = (env = process.env) => String(env.CAPTURE_REGION ?? "").trim().toUpperCase() || DEFAULT_REGION;
@@ -84,7 +87,7 @@ export const TRACKING_COOKIES = [
   [/^_gat(_.+)?$/, "Google Analytics"],
   [/^__utm[abcztv]$/, "Google Analytics"],
   [/^_gcl_/, "Google Ads"],
-  [/^(IDE|DSID|test_cookie|__gads|__gpi|__eoi)$/, "Google Ads"],
+  [/^(IDE|DSID|test_cookie|__gads|__gpi|__eoi|APC)$/, "Google Ads"],
   [/^_fb[pc]$/, "Meta Pixel"],
   [/^_hj/, "Hotjar"],
   [/^_cl(ck|sk)$/, "Microsoft Clarity"],
@@ -112,75 +115,111 @@ export const TRACKING_COOKIES = [
 ];
 
 /**
- * Known tracker hosts: { host, vendor, loader? }. A request to the host or a
- * subdomain counts as tracking unless its path matches `loader` (the
- * script that loads the tag, recorded apart), and a cookie set from the
- * host's own domain is a tracking cookie. `path` limits the host to those
- * paths (facebook.com's pixel, google.com's ad pings).
+ * Known trackers: { host, vendor, kind, beacon? }. `kind` is "analytics" or
+ * "pixel" (the site's own measuring: its beacons from the main frame are the
+ * site's own tracking) or "ads" (an ad network serving ads: never the site's
+ * own). A request to the host or a subdomain is a beacon when its path
+ * matches `beacon` ("ads" hosts: any request that is not a script); every
+ * other request to it (a script, a configuration) is a loader, never
+ * tracking. A cookie set from the host's own domain is a tracking cookie of
+ * the vendor. `path` limits the host to those paths. The beacons verified
+ * against live sites on 2026-11-25 are marked "verified".
  */
-export const TRACKER_HOSTS = [
-  { host: "google-analytics.com", vendor: "Google Analytics", loader: /\/analytics\.js$|\/ga\.js$/ },
-  { host: "analytics.google.com", vendor: "Google Analytics" },
-  { host: "googletagmanager.com", vendor: "Google Tag Manager", loader: /^\/(gtm\.js|gtag\/js|gtag\/destination|static\/)/ },
-  { host: "doubleclick.net", vendor: "Google Ads" },
-  { host: "googleadservices.com", vendor: "Google Ads", loader: /\/conversion(_async)?\.js$/ },
-  { host: "googlesyndication.com", vendor: "Google Ads", loader: /\.js$/ },
-  { host: "google.com", vendor: "Google Ads", path: /^\/(pagead|ads\/|ccm\/collect|rmkt\/)/ },
-  { host: "connect.facebook.net", vendor: "Meta Pixel", loader: /fbevents\.js$|\/signals\/(config|plugins)\// },
-  { host: "facebook.com", vendor: "Meta Pixel", path: /^\/tr\/?$/ },
-  { host: "hotjar.com", vendor: "Hotjar", loader: /^\/c\/hotjar-[\w-]+\.js$|^\/modules\./ },
-  { host: "hotjar.io", vendor: "Hotjar" },
-  { host: "clarity.ms", vendor: "Microsoft Clarity", loader: /^\/(tag|s)\// },
-  { host: "bat.bing.com", vendor: "Microsoft Advertising", loader: /\/bat\.js$/ },
-  { host: "snap.licdn.com", vendor: "LinkedIn", loader: /insight(\.min)?\.js$/ },
-  { host: "px.ads.linkedin.com", vendor: "LinkedIn" },
-  { host: "ads.linkedin.com", vendor: "LinkedIn" },
-  { host: "analytics.tiktok.com", vendor: "TikTok", loader: /\/(events|main\.[\w.]+)\.js$/ },
-  { host: "static.ads-twitter.com", vendor: "X (Twitter)", loader: /\.js$/ },
-  { host: "analytics.twitter.com", vendor: "X (Twitter)" },
-  { host: "ads-api.twitter.com", vendor: "X (Twitter)" },
-  { host: "ct.pinterest.com", vendor: "Pinterest" },
-  { host: "tr.snapchat.com", vendor: "Snapchat" },
-  { host: "sc-static.net", vendor: "Snapchat", loader: /\.js$/ },
-  { host: "js.hs-scripts.com", vendor: "HubSpot", loader: /\.js$/ },
-  { host: "js.hs-analytics.net", vendor: "HubSpot", loader: /\.js$/ },
-  { host: "track.hubspot.com", vendor: "HubSpot" },
-  { host: "mixpanel.com", vendor: "Mixpanel" },
-  { host: "mxpnl.com", vendor: "Mixpanel", loader: /\.js$/ },
-  { host: "amplitude.com", vendor: "Amplitude", loader: /\.js$/ },
-  { host: "segment.io", vendor: "Segment" },
-  { host: "segment.com", vendor: "Segment", loader: /\.js$/ },
-  { host: "posthog.com", vendor: "PostHog", loader: /\/static\/|\/array\// },
-  { host: "mc.yandex.ru", vendor: "Yandex Metrica", loader: /\/metrika\/|\.js$/ },
-  { host: "mc.yandex.com", vendor: "Yandex Metrica", loader: /\/metrika\/|\.js$/ },
-  { host: "heapanalytics.com", vendor: "Heap", loader: /\.js$/ },
-  { host: "fullstory.com", vendor: "FullStory", loader: /\/s\/fs\.js$/ },
-  { host: "crazyegg.com", vendor: "Crazy Egg", loader: /\.js$/ },
-  { host: "matomo.cloud", vendor: "Matomo", loader: /\.js$/ },
-  { host: "quantserve.com", vendor: "Quantcast" },
-  { host: "scorecardresearch.com", vendor: "Comscore" },
-  { host: "criteo.com", vendor: "Criteo" },
-  { host: "criteo.net", vendor: "Criteo" },
-  { host: "adnxs.com", vendor: "Xandr" },
-  { host: "taboola.com", vendor: "Taboola" },
-  { host: "outbrain.com", vendor: "Outbrain" },
-  { host: "visualwebsiteoptimizer.com", vendor: "VWO", loader: /\.js$/ },
-  { host: "redditstatic.com", vendor: "Reddit", loader: /\.js$/ },
-  { host: "alb.reddit.com", vendor: "Reddit" },
-  { host: "mouseflow.com", vendor: "Mouseflow" },
-  { host: "smartlook.com", vendor: "Smartlook" },
-  { host: "luckyorange.com", vendor: "Lucky Orange" },
-  { host: "leadfeeder.com", vendor: "Leadfeeder" },
-  { host: "lfeeder.com", vendor: "Leadfeeder" },
+export const TRACKERS = [
+  // verified: www.google-analytics.com, analytics.google.com and stats.g.doubleclick.net /g/collect (adhamdannaway.com, juncie.com, adityaseth.in)
+  { host: "google-analytics.com", vendor: "Google Analytics", kind: "analytics", beacon: /^\/(g\/|j\/|r\/|mp\/)?collect\b/ },
+  { host: "analytics.google.com", vendor: "Google Analytics", kind: "analytics", beacon: /^\/(g\/)?collect\b/ },
+  { host: "stats.g.doubleclick.net", vendor: "Google Analytics", kind: "analytics", beacon: /^\/(g\/|j\/|r\/)?collect\b/ },
+  // A tag manager only loads tags (gtm.js, gtag/js): never a beacon.
+  { host: "googletagmanager.com", vendor: "Google Tag Manager", kind: "analytics", beacon: null },
+  { host: "googleadservices.com", vendor: "Google Ads", kind: "pixel", beacon: /^\/pagead\/conversion\// },
+  { host: "google.com", vendor: "Google Ads", kind: "pixel", path: /^\/(pagead|ccm|rmkt)\//, beacon: /^\/(pagead\/(1p-user-list|1p-conversion|conversion|viewthroughconversion)|ccm\/collect|rmkt\/collect)\b/ },
+  // verified: AdSense on elangodev.com (pagead2.googlesyndication.com/pagead/ping from the main frame, the ad in a doubleclick frame)
+  { host: "doubleclick.net", vendor: "Google Ads", kind: "ads" },
+  { host: "googlesyndication.com", vendor: "Google AdSense", kind: "ads" },
+  { host: "adtrafficquality.google", vendor: "Google AdSense", kind: "ads" },
+  // verified: connect.facebook.net fbevents.js, signals/config (juncie.com), sdk.js, app_config (adhamdannaway.com): all loaders
+  { host: "connect.facebook.net", vendor: "Meta Pixel", kind: "pixel", beacon: null },
+  { host: "facebook.com", vendor: "Meta Pixel", kind: "pixel", path: /^\/tr\/?$/, beacon: /^\/tr\/?$/ },
+  // verified: static.hotjar.com and script.hotjar.com scripts are loaders (tajmirul.site); its data goes to *.hotjar.io
+  { host: "hotjar.com", vendor: "Hotjar", kind: "analytics", beacon: null },
+  { host: "hotjar.io", vendor: "Hotjar", kind: "analytics", beacon: /^\/(?!.*\.js$)/ },
+  // verified: www.clarity.ms/tag and scripts.clarity.ms are loaders, b.clarity.ms/collect the beacon (adityaseth.in)
+  { host: "clarity.ms", vendor: "Microsoft Clarity", kind: "analytics", beacon: /^\/collect\b/ },
+  { host: "bat.bing.com", vendor: "Microsoft Advertising", kind: "pixel", beacon: /^\/action\// },
+  { host: "snap.licdn.com", vendor: "LinkedIn", kind: "pixel", beacon: null },
+  { host: "px.ads.linkedin.com", vendor: "LinkedIn", kind: "pixel", beacon: /^\/(collect|wa)\b/ },
+  { host: "analytics.tiktok.com", vendor: "TikTok", kind: "pixel", beacon: /^\/api\/v\d\/(pixel|monitor)\b/ },
+  { host: "static.ads-twitter.com", vendor: "X (Twitter)", kind: "pixel", beacon: null },
+  { host: "analytics.twitter.com", vendor: "X (Twitter)", kind: "pixel", beacon: /^\/i\/adsct\b/ },
+  { host: "t.co", vendor: "X (Twitter)", kind: "pixel", path: /^\/i\/adsct\b/, beacon: /^\/i\/adsct\b/ },
+  { host: "ct.pinterest.com", vendor: "Pinterest", kind: "pixel", beacon: /^\/(v3|user)\b/ },
+  { host: "tr.snapchat.com", vendor: "Snapchat", kind: "pixel", beacon: /^\/(p|cm)\b/ },
+  { host: "sc-static.net", vendor: "Snapchat", kind: "pixel", beacon: null },
+  { host: "js.hs-scripts.com", vendor: "HubSpot", kind: "analytics", beacon: null },
+  { host: "js.hs-analytics.net", vendor: "HubSpot", kind: "analytics", beacon: null },
+  { host: "track.hubspot.com", vendor: "HubSpot", kind: "analytics", beacon: /^\/__pt[qc]\.gif\b/ },
+  { host: "mixpanel.com", vendor: "Mixpanel", kind: "analytics", beacon: /^\/(track|engage|import)\b/ },
+  { host: "mxpnl.com", vendor: "Mixpanel", kind: "analytics", beacon: null },
+  { host: "cdn.amplitude.com", vendor: "Amplitude", kind: "analytics", beacon: null },
+  { host: "sr-client-cfg.amplitude.com", vendor: "Amplitude", kind: "analytics", beacon: null },
+  { host: "amplitude.com", vendor: "Amplitude", kind: "analytics", beacon: /^\/(2\/httpapi|batch)\b/ },
+  { host: "cdn.segment.io", vendor: "Segment", kind: "analytics", beacon: null },
+  { host: "cdn.segment.com", vendor: "Segment", kind: "analytics", beacon: null },
+  { host: "segment.io", vendor: "Segment", kind: "analytics", beacon: /^\/v1\/(t|p|i|track|page|identify|batch|m)\b/ },
+  // verified: eu-assets.i.posthog.com /static and /array are loaders (carlton.dev); its events go to /e/, /i/v0/e/, /batch
+  { host: "posthog.com", vendor: "PostHog", kind: "analytics", beacon: /^\/(e|i\/v0\/e|batch|capture|s)\/?/ },
+  { host: "mc.yandex.ru", vendor: "Yandex Metrica", kind: "analytics", beacon: /^\/(watch|webvisor)\// },
+  { host: "mc.yandex.com", vendor: "Yandex Metrica", kind: "analytics", beacon: /^\/(watch|webvisor)\// },
+  { host: "heapanalytics.com", vendor: "Heap", kind: "analytics", beacon: /^\/h\b/ },
+  { host: "fullstory.com", vendor: "FullStory", kind: "analytics", beacon: /^\/rec\// },
+  { host: "matomo.cloud", vendor: "Matomo", kind: "analytics", beacon: /^\/(matomo|piwik)\.php\b/ },
+  { host: "alb.reddit.com", vendor: "Reddit", kind: "pixel", beacon: /^\/rp\.gif\b/ },
+  { host: "redditstatic.com", vendor: "Reddit", kind: "pixel", beacon: null },
+  { host: "crazyegg.com", vendor: "Crazy Egg", kind: "analytics", beacon: null },
+  { host: "visualwebsiteoptimizer.com", vendor: "VWO", kind: "analytics", beacon: null },
+  { host: "mouseflow.com", vendor: "Mouseflow", kind: "analytics", beacon: null },
+  { host: "smartlook.com", vendor: "Smartlook", kind: "analytics", beacon: null },
+  { host: "luckyorange.com", vendor: "Lucky Orange", kind: "analytics", beacon: null },
+  { host: "leadfeeder.com", vendor: "Leadfeeder", kind: "analytics", beacon: null },
+  { host: "lfeeder.com", vendor: "Leadfeeder", kind: "analytics", beacon: null },
+  { host: "quantserve.com", vendor: "Quantcast", kind: "ads" },
+  { host: "scorecardresearch.com", vendor: "Comscore", kind: "ads" },
+  { host: "criteo.com", vendor: "Criteo", kind: "ads" },
+  { host: "criteo.net", vendor: "Criteo", kind: "ads" },
+  { host: "adnxs.com", vendor: "Xandr", kind: "ads" },
+  { host: "taboola.com", vendor: "Taboola", kind: "ads" },
+  { host: "outbrain.com", vendor: "Outbrain", kind: "ads" },
+  { host: "bing.com", vendor: "Microsoft Advertising", kind: "ads", path: /^\/c\.gif\b/ },
 ];
 
-/**
- * Domains whose own cookies are tracking cookies though nothing is counted
- * from their requests: an embedded YouTube video sets YouTube's visitor
- * cookies (youtube-nocookie.com sets none). Their requests are not tracker
- * requests (the video is content), only their cookies count.
- */
-export const TRACKING_COOKIE_DOMAINS = [{ host: "youtube.com", vendor: "YouTube" }];
+/** Domains whose own cookies are tracking cookies of their vendor; their requests are content, not tracking. */
+export const TRACKING_COOKIE_DOMAINS = [
+  { host: "youtube.com", vendor: "YouTube" },
+  { host: "linkedin.com", vendor: "LinkedIn" },
+  { host: "facebook.com", vendor: "Meta" },
+  { host: "twitter.com", vendor: "X (Twitter)" },
+  { host: "x.com", vendor: "X (Twitter)" },
+  { host: "tiktok.com", vendor: "TikTok" },
+  { host: "bing.com", vendor: "Microsoft Advertising" },
+];
+
+/** Embeds by the host of their frame, for the name shown and the advice that fits ("privacy" mode, else click to load). */
+export const EMBEDS = [
+  { host: "youtube.com", name: "YouTube", privacy: "youtube-nocookie.com, YouTube's privacy-enhanced mode" },
+  { host: "youtube-nocookie.com", name: "YouTube (privacy-enhanced mode)" },
+  { host: "vimeo.com", name: "Vimeo", privacy: "the Vimeo player's do-not-track setting (dnt=1)" },
+  { host: "calendly.com", name: "Calendly" },
+  { host: "linkedin.com", name: "LinkedIn" },
+  { host: "twitter.com", name: "X (Twitter)" },
+  { host: "x.com", name: "X (Twitter)" },
+  { host: "facebook.com", name: "Facebook" },
+  { host: "instagram.com", name: "Instagram" },
+  { host: "spotify.com", name: "Spotify" },
+  { host: "soundcloud.com", name: "SoundCloud" },
+  { host: "codepen.io", name: "CodePen" },
+  { host: "google.com", name: "Google" },
+];
 
 /**
  * Privacy-friendly analytics that set no cookies and keep no identifier on
@@ -207,16 +246,17 @@ export const COOKIELESS_ANALYTICS = [
 ];
 
 /**
- * Consent tools: { name, hosts, selector }. `hosts` are where their script
- * comes from; `selector` is the element of their banner on the page.
+ * Consent tools: { name, hosts, selector, script? }. `hosts` are where their
+ * script comes from, `script` a self-hosted copy's address, `selector` the
+ * element of their banner on the page.
  */
 export const CONSENT_TOOLS = [
   { name: "Cookiebot", hosts: ["cookiebot.com", "cookiebot.eu"], selector: "#CybotCookiebotDialog" },
   { name: "OneTrust", hosts: ["cookielaw.org", "onetrust.com"], selector: "#onetrust-banner-sdk, #onetrust-consent-sdk .ot-sdk-container, #onetrust-pc-sdk" },
   { name: "Osano", hosts: ["osano.com"], selector: ".osano-cm-window, .osano-cm-dialog" },
   { name: "CookieYes", hosts: ["cookieyes.com", "cdn-cookieyes.com"], selector: ".cky-consent-container, #cookie-law-info-bar, .cky-modal" },
-  { name: "Klaro", hosts: ["kiprotect.com", "klaro.org"], selector: ".klaro .cookie-notice, .klaro .cookie-modal, #klaro .cookie-notice" },
-  { name: "Complianz", hosts: [], selector: "#cmplz-cookiebanner-container .cmplz-cookiebanner, .cmplz-cookiebanner" },
+  { name: "Klaro", hosts: ["kiprotect.com", "klaro.org"], selector: ".klaro .cookie-notice, .klaro .cookie-modal, #klaro .cookie-notice", script: /\/klaro(\.min)?\.js/i },
+  { name: "Complianz", hosts: [], selector: "#cmplz-cookiebanner-container .cmplz-cookiebanner, .cmplz-cookiebanner", script: /complianz/i },
   { name: "iubenda", hosts: ["iubenda.com"], selector: "#iubenda-cs-banner" },
   { name: "Termly", hosts: ["termly.io"], selector: "[class*=termly-styles-root], #termly-code-snippet-support [role=dialog]" },
   { name: "Usercentrics", hosts: ["usercentrics.eu", "usercentrics.com"], selector: "#usercentrics-root, #usercentrics-cmp-ui, #uc-banner" },
@@ -225,13 +265,19 @@ export const CONSENT_TOOLS = [
   { name: "TrustArc", hosts: ["trustarc.com", "truste.com"], selector: "#truste-consent-track, #consent_blackbar" },
   { name: "CookieFirst", hosts: ["cookiefirst.com"], selector: ".cookiefirst-root" },
   { name: "Cookie Script", hosts: ["cookie-script.com"], selector: "#cookiescript_injected" },
-  { name: "Borlabs Cookie", hosts: [], selector: "#BorlabsCookieBox ._brlbs-bar, #BorlabsCookieBox ._brlbs-box" },
+  { name: "Borlabs Cookie", hosts: [], selector: "#BorlabsCookieBox ._brlbs-bar, #BorlabsCookieBox ._brlbs-box", script: /borlabs-cookie/i },
   { name: "Google consent message", hosts: ["fundingchoicesmessages.google.com"], selector: ".fc-consent-root" },
   { name: "Sourcepoint", hosts: ["sourcepoint.com", "privacy-mgmt.com"], selector: "[id^=sp_message_container]" },
   { name: "Silktide", hosts: ["silktide.com"], selector: "#silktide-wrapper, #stcm-wrapper" },
-  { name: "Termageddon", hosts: ["termageddon.com"], selector: "#usercentrics-root" },
+  { name: "Axeptio", hosts: ["axept.io"], selector: "#axeptio_overlay .axeptio_mount, #axeptio_overlay [class*=axeptio_widget], #axeptio_main_button" },
+  { name: "CookieHub", hosts: ["cookiehub.net", "cookiehub.eu"], selector: ".ch2-dialog, .ch2-container .ch2-dialog" },
+  { name: "Consentmanager", hosts: ["consentmanager.net"], selector: "#cmpbox, .cmpbox" },
+  { name: "Ketch", hosts: ["ketchcdn.com", "ketchjs.com"], selector: "#lanyard_root" },
+  { name: "Tarteaucitron", hosts: ["tarteaucitron.io"], selector: "#tarteaucitronAlertBig, #tarteaucitronRoot #tarteaucitronAlertBig", script: /tarteaucitron/i },
+  { name: "Cookie Notice (WordPress)", hosts: ["hu-manity.co"], selector: "#cookie-notice", script: /cookie-notice\/js\/front/i },
+  { name: "HubSpot cookie banner", hosts: ["hs-banner.com"], selector: "#hs-eu-cookie-confirmation" },
   // The open-source banners: Osano's cookieconsent (cc-window) and orestbida's vanilla-cookieconsent (#cc-main, #cm).
-  { name: "cookieconsent", hosts: [], selector: ".cc-window, #cc-main .cm, #cc--main #cm" },
+  { name: "cookieconsent", hosts: [], selector: ".cc-window, #cc-main .cm, #cc--main #cm", script: /cookieconsent/i },
 ];
 
 const hostOf = (u) => {
@@ -279,14 +325,22 @@ export function siteOf(host) {
   return labels.slice(-2).join(".");
 }
 
-const trackerFor = (host, path) => TRACKER_HOSTS.find((t) => onHost(host, t.host) && (!t.path || t.path.test(path)));
+const trackerFor = (host, path) => TRACKERS.filter((t) => onHost(host, t.host) && (!t.path || t.path.test(path))).sort((a, b) => b.host.length - a.host.length)[0];
 const cookielessFor = (host, path) => COOKIELESS_ANALYTICS.find((c) => (c.host ? onHost(host, c.host) : c.path ? c.path.test(path) : false));
+const isScript = (path) => /\.m?js$/i.test(path);
+
+/** Whether a request to tracker `t` at `path` is one of its beacons (never a script or a configuration). */
+export function isBeacon(t, path) {
+  if (!t) return false;
+  if (t.kind === "ads") return !isScript(path);
+  return Boolean(t.beacon && t.beacon.test(path) && !isScript(path));
+}
 
 /** The vendor of a tracking cookie, or null: by its name, else by the tracker domain that set it. */
 export function trackingCookieVendor({ name, domain }) {
   const byName = TRACKING_COOKIES.find(([re]) => re.test(String(name ?? "")));
   if (byName) return byName[1];
-  const byDomain = [...TRACKER_HOSTS, ...TRACKING_COOKIE_DOMAINS].find((t) => !t.path && onHost(domain, t.host));
+  const byDomain = [...TRACKERS.filter((t) => !t.path), ...TRACKING_COOKIE_DOMAINS].find((t) => onHost(domain, t.host));
   return byDomain ? byDomain.vendor : null;
 }
 
@@ -304,60 +358,123 @@ export function deniedConsentPing(url) {
   }
 }
 
-/** Adds one to `host`'s count in `map` (host → { host, vendor, requests }). */
-const tally = (map, host, vendor) => {
-  const row = map.get(host) ?? { host, vendor, requests: 0 };
-  row.requests++;
-  map.set(host, row);
+/** The name an embed is shown by: EMBEDS, else its host. */
+export const embedName = (host) => EMBEDS.find((e) => onHost(host, e.host))?.name ?? String(host ?? "").replace(/^www\./, "");
+
+/**
+ * Where a request came from (pure), against the page's address: "main", or
+ * "same-site" (a frame on the site's own registrable domain, or a frame
+ * with no address of its own, which a page script made), or "embed" with
+ * the embed frame's host. `r` is watchRequests's record: { url, frame }
+ * (frame: null for the main frame, else the address of the top frame under
+ * the page that the request belongs to).
+ */
+export function originOf(r, pageSite) {
+  if (r.frame == null) return { origin: "main", embed: null };
+  const host = hostOf(r.frame);
+  if (!host || siteOf(host) === pageSite) return { origin: "same-site", embed: null };
+  return { origin: "embed", embed: host };
+}
+
+/** Adds one to `key`'s count in `map`. */
+const tally = (map, key, row) => {
+  const cur = map.get(key) ?? { ...row, requests: 0 };
+  cur.requests++;
+  map.set(key, cur);
 };
 const listed = (map) => [...map.values()].sort((a, b) => b.requests - a.requests || a.host.localeCompare(b.host)).slice(0, MAX_LISTED);
 const vendorsOf = (rows) => [...new Set(rows.map((r) => r.vendor).filter(Boolean))];
 
 /**
- * The requests' part of a reading (pure): `urls`, every request the page made
- * before the reading, in order. Returns { trackers, loaders, cookieless,
- * consentHosts, consentPings }: the first three as [{ host, vendor, requests }].
+ * The requests' part of a reading (pure). `requests`: watchRequests's
+ * records ({ url, frame }; a plain address string is a main-frame request).
+ * Returns { beacons, loaders, ads, embedBeacons, cookieless, consentHosts,
+ * consentPings, sitesFrom, embedHosts }: beacons (the site's own tracking),
+ * loaders and ads as [{ host, vendor, requests }]; embedBeacons as [{ embed,
+ * host, vendor, requests }]; `sitesFrom` maps each requested registrable
+ * domain to the origins that asked for it ("main" for the page's own and
+ * same-site frames, else the embed's host), for the cookies.
  */
-export function classifyRequests(urls) {
-  const trackers = new Map();
+export function classifyRequests(requests, pageUrl = "") {
+  const pageSite = siteOf(hostOf(pageUrl));
+  const beacons = new Map();
   const loaders = new Map();
+  const ads = new Map();
+  const embedBeacons = new Map();
   const cookieless = new Map();
   const consentHosts = new Set();
+  const sitesFrom = new Map();
+  const embedHosts = new Set();
   let consentPings = 0;
-  for (const u of urls ?? []) {
-    const host = hostOf(u);
+  for (const raw of requests ?? []) {
+    const r = typeof raw === "string" ? { url: raw, frame: null } : raw;
+    const host = hostOf(r.url);
     if (!host) continue;
-    const path = pathOf(u);
-    const tool = CONSENT_TOOLS.find((c) => c.hosts.some((h) => onHost(host, h)));
-    if (tool) consentHosts.add(tool.name);
-    const free = cookielessFor(host, path);
-    if (free) {
-      tally(cookieless, host, free.vendor);
-      continue;
+    const path = pathOf(r.url);
+    const { origin, embed } = originOf(r, pageSite);
+    if (embed) embedHosts.add(embed);
+    const from = origin === "embed" ? embed : "main";
+    const site = siteOf(host);
+    if (!sitesFrom.has(site)) sitesFrom.set(site, new Set());
+    sitesFrom.get(site).add(from);
+    // Consent tools and cookieless analytics: the page's own only, never an embed's.
+    if (origin !== "embed") {
+      const tool = CONSENT_TOOLS.find((c) => c.hosts.some((h) => onHost(host, h)));
+      if (tool) consentHosts.add(tool.name);
+      const free = cookielessFor(host, path);
+      if (free) {
+        tally(cookieless, host, { host, vendor: free.vendor });
+        continue;
+      }
     }
     const t = trackerFor(host, path);
     if (!t) continue;
-    if (t.loader?.test(path)) tally(loaders, host, t.vendor);
-    else if (deniedConsentPing(u)) consentPings++;
-    else tally(trackers, host, t.vendor);
+    if (origin === "embed") {
+      if (isBeacon(t, path)) tally(embedBeacons, `${embed} ${host}`, { embed, host, vendor: t.vendor });
+      continue;
+    }
+    if (t.kind !== "ads" && deniedConsentPing(r.url)) consentPings++;
+    else if (!isBeacon(t, path)) tally(loaders, host, { host, vendor: t.vendor });
+    else if (t.kind === "ads") tally(ads, host, { host, vendor: t.vendor });
+    else tally(beacons, host, { host, vendor: t.vendor });
   }
-  return { trackers: listed(trackers), loaders: listed(loaders), cookieless: listed(cookieless), consentHosts: [...consentHosts], consentPings };
+  return {
+    beacons: listed(beacons),
+    loaders: listed(loaders),
+    ads: listed(ads),
+    embedBeacons: [...embedBeacons.values()].slice(0, MAX_LISTED),
+    cookieless: listed(cookieless),
+    consentHosts: [...consentHosts],
+    consentPings,
+    sitesFrom,
+    embedHosts: [...embedHosts],
+  };
 }
 
 /**
  * The cookies' part of a reading (pure): each cookie's name, domain, party
- * (against the page's address `pageUrl`) and tracking vendor (null when it is
- * not a known tracking cookie). Values are never kept, whatever is passed in.
+ * (against the page's address `pageUrl`), tracking vendor (null when it is
+ * not a known tracking cookie) and, for a third-party cookie, the embed it
+ * belongs to (`embed`): the embed frame on the cookie's own site (a YouTube
+ * player's frame for a youtube.com cookie, even when the page also loaded
+ * YouTube's player script), else the one embed that every request to the
+ * cookie's site came from (a doubleclick.net cookie set from inside the
+ * YouTube player); null otherwise. Values are never kept, whatever is passed
+ * in. `seen`: classifyRequests's { sitesFrom, embedHosts }.
  */
-export function classifyCookies(cookies, pageUrl) {
+export function classifyCookies(cookies, pageUrl, { sitesFrom = new Map(), embedHosts = [] } = {}) {
   const site = siteOf(hostOf(pageUrl));
   const rows = [];
   for (const c of cookies ?? []) {
     const name = String(c?.name ?? "");
     const domain = String(c?.domain ?? "").toLowerCase();
     if (!name) continue;
-    const party = site && siteOf(domain) === site ? "first" : "third";
-    rows.push({ name, domain, party, tracking: trackingCookieVendor({ name, domain }) });
+    const cookieSite = siteOf(domain);
+    const party = site && cookieSite === site ? "first" : "third";
+    const from = sitesFrom.get(cookieSite);
+    const embed =
+      party === "first" ? null : (embedHosts.find((h) => siteOf(h) === cookieSite) ?? (from && from.size === 1 && !from.has("main") ? [...from][0] : null));
+    rows.push({ name, domain, party, tracking: trackingCookieVendor({ name, domain }), embed });
   }
   // Tracking cookies first, then by domain and name, so the stored list keeps what matters when it is cut.
   rows.sort((a, b) => Number(Boolean(b.tracking)) - Number(Boolean(a.tracking)) || a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
@@ -368,56 +485,79 @@ export function classifyCookies(cookies, pageUrl) {
  * One reading (pure), from what the browser saw before any click:
  *   pageUrl   the page's address at the reading;
  *   cookies   the browser's cookies ({ name, domain }; values are dropped);
- *   requests  the addresses of every request so far;
- *   dom       findConsent's answer ({ tools, banner, generic, scripts }), or
+ *   requests  watchRequests's records so far;
+ *   dom       findConsent's answer ({ tools, banner, sample, scripts }), or
  *             null when the page could not be read;
  *   error     why the reading could not be made, if it could not;
  *   region, at.
- * Returns the stored reading: { region, at, state, reason, banner, tool,
- * tracking_cookies, cookies, cookie_count, trackers, loaders, cookieless,
- * consent_mode_pings, vendors }.
+ * Returns the stored reading: { v, region, at, state, reason, banner,
+ * banner_how, tool, vendors (the site's own), own_cookies, beacons, loaders,
+ * ads, embeds, cookieless, consent_mode_pings, cookies, cookie_count }.
  */
-export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = null, error = null, region = DEFAULT_REGION, vantage = null, at = new Date() }) {
-  const v = vantageOf(region, vantage);
-  const base = { v: PRIVACY_VERSION, region, vantage: v.key, label: v.label, at: (at instanceof Date ? at : new Date(at)).toISOString() };
+export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = null, error = null, region = DEFAULT_REGION, at = new Date() }) {
+  const base = { v: PRIVACY_VERSION, region, at: (at instanceof Date ? at : new Date(at)).toISOString() };
   if (error) return { ...base, state: "unknown", reason: String(error).slice(0, 200) };
-  const jar = classifyCookies(cookies, pageUrl);
-  const req = classifyRequests(requests);
+  const req = classifyRequests(requests, pageUrl);
+  const jar = classifyCookies(cookies, pageUrl, req);
   // A cookieless tool loaded from the site itself (a proxied Plausible, a self-hosted Umami): seen by its script.
   const cookieless = [...req.cookieless];
   for (const s of dom?.scripts ?? []) {
     const hit = COOKIELESS_ANALYTICS.find((c) => c.script?.test(s));
     if (hit && !cookieless.some((r) => r.vendor === hit.vendor)) cookieless.push({ host: hostOf(s) || siteOf(hostOf(pageUrl)), vendor: hit.vendor, requests: 0 });
   }
-  const trackingCookies = jar.filter((c) => c.tracking);
-  const tool = dom?.tools?.find((t) => t.shown)?.name ?? dom?.tools?.[0]?.name ?? req.consentHosts[0] ?? null;
+  // The site's own: first-party tracking cookies and the main frame's beacons.
+  const ownCookies = jar.filter((c) => c.tracking && c.party === "first");
+  // An embed's: its third-party tracking cookies and its beacons, by embed. An ad's own frame (an AdSense
+  // slot is a doubleclick frame) is an ad, not an embed.
+  const adFrame = (host) => trackerFor(host, "/")?.kind === "ads";
+  const embeds = new Map();
+  const embedRow = (host) => embeds.get(host) ?? embeds.set(host, { host, name: embedName(host), cookies: [], trackers: [] }).get(host);
+  const adsFromFrames = [];
+  for (const c of jar) {
+    if (!c.embed || !c.tracking) continue;
+    if (adFrame(c.embed)) adsFromFrames.push({ host: c.domain.replace(/^\./, ""), vendor: c.tracking, cookie: c.name });
+    else embedRow(c.embed).cookies.push(c.name);
+  }
+  for (const b of req.embedBeacons) {
+    if (adFrame(b.embed)) adsFromFrames.push({ host: b.host, vendor: b.vendor, requests: b.requests });
+    else embedRow(b.embed).trackers.push(`${b.host} x${b.requests}`);
+  }
+  // An ad network's (or any other third party's) tracking cookies and requests from the main frame: not the site's own.
+  const thirdCookies = jar.filter((c) => c.tracking && c.party === "third" && !c.embed);
+  const ads = [...req.ads, ...thirdCookies.map((c) => ({ host: c.domain.replace(/^\./, ""), vendor: c.tracking, cookie: c.name })), ...adsFromFrames].slice(0, MAX_LISTED);
+  // A consent tool in the page's own code: its script host, a script address, or its element on the page.
+  const scriptTool = CONSENT_TOOLS.find((t) => t.script && (dom?.scripts ?? []).some((s) => t.script.test(s)))?.name ?? null;
+  const tool = dom?.tools?.find((t) => t.shown)?.name ?? dom?.tools?.[0]?.name ?? req.consentHosts[0] ?? scriptTool ?? null;
   const banner = dom ? Boolean(dom.banner) : null;
-  const tracked = trackingCookies.length > 0 || req.trackers.length > 0;
-  const vendors = vendorsOf([...trackingCookies.map((c) => ({ vendor: c.tracking })), ...req.trackers]);
+  const own = ownCookies.length > 0 || req.beacons.length > 0;
+  const vendors = vendorsOf([...ownCookies.map((c) => ({ vendor: c.tracking })), ...req.beacons]);
   let state;
   let reason = null;
-  if (!tracked) state = banner ? "after-consent" : "none";
+  if (!own) state = banner ? "after-consent" : "none";
   else if (banner === null) {
     state = "unknown";
-    reason = "tracking started, but the page could not be read to tell whether a consent banner was shown";
+    reason = "the site's own tracking started, but the page could not be read to tell whether a consent banner was shown";
   } else state = banner ? "with-banner" : "no-consent";
-  // A consent tool that loaded but showed no banner here: many show it only to visitors from some regions.
-  if (state === "no-consent" && tool) reason = `${tool} loaded but showed no banner to this visit (from ${region})`;
+  if (state === "no-consent" && tool) reason = `${tool} is in the page's code but showed no banner to this visit (from ${region})`;
   return {
     ...base,
     state,
     reason,
     banner,
-    tool,
     banner_how: dom?.banner ?? null,
+    banner_sample: dom?.sample ?? null,
+    tool,
     vendors,
-    tracking_cookies: trackingCookies.length,
-    cookie_count: jar.length,
-    cookies: jar.slice(0, MAX_LISTED),
-    trackers: req.trackers,
+    own_cookies: ownCookies.map((c) => ({ name: c.name, vendor: c.tracking })),
+    beacons: req.beacons,
     loaders: req.loaders,
+    ads,
+    embeds: [...embeds.values()].filter((e) => e.cookies.length || e.trackers.length),
+    embed_hosts: req.embedHosts.slice(0, MAX_LISTED),
     cookieless,
     consent_mode_pings: req.consentPings,
+    cookie_count: jar.length,
+    cookies: jar.slice(0, MAX_LISTED),
   };
 }
 
@@ -428,8 +568,18 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
  * recognised ("tool", "frame" for a consent tool's visible frame, "generic"),
  * or null when none is shown; `sample` the first words of a generic banner,
  * for the reviewer; `scripts` the page's script addresses (for cookieless
- * analytics served from the site itself). Pure DOM reading: nothing is
- * clicked or changed.
+ * analytics and consent tools served from the site itself). Pure DOM
+ * reading: nothing is clicked or changed.
+ *
+ * The generic banner, and its false-positive guard: a visible element that
+ * is fixed, sticky, a dialog, or named like a consent banner; under 1,500
+ * characters; whose text says it uses cookies or tracking ("we use", "this
+ * site uses" and the same in French, German, Spanish, Italian, Portuguese,
+ * Dutch and Polish), or is named like a consent tool's banner; and that holds
+ * a short choice button (accept, reject, agree, decline, allow, deny, manage,
+ * settings, OK in those languages). A footer that says "No cookies, no
+ * tracking. OK", a blog post about cookies, or a "Cookie Clicker" project
+ * card is not a banner.
  */
 export function findConsent([tools, frameHosts]) {
   const vw = window.innerWidth;
@@ -475,10 +625,44 @@ export function findConsent([tools, frameHosts]) {
       }
     }
   }
-  // The generic banner. Wording and a choice button must both be in one small element.
-  const WORDING = /\b(cookies?|consent|gdpr|ccpa)\b|privacy (settings|preferences|choices)|do not sell/i;
-  const CHOICE = /^(?:[^\w]*)(accept|agree|allow|reject|decline|deny|refuse|got it|ok(ay)?|understood|i understand|necessary|essential|manage|preferences|customi[sz]e|opt[ -]?out|only (necessary|essential))\b/i;
-  const NAMED = /cookie|consent|gdpr|\bcmp\b/i;
+  // Says it uses cookies or tracking, in English, French, German, Spanish, Italian, Portuguese, Dutch or Polish.
+  const USES = new RegExp(
+    [
+      String.raw`\b(we|this (web)?site|our (web)?site|this page)\s+(also\s+)?(use|uses|place|store|set)\b`,
+      String.raw`\b(uses?|using)\s+(cookies|trackers)`,
+      String.raw`\bwe and our (\d+ )?(partners|vendors)\b`,
+      String.raw`\bby (using|continuing|browsing)\b[^.]{0,80}\b(agree|accept|consent)`,
+      String.raw`nous utilisons|ce site( web)? utilise|utilise des cookies|nous et nos partenaires|en poursuivant (votre )?navigation`,
+      String.raw`wir (verwenden|nutzen|setzen)|diese (web)?seite (verwendet|nutzt|setzt)|(verwendet|nutzt|setzt) cookies|wir und unsere partner`,
+      String.raw`(utilizamos|usamos)\s+(cookies|galletas)|este (sitio( web)?|portal) (utiliza|usa)|nosotros y nuestros socios`,
+      String.raw`(utilizziamo|usiamo)\s+(i\s+)?cookie|questo sito (web )?(utilizza|usa)|noi e i nostri partner`,
+      String.raw`(utilizamos|usamos)\s+cookies|este (site|website) (utiliza|usa)|n[oó]s e os nossos parceiros`,
+      String.raw`(wij|we) gebruiken|deze (web)?site gebruikt|maakt gebruik van cookies`,
+      String.raw`u[zż]ywamy|wykorzystujemy|ta strona (u[zż]ywa|wykorzystuje|korzysta)|strona korzysta z`,
+    ].join("|"),
+    "i"
+  );
+  const ABOUT = /cookie|ciasteczk|traceur|tracker|tracking|t[ée]moin|galleta/i;
+  // A consent banner's or a consent tool's own markers in an element's id or class.
+  const NAMED =
+    /cookie[-_ ]?(banner|consent|notice|bar|popup|law|box|message|alert|disclaimer)|consent[-_ ]?(banner|bar|popup|box|notice|manager)|\bgdpr\b|\bcmp\b|cookiebot|onetrust|osano|cky-|klaro|cmplz|iubenda|termly|usercentrics|didomi|qc-cmp|truste|cookiefirst|cookiescript|borlabs|axeptio|ch2-|cmpbox|tarteaucitron|hs-eu-cookie|cc-window|cookieconsent/i;
+  // A short choice button: its label starts with one of these, in the same languages.
+  const CHOICE = new RegExp(
+    String.raw`^[^\p{L}]*(` +
+      [
+        "accept( all)?|i accept|agree|i agree|allow( all)?|reject( all)?|decline|deny|refuse|manage|settings|preferences|customi[sz]e|ok|okay|got it|understood|necessary only|only necessary|essential only",
+        "accepter|tout accepter|j'accepte|j’accepte|refuser|tout refuser|continuer sans accepter|autoriser|param[eè]tr|personnaliser|g[ée]rer|d'accord|d’accord|compris",
+        "akzeptieren|alle akzeptieren|annehmen|zustimmen|einverstanden|ablehnen|alle ablehnen|erlauben|zulassen|verweigern|einstellungen|anpassen|verwalten|verstanden|nur notwendige",
+        "aceptar|rechazar|permitir|denegar|configurar|configuraci[oó]n|gestionar|personalizar|de acuerdo|entendido",
+        "accetta|accetto|rifiuta|consenti|nega|impostazioni|gestisci|personalizza|ho capito",
+        "aceitar|aceito|rejeitar|recusar|negar|configura[cç][oõ]es|defini[cç][oõ]es|gerir|gerenciar|entendi",
+        "accepteren|alles accepteren|akkoord|weigeren|afwijzen|toestaan|instellingen|beheren|aanpassen|begrepen",
+        "akceptuj|akceptuj[eę]|zaakceptuj|zgadzam si[eę]|odrzu[cć]|odrzucam|zezw[oó]l|pozw[oó]l|odm[oó]w|ustawienia|zarz[aą]dzaj|dostosuj|rozumiem",
+      ].join("|") +
+      String.raw`)(?=$|[^\p{L}])`,
+    "iu"
+  );
+  const nameOf = (el) => `${el.id ?? ""} ${typeof el.className === "string" ? el.className : ""}`;
   let sample = null;
   if (!banner) {
     const pinned = (el) => {
@@ -488,11 +672,9 @@ export function findConsent([tools, frameHosts]) {
       }
       return false;
     };
-    const candidates = new Set(document.querySelectorAll("[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open], [role=region][aria-label]"));
-    for (const el of document.querySelectorAll("[id], [class]")) {
-      const name = `${el.id ?? ""} ${typeof el.className === "string" ? el.className : ""}`;
-      if (NAMED.test(name)) candidates.add(el);
-    }
+    const DIALOG = "[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]";
+    const candidates = new Set(document.querySelectorAll(`${DIALOG}, [role=region][aria-label]`));
+    for (const el of document.querySelectorAll("[id], [class]")) if (NAMED.test(nameOf(el))) candidates.add(el);
     let n = 0;
     for (const el of document.querySelectorAll("body *")) {
       if (++n > 6000) break;
@@ -502,10 +684,12 @@ export function findConsent([tools, frameHosts]) {
     for (const el of candidates) {
       if (!el.isConnected || !visible(el)) continue;
       const text = (el.innerText ?? "").trim();
-      if (!text || text.length > 1500 || !WORDING.test(text)) continue;
-      // Named cookie or consent, or pinned on the screen (fixed, sticky) or a dialog: not a section of the page.
-      const named = NAMED.test(`${el.id ?? ""} ${typeof el.className === "string" ? el.className : ""}`);
-      if (!named && !pinned(el) && !el.matches("[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]")) continue;
+      if (!text || text.length > 1500) continue;
+      const named = NAMED.test(nameOf(el));
+      // About using cookies or tracking, or named as a consent banner: "No cookies, no tracking" is not.
+      if (!(named || (USES.test(text) && ABOUT.test(text)))) continue;
+      // Pinned on the screen (fixed, sticky), a dialog, or named as a banner: not a section of the page.
+      if (!named && !pinned(el) && !el.matches(DIALOG)) continue;
       const controls = [...el.querySelectorAll("button, a, [role=button], input[type=button], input[type=submit]")].filter(visible);
       const choice = controls.find((b) => {
         const label = (b.innerText || b.value || b.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
@@ -525,20 +709,41 @@ export function findConsent([tools, frameHosts]) {
 export const consentArgs = () => [CONSENT_TOOLS.map((t) => [t.name, t.selector]), CONSENT_TOOLS.flatMap((t) => t.hosts)];
 
 /**
+ * The frame a request belongs to, for originOf: null for the main frame (and
+ * for a request with no frame, a worker's), else the address of the top
+ * frame under the page it is in. A frame's own document request is that
+ * frame's address (its frame has none yet).
+ * @param {import("playwright").Page} page
+ */
+export function frameOfRequest(page, req) {
+  try {
+    const main = page.mainFrame();
+    let f = req.frame();
+    if (!f || f === main) return null;
+    if (req.isNavigationRequest() && f.parentFrame() === main) return req.url();
+    while (f.parentFrame() && f.parentFrame() !== main) f = f.parentFrame();
+    const u = f.url();
+    return u && u !== "about:blank" ? u : "";
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Starts listening to a page's requests (pipeline/capture.mjs, before the
- * first navigation): every address is kept, in order, until `stop()`. The
- * reading takes what came before it.
+ * first navigation): each is kept with its frame (frameOfRequest), in
+ * order, until `stop()`. The reading takes what came before it.
  * @param {import("playwright").Page} page
  */
 export function watchRequests(page) {
-  const urls = [];
+  const records = [];
   let on = true;
   const onRequest = (req) => {
-    if (on && urls.length < 5000) urls.push(req.url());
+    if (on && records.length < 5000) records.push({ url: req.url(), frame: frameOfRequest(page, req) });
   };
   page.on("request", onRequest);
   return {
-    urls,
+    records,
     stop() {
       on = false;
       page.off?.("request", onRequest);
@@ -549,115 +754,59 @@ export function watchRequests(page) {
 /**
  * The reading on a capture's page as it now is, before anything is clicked
  * (makeReading on the browser's cookies, the requests so far and the page's
- * banner). When tracking was seen and no banner, it looks once more after
- * LATE_BANNER_MS, for a banner that slides in late. Never throws: a page that
- * cannot be read gives an `unknown` reading with the reason.
+ * banner). When the site's own tracking was seen and no banner, it looks
+ * once more after LATE_BANNER_MS, for a banner that slides in late. It takes
+ * at most `limitMs` (READ_LIMIT_MS, or less when the capture has less time
+ * left: `deadline`, the capture's own limit, less READ_MARGIN_MS); past it,
+ * or with no time left, the reading is `unknown`. Never throws.
  * @param {import("playwright").Page} page
- * @param {{ urls: string[] }} watch watchRequests's
+ * @param {{ records: object[] }} watch watchRequests's
  */
-export async function readCookieCheck(page, watch, { region = captureRegion(), vantage = null, lateMs = LATE_BANNER_MS } = {}) {
+export async function readCookieCheck(page, watch, { region = captureRegion(), lateMs = LATE_BANNER_MS, limitMs = READ_LIMIT_MS, deadline = Infinity, now = Date.now } = {}) {
+  const budget = Math.min(limitMs, deadline - now() - READ_MARGIN_MS);
+  if (!(budget > 1000)) return makeReading({ error: "no time left in the capture for the cookie check", region });
+  const until = now() + budget;
   const once = async () => {
-    try {
-      const cookies = (await page.context().cookies()).map(({ name, domain }) => ({ name, domain }));
-      const dom = await page.evaluate(findConsent, consentArgs()).catch(() => null);
-      return makeReading({ pageUrl: page.url(), cookies, requests: [...watch.urls], dom, region, vantage });
-    } catch (e) {
-      return makeReading({ error: `the cookies could not be read (${String(e?.message ?? e).slice(0, 120)})`, region, vantage });
-    }
+    const cookies = (await page.context().cookies()).map(({ name, domain }) => ({ name, domain }));
+    const dom = await page.evaluate(findConsent, consentArgs()).catch(() => null);
+    return makeReading({ pageUrl: page.url(), cookies, requests: [...watch.records], dom, region });
   };
-  const first = await once();
-  if (first.state !== "no-consent" || lateMs <= 0) return first;
-  await page.waitForTimeout(lateMs).catch(() => {});
-  return once();
-}
-
-/**
- * The second vantage: the same network address with a European browser (time
- * zone Europe/Paris, language fr-FR, a Paris location for a page that asks).
- * Most consent tools decide by the visitor's network address and are not
- * fooled by it; this only catches the minority that decide in the browser
- * (by time zone or language). So it is labelled for what it is, never as a
- * reading from Europe.
- */
-export const EU_SETTINGS = {
-  suffix: "eu-browser",
-  label: "address in {region}, European browser settings (Europe/Paris, fr-FR)",
-  context: {
-    timezoneId: "Europe/Paris",
-    locale: "fr-FR",
-    geolocation: { latitude: 48.8566, longitude: 2.3522 },
-    permissions: ["geolocation"],
-    extraHTTPHeaders: { "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.5" },
-  },
-};
-
-/** A reading's vantage: its key in facts.privacy.readings and its label. The plain one is the region itself. */
-export function vantageOf(region, vantage = null) {
-  if (!vantage) return { key: region, label: `address in ${region}, browser in its default settings (en-US)` };
-  return { key: `${region}+${vantage.suffix}`, label: vantage.label.replace("{region}", region) };
-}
-
-/**
- * Whether the second vantage is worth its visit: the first reading saw a
- * consent tool, a banner, a tracker, a tag loader or a tracking cookie. A
- * page with none of them has nothing a banner could hold back.
- */
-export const wantsSecondVantage = (r) =>
-  Boolean(r && r.state !== "unknown" && (r.tool || r.banner || r.tracking_cookies > 0 || r.trackers?.length || r.loaders?.length));
-
-/** The longest the second vantage may take, everything included. */
-export const SECOND_VANTAGE_LIMIT_MS = 40000;
-
-/**
- * The reading from a second vantage (EU_SETTINGS by default): a fresh browser
- * context of its own with the vantage's settings, the same arrival as the
- * capture's (the load, the network going quiet up to 8 seconds, 1.5 seconds),
- * then readCookieCheck. Nothing is clicked. A page that answers an error
- * status (a bot check meeting a second visit) gives an `unknown` reading.
- * Never throws; its context is always closed. `contextOptions` are the
- * capture's own (viewport, user agent).
- * @param {import("playwright").Browser} browser
- */
-export async function readSecondVantage(browser, url, { contextOptions = {}, vantage = EU_SETTINGS, region = captureRegion(), limitMs = SECOND_VANTAGE_LIMIT_MS, lateMs = LATE_BANNER_MS } = {}) {
-  let ctx = null;
-  let timer;
-  const t0 = Date.now();
   const work = (async () => {
-    ctx = await browser.newContext({ ...contextOptions, ...vantage.context });
-    const page = await ctx.newPage();
-    const watch = watchRequests(page);
-    const res = await page.goto(url, { waitUntil: "load", timeout: 30000 });
-    const status = res?.status() ?? 0;
-    if (status >= 400) return makeReading({ error: `the page answered ${status} to this visit`, region, vantage });
-    await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
-    await page.waitForTimeout(1500);
-    return readCookieCheck(page, watch, { region, vantage, lateMs });
+    const first = await once();
+    if (first.state !== "no-consent" || lateMs <= 0 || now() + lateMs + 1000 > until) return first;
+    await page.waitForTimeout(lateMs);
+    return once();
   })();
+  let timer;
   try {
-    // `ms`: what the second visit cost, for the record.
-    const r = await Promise.race([work, new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(`took over ${Math.round(limitMs / 1000)}s`)), limitMs)))]);
-    return { ...r, ms: Date.now() - t0 };
+    return await Promise.race([work, new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(`took over ${Math.round(budget / 1000)}s`)), budget)))]);
   } catch (e) {
     work.catch(() => {});
-    return { ...makeReading({ error: `the second visit failed (${String(e?.message ?? e).slice(0, 120)})`, region, vantage }), ms: Date.now() - t0 };
+    return makeReading({ error: `the cookies could not be read (${String(e?.message ?? e).slice(0, 120)})`, region });
   } finally {
     clearTimeout(timer);
-    // The context may still be opening when the limit passes: closed once it exists.
-    const close = () => ctx?.close().catch(() => {});
-    await Promise.race([work.then(close, close), new Promise((r) => setTimeout(r, 5000))]);
-    await close();
   }
 }
 
 /**
- * The facts' privacy part with `readings` stored under their vantages
- * (reading.vantage, the region for a plain reading): the other vantages'
- * readings in `previous` (the stored facts.privacy) are kept, so a reading
- * made elsewhere is not lost when this runner captures again.
+ * The facts' privacy part with `readings` stored under their region: the
+ * other regions' readings in `previous` (the stored facts.privacy) are kept,
+ * so a reading made elsewhere is not lost when this runner captures again.
  */
 export function withReading(previous, ...readings) {
   const old = previous && typeof previous === "object" && Number(previous.v) === PRIVACY_VERSION && previous.readings && typeof previous.readings === "object" ? previous.readings : {};
   const next = { ...old };
-  for (const r of readings) if (r) next[r.vantage ?? r.region] = r;
+  for (const r of readings) if (r) next[r.region] = r;
   return { v: PRIVACY_VERSION, readings: next };
+}
+
+/** Whether stored facts (an object or its JSON) carry a cookie check reading at the current version (scripts/remeasure-shard.mjs). */
+export function hasCookieCheck(facts) {
+  try {
+    const f = typeof facts === "string" ? JSON.parse(facts) : facts;
+    const p = f?.privacy;
+    return Boolean(p && Number(p.v) === PRIVACY_VERSION && p.readings && Object.keys(p.readings).length > 0);
+  } catch {
+    return false;
+  }
 }

@@ -1,7 +1,8 @@
 {
-  "_about": "What the browser saw on arrival (pipeline/cookie-check.mjs makeReading's input), one case per state. Shaped after the trial readings of 2026-11-25; the addresses are made up. Cookie values are present on purpose: the reading must drop them.",
+  "_about": "What the browser saw on arrival (pipeline/cookie-check.mjs makeReading's input), one case each, shaped after the trial readings of 2026-11-25; the addresses are made up. A request is { url, frame } (frame: null for the main frame, else the address of the frame under the page it came from); a plain string is a main-frame request. Cookie values are present on purpose: the reading must drop them. `expect` is the stored state, `shown` the display kind (lib/cookie-check.mjs).",
   "none-cookieless": {
     "expect": "none",
+    "shown": "none",
     "pageUrl": "https://ana.example.dev/",
     "cookies": [{ "name": "theme", "domain": "ana.example.dev", "value": "dark" }],
     "requests": [
@@ -17,13 +18,41 @@
   },
   "none-plain": {
     "expect": "none",
+    "shown": "none",
     "pageUrl": "https://sam.github.io/",
     "cookies": [],
     "requests": ["https://sam.github.io/", "https://fonts.googleapis.com/css2?family=Inter", "https://fonts.gstatic.com/s/inter/v20/a.woff2"],
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },
+  "none-loaders-only": {
+    "expect": "none",
+    "shown": "none",
+    "pageUrl": "https://ld.example.com/",
+    "cookies": [],
+    "requests": [
+      "https://ld.example.com/",
+      "https://www.googletagmanager.com/gtm.js?id=GTM-ABC",
+      "https://cdn.segment.com/analytics.js/v1/abc/analytics.min.js",
+      "https://cdn.segment.com/v1/projects/abc/settings",
+      "https://cdn.segment.io/analytics.js/v1/abc/analytics.min.js",
+      "https://www.clarity.ms/tag/abcdef",
+      "https://scripts.clarity.ms/0.8.80/clarity.js",
+      "https://connect.facebook.net/en_US/sdk.js",
+      "https://connect.facebook.net/en_US/fbevents.js",
+      "https://connect.facebook.net/signals/config/123",
+      "https://connect.facebook.net/app_config/json/123/",
+      "https://sr-client-cfg.amplitude.com/config?api_key=x",
+      "https://cdn.amplitude.com/libs/analytics-browser-2.0.0-min.js.gz",
+      "https://eu-assets.i.posthog.com/static/array.js",
+      "https://eu-assets.i.posthog.com/array/phc_abc/config.js",
+      "https://static.hotjar.com/c/hotjar-1.js?sv=6",
+      "https://snap.licdn.com/li.lms-analytics/insight.min.js"
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
   "after-consent-tool": {
     "expect": "after-consent",
+    "shown": "asks",
     "pageUrl": "https://www.jo.example.com/",
     "cookies": [{ "name": "CookieConsent", "domain": "www.jo.example.com", "value": "-1" }],
     "requests": [
@@ -36,6 +65,7 @@
   },
   "after-consent-generic": {
     "expect": "after-consent",
+    "shown": "asks",
     "pageUrl": "https://gp.example.com/",
     "cookies": [],
     "requests": ["https://gp.example.com/", "https://images.example-cdn.com/photo.jpg"],
@@ -43,6 +73,7 @@
   },
   "with-banner-tracker-fires-anyway": {
     "expect": "with-banner",
+    "shown": "before-choice",
     "pageUrl": "https://hs.example.com/",
     "cookies": [
       { "name": "_ga", "domain": ".hs.example.com", "value": "GA1.1.123.456" },
@@ -55,18 +86,20 @@
     ],
     "dom": { "tools": [], "banner": "generic", "sample": "This website uses cookies ... Google Analytics cookies to measure traffic ALLOW ALL REJECT ALL", "scripts": [] }
   },
-  "with-banner-third-party-only": {
+  "with-banner-beacon-only": {
     "expect": "with-banner",
+    "shown": "before-choice",
     "pageUrl": "https://www.al.example.com/en",
     "cookies": [
       { "name": "MUID", "domain": ".clarity.ms", "value": "x" },
       { "name": "CLID", "domain": "www.clarity.ms", "value": "y" }
     ],
-    "requests": ["https://www.al.example.com/en", "https://www.clarity.ms/tag/abcdef", "https://scripts.clarity.ms/0.8.9/clarity.js", "https://q.clarity.ms/collect"],
-    "dom": { "tools": [], "banner": "generic", "sample": "Cookie settings Accept Decline", "scripts": [] }
+    "requests": ["https://www.al.example.com/en", "https://www.clarity.ms/tag/abcdef", "https://scripts.clarity.ms/0.8.9/clarity.js", "https://b.clarity.ms/collect"],
+    "dom": { "tools": [], "banner": "generic", "sample": "We use cookies. Accept Decline", "scripts": [] }
   },
-  "no-consent": {
+  "no-consent-cookies": {
     "expect": "no-consent",
+    "shown": "sets-cookies",
     "pageUrl": "https://www.tm.example.site/",
     "cookies": [
       { "name": "_ga", "domain": ".tm.example.site", "value": "GA1" },
@@ -82,43 +115,106 @@
     ],
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },
-  "no-consent-tool-shows-no-banner": {
+  "no-consent-beacon-only": {
     "expect": "no-consent",
-    "pageUrl": "https://aj.github.io/",
-    "cookies": [{ "name": "_ga", "domain": ".aj.github.io", "value": "GA1" }],
-    "requests": ["https://aj.github.io/", "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js", "https://www.google-analytics.com/g/collect?v=2"],
-    "dom": { "tools": [{ "name": "OneTrust", "shown": false }], "banner": null, "sample": null, "scripts": [] }
-  },
-  "no-consent-requests-only": {
-    "expect": "no-consent",
+    "shown": "tracks-without",
     "pageUrl": "https://ad.example.com/",
     "cookies": [],
     "requests": ["https://ad.example.com/", "https://connect.facebook.net/en_US/fbevents.js", "https://www.facebook.com/tr/?id=1&ev=PageView"],
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },
-  "none-loader-only": {
-    "expect": "none",
-    "pageUrl": "https://gtm.example.com/",
-    "cookies": [],
-    "requests": ["https://gtm.example.com/", "https://www.googletagmanager.com/gtm.js?id=GTM-ABC"],
+  "no-consent-segment": {
+    "expect": "no-consent",
+    "shown": "sets-cookies",
+    "pageUrl": "https://thea.example.com/",
+    "cookies": [{ "name": "ajs_anonymous_id", "domain": ".example.com", "value": "uuid" }],
+    "requests": ["https://thea.example.com/", "https://cdn.segment.com/analytics.js/v1/abc/analytics.min.js", "https://cdn.segment.com/v1/projects/abc/settings", "https://api.segment.io/v1/p"],
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },
-  "unknown-dom-unreadable": {
-    "expect": "unknown",
-    "pageUrl": "https://u.example.com/",
-    "cookies": [{ "name": "_fbp", "domain": ".u.example.com", "value": "fb.1" }],
-    "requests": ["https://u.example.com/"],
-    "dom": null
+  "region-only-tool-tracks": {
+    "expect": "no-consent",
+    "shown": "region-only",
+    "pageUrl": "https://aj.github.io/",
+    "cookies": [{ "name": "_ga", "domain": ".aj.github.io", "value": "GA1" }],
+    "requests": ["https://aj.github.io/", "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js", "https://www.google-analytics.com/g/collect?v=2"],
+    "dom": { "tools": [{ "name": "OneTrust", "shown": false }], "banner": null, "sample": null, "scripts": [] }
   },
-  "none-tool-shows-no-banner": {
+  "tool-no-banner-nothing-tracked": {
     "expect": "none",
+    "shown": "tool-no-banner",
     "pageUrl": "https://ct.example.com/",
     "cookies": [{ "name": "OptanonConsent", "domain": ".ct.example.com", "value": "isGpcEnabled=0" }],
     "requests": ["https://ct.example.com/", "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js", "https://cdn.cookielaw.org/consent/abc.json"],
     "dom": { "tools": [{ "name": "OneTrust", "shown": false }], "banner": null, "sample": null, "scripts": [] }
   },
+  "calendly-embed-only": {
+    "expect": "none",
+    "shown": "none",
+    "pageUrl": "https://cal.example.dev/",
+    "cookies": [],
+    "requests": [
+      "https://cal.example.dev/",
+      "https://assets.calendly.com/assets/external/widget.js",
+      { "url": "https://calendly.com/someone/30min?embed_type=Inline", "frame": "https://calendly.com/someone/30min?embed_type=Inline" },
+      { "url": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js", "frame": "https://calendly.com/someone/30min?embed_type=Inline" },
+      { "url": "https://www.googletagmanager.com/gtm.js?id=GTM-CAL", "frame": "https://calendly.com/someone/30min?embed_type=Inline" },
+      { "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-CAL", "frame": "https://calendly.com/someone/30min?embed_type=Inline" }
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": ["https://assets.calendly.com/assets/external/widget.js"] }
+  },
+  "youtube-embed": {
+    "expect": "none",
+    "shown": "embed",
+    "pageUrl": "https://yt.example.me/",
+    "cookies": [
+      { "name": "YSC", "domain": ".youtube.com", "value": "x" },
+      { "name": "VISITOR_INFO1_LIVE", "domain": ".youtube.com", "value": "y" },
+      { "name": "test_cookie", "domain": ".doubleclick.net", "value": "CheckForPermission" }
+    ],
+    "requests": [
+      "https://yt.example.me/",
+      "https://www.youtube.com/iframe_api",
+      { "url": "https://www.youtube.com/embed/0HPGny83MRU", "frame": "https://www.youtube.com/embed/0HPGny83MRU" },
+      { "url": "https://www.youtube.com/s/player/b485e332/player_embed.vflset/en_US/base.js", "frame": "https://www.youtube.com/embed/0HPGny83MRU" },
+      { "url": "https://googleads.g.doubleclick.net/pagead/id", "frame": "https://www.youtube.com/embed/0HPGny83MRU" },
+      { "url": "https://static.doubleclick.net/instream/ad_status.js", "frame": "https://www.youtube.com/embed/0HPGny83MRU" }
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": ["https://www.youtube.com/iframe_api"] }
+  },
+  "youtube-nocookie-embed": {
+    "expect": "none",
+    "shown": "none",
+    "pageUrl": "https://nc.example.me/",
+    "cookies": [],
+    "requests": [
+      "https://nc.example.me/",
+      { "url": "https://www.youtube-nocookie.com/embed/0HPGny83MRU", "frame": "https://www.youtube-nocookie.com/embed/0HPGny83MRU" },
+      { "url": "https://www.youtube-nocookie.com/s/player/b485e332/player_embed.vflset/en_US/base.js", "frame": "https://www.youtube-nocookie.com/embed/0HPGny83MRU" }
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
+  "ad-creative-only": {
+    "expect": "none",
+    "shown": "ad",
+    "pageUrl": "https://cd.example.com/",
+    "cookies": [
+      { "name": "APC", "domain": ".doubleclick.net", "value": "x" },
+      { "name": "test_cookie", "domain": ".doubleclick.net", "value": "CheckForPermission" }
+    ],
+    "requests": ["https://cd.example.com/", "https://cdn.carbonads.com/carbon.js", "https://srv.carbonads.net/ads/CWBI4KJE.json", "https://ad.doubleclick.net/ddm/trackimp/N1.png", "https://api.openpanel.dev/track"],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
+  "unknown-dom-unreadable": {
+    "expect": "unknown",
+    "shown": "not-measured",
+    "pageUrl": "https://u.example.com/",
+    "cookies": [{ "name": "_fbp", "domain": ".u.example.com", "value": "fb.1" }],
+    "requests": ["https://u.example.com/"],
+    "dom": null
+  },
   "none-dom-unreadable": {
     "expect": "none",
+    "shown": "none",
     "pageUrl": "https://n.example.com/",
     "cookies": [],
     "requests": ["https://n.example.com/"],

@@ -1,60 +1,105 @@
 // The cookie check's pure parts (pipeline/cookie-check.mjs, lib/cookie-check.mjs):
-// each state from fixtures of what the browser saw on arrival
-// (tests/fixtures/cookie-check/readings.json), cookieless analytics never
-// counted as tracking, a banner whose tracker fires anyway, first and third
-// party, cookie values never kept, readings kept by vantage, and the owner's
-// five display cases a profile will show (lib/cookie-check.mjs).
+// each state and display kind from fixtures of what the browser saw on arrival
+// (tests/fixtures/cookie-check/readings.json); only the site's own evidence
+// (a first-party tracking cookie, a main-frame beacon) makes tracking; a
+// script or configuration fetch is never tracking; embeds and ads are kept
+// apart and never make a fix; consent tools count from the page's own code
+// only; cookieless analytics are a note; cookie values are never kept;
+// readings are kept by region; and the owner's display mapping.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  EU_SETTINGS,
   PRIVACY_VERSION,
+  TRACKERS,
   captureRegion,
   classifyCookies,
   classifyRequests,
   deniedConsentPing,
+  hasCookieCheck,
+  isBeacon,
   makeReading,
+  originOf,
   siteOf,
   trackingCookieVendor,
-  vantageOf,
-  wantsSecondVantage,
   withReading,
 } from "../pipeline/cookie-check.mjs";
-import { cookieCheckView, cookieReading } from "../lib/cookie-check.mjs";
+import { TITLES, cookieCheckView, cookieReading } from "../lib/cookie-check.mjs";
 
 const fixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "fixtures", "cookie-check", "readings.json"), "utf8"));
 const cases = Object.entries(fixtures).filter(([k]) => !k.startsWith("_"));
 const AT = new Date("2026-11-25T12:00:00Z");
 const read = (name, extra = {}) => makeReading({ ...fixtures[name], at: AT, ...extra });
 const factsWith = (...readings) => ({ v: 4, resume: true, privacy: withReading(null, ...readings) });
+const view = (name) => cookieCheckView(factsWith(read(name)));
 
 for (const [name, fx] of cases) {
-  test(`fixture ${name}: ${fx.expect}`, () => {
+  test(`fixture ${name}: state ${fx.expect}, shown as ${fx.shown}`, () => {
     const r = read(name);
     assert.equal(r.state, fx.expect, JSON.stringify(r));
     assert.equal(r.region, "US");
-    assert.equal(r.vantage, "US");
     assert.equal(r.v, PRIVACY_VERSION);
+    assert.equal(view(name).kind, fx.shown);
   });
 }
 
-test("every state is covered by a fixture", () => {
+test("every state and every display kind is covered by a fixture", () => {
   const states = new Set(cases.map(([, fx]) => fx.expect));
   for (const s of ["none", "after-consent", "with-banner", "no-consent", "unknown"]) assert.ok(states.has(s), s);
+  const kinds = new Set(cases.map(([, fx]) => fx.shown));
+  for (const k of ["none", "asks", "tool-no-banner", "sets-cookies", "tracks-without", "before-choice", "region-only", "embed", "ad", "not-measured"]) assert.ok(kinds.has(k), k);
+});
+
+test("a script or a configuration fetch is never tracking: loaders are kept apart", () => {
+  const r = read("none-loaders-only");
+  assert.equal(r.state, "none");
+  assert.deepEqual(r.beacons, []);
+  assert.deepEqual(
+    r.loaders.map((l) => l.vendor).sort(),
+    ["Amplitude", "Amplitude", "Google Tag Manager", "Hotjar", "LinkedIn", "Meta Pixel", "Microsoft Clarity", "Microsoft Clarity", "PostHog", "Segment", "Segment"].sort()
+  );
+});
+
+test("beacons: the known beacon paths count, the same host's scripts do not", () => {
+  const t = (host, p) => isBeacon(TRACKERS.filter((x) => host.endsWith(x.host) && (!x.path || x.path.test(p))).sort((a, b) => b.host.length - a.host.length)[0], p);
+  // Verified against live sites on 2026-11-25 (pipeline/cookie-check.mjs TRACKERS).
+  assert.equal(t("www.google-analytics.com", "/g/collect"), true);
+  assert.equal(t("analytics.google.com", "/g/collect"), true);
+  assert.equal(t("stats.g.doubleclick.net", "/g/collect"), true);
+  assert.equal(t("b.clarity.ms", "/collect"), true);
+  assert.equal(t("api.segment.io", "/v1/p"), true);
+  assert.equal(t("www.facebook.com", "/tr/"), true);
+  assert.equal(t("metrics.hotjar.io", "/v2/client/ping"), true);
+  // Not verified live, by the vendors' documented paths.
+  assert.equal(t("us.i.posthog.com", "/e/"), true);
+  assert.equal(t("api2.amplitude.com", "/2/httpapi"), true);
+  assert.equal(t("px.ads.linkedin.com", "/collect"), true);
+  // Scripts and configuration.
+  assert.equal(t("www.google-analytics.com", "/analytics.js"), false);
+  assert.equal(t("www.googletagmanager.com", "/gtag/js"), false);
+  assert.equal(t("scripts.clarity.ms", "/0.8.80/clarity.js"), false);
+  assert.equal(t("www.clarity.ms", "/tag/abc"), false);
+  assert.equal(t("cdn.segment.io", "/analytics.js/v1/abc/analytics.min.js"), false);
+  assert.equal(t("cdn.segment.com", "/v1/projects/abc/settings"), false);
+  assert.equal(t("connect.facebook.net", "/en_US/sdk.js"), false);
+  assert.equal(t("sr-client-cfg.amplitude.com", "/config"), false);
+  assert.equal(t("eu-assets.i.posthog.com", "/static/array.js"), false);
+  assert.equal(t("eu-assets.i.posthog.com", "/array/phc_abc/config"), false);
 });
 
 test("cookieless analytics are recorded apart and never count as tracking", () => {
   const r = read("none-cookieless");
   assert.equal(r.state, "none");
   assert.deepEqual([...new Set(r.cookieless.map((c) => c.vendor))].sort(), ["Cloudflare Web Analytics", "GoatCounter", "Plausible", "Vercel Analytics"]);
-  assert.equal(r.trackers.length, 0);
-  assert.equal(r.tracking_cookies, 0);
-  // With a tracker beside them, the tracker decides.
-  const both = makeReading({ ...fixtures["none-cookieless"], requests: [...fixtures["none-cookieless"].requests, "https://www.google-analytics.com/g/collect?v=2"] });
-  assert.equal(both.state, "no-consent");
-  assert.ok(both.cookieless.length > 0);
+  assert.equal(r.beacons.length, 0);
+  assert.equal(r.own_cookies.length, 0);
+  const v = view("none-cookieless");
+  assert.equal(v.level, "pass");
+  assert.equal(
+    v.sentence,
+    "On our visit on 25 Nov 2026 from the United States, no known tracker ran and no tracking cookie was set. Visits are counted with Plausible, Vercel Analytics, GoatCounter and Cloudflare Web Analytics, which set no cookies."
+  );
 });
 
 test("a self-hosted cookieless script is seen by its address on the page", () => {
@@ -63,23 +108,52 @@ test("a self-hosted cookieless script is seen by its address on the page", () =>
   assert.deepEqual(r.cookieless.map((c) => c.vendor), ["Umami"]);
 });
 
-test("a banner whose tracker fires anyway is with-banner, named by its vendors", () => {
-  const r = read("with-banner-tracker-fires-anyway");
-  assert.equal(r.state, "with-banner");
-  assert.equal(r.banner, true);
-  assert.deepEqual(r.vendors, ["Google Analytics"]);
-  assert.equal(r.tracking_cookies, 2);
-  assert.deepEqual(r.trackers.map((t) => [t.host, t.requests]), [["www.google-analytics.com", 1]]);
-  assert.deepEqual(r.loaders.map((t) => t.host), ["www.googletagmanager.com"]);
+test("frames: main, same-site, a blank frame a script made, and a third-party embed", () => {
+  const site = "ana.dev";
+  assert.deepEqual(originOf({ url: "x", frame: null }, site), { origin: "main", embed: null });
+  assert.deepEqual(originOf({ url: "x", frame: "https://blog.ana.dev/" }, site), { origin: "same-site", embed: null });
+  assert.deepEqual(originOf({ url: "x", frame: "" }, site), { origin: "same-site", embed: null });
+  assert.deepEqual(originOf({ url: "x", frame: "https://www.youtube.com/embed/1" }, site), { origin: "embed", embed: "www.youtube.com" });
 });
 
-test("a tag loader alone, or consent mode's denied pings, are not tracking", () => {
+test("a page with only a Calendly inline frame reads no consent tool and no fix", () => {
+  const r = read("calendly-embed-only");
+  assert.equal(r.state, "none");
+  assert.equal(r.tool, null, "OneTrust inside Calendly's frame is Calendly's, not the page's");
+  assert.deepEqual(r.beacons, []);
+  assert.equal(view("calendly-embed-only").level, "pass");
+  // Calendly's own beacon is kept, with the embed named.
+  assert.deepEqual(r.embeds.map((e) => [e.name, e.trackers]), [["Calendly", ["www.google-analytics.com x1"]]]);
+});
+
+test("a plain youtube.com embed is information, never a fix; youtube-nocookie stays clean", () => {
+  const yt = read("youtube-embed");
+  assert.equal(yt.state, "none");
+  assert.deepEqual(yt.embeds.map((e) => [e.host, e.name, e.cookies.sort()]), [["www.youtube.com", "YouTube", ["VISITOR_INFO1_LIVE", "YSC", "test_cookie"]]]);
+  assert.deepEqual(yt.ads, [], "doubleclick inside the player is YouTube's");
+  const v = view("youtube-embed");
+  assert.deepEqual([v.level, v.title], ["information", "Embeds YouTube, which sets its own cookies"]);
+  assert.match(v.sentence, /youtube-nocookie\.com, YouTube's privacy-enhanced mode, or load it only when the visitor clicks it\./);
+  assert.doesNotMatch(v.sentence, /cookieless|no cookies \(such as/);
+  const nc = read("youtube-nocookie-embed");
+  assert.equal(nc.state, "none");
+  assert.deepEqual(nc.embeds, []);
+  assert.equal(view("youtube-nocookie-embed").level, "pass");
+});
+
+test("only an ad network's cookie or request from the main frame is information, not a fix", () => {
+  const r = read("ad-creative-only");
+  assert.equal(r.state, "none");
+  assert.deepEqual([...new Set(r.ads.map((a) => a.vendor))], ["Google Ads"]);
+  assert.deepEqual(r.cookieless.map((c) => c.vendor), ["OpenPanel"]);
+  const v = view("ad-creative-only");
+  assert.deepEqual([v.level, v.title, v.recommendation], ["information", "Tracking seen from an ad on the page", null]);
+});
+
+test("consent mode's denied pings are not tracking", () => {
   const r = read("after-consent-tool");
-  assert.equal(r.state, "after-consent");
-  assert.equal(r.tool, "Cookiebot");
   assert.equal(r.consent_mode_pings, 1);
-  assert.equal(r.trackers.length, 0);
-  assert.equal(read("none-loader-only").loaders[0].vendor, "Google Tag Manager");
+  assert.deepEqual(r.beacons, []);
   assert.equal(deniedConsentPing("https://www.google-analytics.com/g/collect?gcs=G100"), true);
   assert.equal(deniedConsentPing("https://www.google-analytics.com/g/collect?gcs=G1-0"), true);
   assert.equal(deniedConsentPing("https://www.google-analytics.com/g/collect?gcs=G101"), false, "analytics granted");
@@ -87,15 +161,7 @@ test("a tag loader alone, or consent mode's denied pings, are not tracking", () 
   assert.equal(deniedConsentPing("https://www.google-analytics.com/g/collect"), false, "no consent mode");
 });
 
-test("a consent tool that loaded but showed no banner is no-consent, with the reason", () => {
-  const r = read("no-consent-tool-shows-no-banner");
-  assert.equal(r.state, "no-consent");
-  assert.equal(r.tool, "OneTrust");
-  assert.equal(r.banner, false);
-  assert.match(r.reason, /OneTrust loaded but showed no banner .*US/);
-});
-
-test("unknown: tracking with a page that could not be read, and a reading that failed", () => {
+test("unknown: the site's own tracking with a page that could not be read, and a reading that failed", () => {
   assert.match(read("unknown-dom-unreadable").reason, /could not be read/);
   const failed = makeReading({ error: "the cookies could not be read (Target closed)", at: AT });
   assert.equal(failed.state, "unknown");
@@ -103,9 +169,9 @@ test("unknown: tracking with a page that could not be read, and a reading that f
 });
 
 test("cookie values are never kept, and cookies are first or third party by site", () => {
-  const r = read("no-consent");
+  const r = read("no-consent-cookies");
   assert.ok(!JSON.stringify(r).includes("GA1") && !JSON.stringify(r).includes("eyJ"), "no value");
-  for (const c of r.cookies) assert.deepEqual(Object.keys(c).sort(), ["domain", "name", "party", "tracking"]);
+  for (const c of r.cookies) assert.deepEqual(Object.keys(c).sort(), ["domain", "embed", "name", "party", "tracking"]);
   assert.deepEqual(r.cookies.map((c) => [c.name, c.party, c.tracking]), [
     ["_ga", "first", "Google Analytics"],
     ["_hjSessionUser_6380611", "first", "Hotjar"],
@@ -119,63 +185,55 @@ test("cookie values are never kept, and cookies are first or third party by site
   assert.equal(siteOf("www.shop.co.uk"), "shop.co.uk");
 });
 
+test("a third-party cookie belongs to the embed on its site, or to the one embed that asked for its site", () => {
+  const req = classifyRequests(
+    [
+      "https://a.dev/",
+      "https://www.youtube.com/iframe_api",
+      { url: "https://www.youtube.com/embed/1", frame: "https://www.youtube.com/embed/1" },
+      { url: "https://googleads.g.doubleclick.net/pagead/id", frame: "https://www.youtube.com/embed/1" },
+    ],
+    "https://a.dev/"
+  );
+  const jar = classifyCookies(
+    [
+      { name: "YSC", domain: ".youtube.com" },
+      { name: "test_cookie", domain: ".doubleclick.net" },
+      { name: "MUID", domain: ".clarity.ms" },
+    ],
+    "https://a.dev/",
+    req
+  );
+  assert.deepEqual(Object.fromEntries(jar.map((c) => [c.name, c.embed])), { YSC: "www.youtube.com", test_cookie: "www.youtube.com", MUID: null });
+});
+
 test("tracking cookies by name and by the network's own domain", () => {
   assert.equal(trackingCookieVendor({ name: "_gcl_au", domain: ".a.dev" }), "Google Ads");
   assert.equal(trackingCookieVendor({ name: "_fbp", domain: ".a.dev" }), "Meta Pixel");
   assert.equal(trackingCookieVendor({ name: "_clck", domain: ".a.dev" }), "Microsoft Clarity");
   assert.equal(trackingCookieVendor({ name: "li_sugr", domain: ".linkedin.com" }), "LinkedIn");
   assert.equal(trackingCookieVendor({ name: "_ttp", domain: ".a.dev" }), "TikTok");
-  assert.equal(trackingCookieVendor({ name: "IDE", domain: ".doubleclick.net" }), "Google Ads");
+  assert.equal(trackingCookieVendor({ name: "ajs_anonymous_id", domain: ".a.dev" }), "Segment");
   assert.equal(trackingCookieVendor({ name: "anything", domain: ".doubleclick.net" }), "Google Ads");
   assert.equal(trackingCookieVendor({ name: "VISITOR_INFO1_LIVE", domain: ".youtube.com" }), "YouTube");
-  // Not tracking: a bot check's, a session's, a consent tool's own record, a page's own preference.
   for (const name of ["__cf_bm", "cf_clearance", "session", "CookieConsent", "OptanonConsent", "theme", "_GRECAPTCHA"]) {
     assert.equal(trackingCookieVendor({ name, domain: ".a.dev" }), null, name);
   }
 });
 
-test("requests: tracker hosts by host and count, subdomains included, loaders apart", () => {
-  const r = classifyRequests([
-    "https://www.google-analytics.com/g/collect?v=2",
-    "https://region1.google-analytics.com/g/collect?v=2",
-    "https://region1.google-analytics.com/g/collect?v=2",
-    "https://www.googletagmanager.com/gtag/js?id=G-1",
-    "https://snap.licdn.com/li.lms-analytics/insight.min.js",
-    "https://px.ads.linkedin.com/collect?pid=1",
-    "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
-    "https://notgoogle-analytics.com/x",
-    "not a url",
-  ]);
-  assert.deepEqual(r.trackers.map((t) => [t.host, t.requests]), [["region1.google-analytics.com", 2], ["px.ads.linkedin.com", 1], ["www.google-analytics.com", 1]]);
-  assert.deepEqual(r.loaders.map((t) => t.vendor).sort(), ["Google Tag Manager", "LinkedIn"]);
-  assert.deepEqual(r.consentHosts, ["OneTrust"]);
-});
-
-test("readings are kept by vantage: a new reading replaces its own, the others stay", () => {
-  const us = read("no-consent");
-  const eu = makeReading({ ...fixtures["with-banner-tracker-fires-anyway"], vantage: EU_SETTINGS, at: AT });
-  assert.equal(eu.vantage, "US+eu-browser");
-  assert.match(eu.label, /^address in US, European browser settings/);
-  assert.doesNotMatch(eu.label, /seen from Europe/i);
-  const later = { ...makeReading({ ...fixtures["none-plain"], region: "EU", at: AT }) };
-  const stored = withReading(withReading(null, us, eu), later);
-  assert.deepEqual(Object.keys(stored.readings).sort(), ["EU", "US", "US+eu-browser"]);
+test("readings are kept by region: a new reading replaces its own, the others stay", () => {
+  const us = read("no-consent-cookies");
+  const eu = makeReading({ ...fixtures["none-plain"], region: "EU", at: AT });
+  const stored = withReading(withReading(null, us), eu);
+  assert.deepEqual(Object.keys(stored.readings).sort(), ["EU", "US"]);
   const again = withReading(stored, read("none-plain"));
   assert.equal(again.readings.US.state, "none");
   assert.equal(again.readings.EU.state, "none");
-  assert.equal(again.readings["US+eu-browser"].state, "with-banner");
-  // A stored part of another version is not read.
-  assert.deepEqual(Object.keys(withReading({ v: 99, readings: { EU: later } }, us).readings), ["US"]);
-  assert.equal(vantageOf("US").key, "US");
-});
-
-test("the second vantage is made only when the first saw a consent tool or a tracker", () => {
-  assert.equal(wantsSecondVantage(read("none-plain")), false);
-  assert.equal(wantsSecondVantage(read("none-cookieless")), false, "cookieless analytics alone");
-  assert.equal(wantsSecondVantage(read("none-loader-only")), true, "a tag loader a banner could be holding");
-  assert.equal(wantsSecondVantage(read("no-consent")), true);
-  assert.equal(wantsSecondVantage(read("after-consent-tool")), true);
-  assert.equal(wantsSecondVantage(read("unknown-dom-unreadable")), false);
+  assert.deepEqual(Object.keys(withReading({ v: 99, readings: { EU: eu } }, us).readings), ["US"], "a stored part of another version is not read");
+  assert.equal(hasCookieCheck(JSON.stringify({ v: 4, privacy: again })), true);
+  assert.equal(hasCookieCheck({ v: 4 }), false);
+  assert.equal(hasCookieCheck(JSON.stringify({ v: 4, privacy: { v: 99, readings: { US: {} } } })), false);
+  assert.equal(hasCookieCheck("not json"), false);
 });
 
 test("the region is the runner's, US unless CAPTURE_REGION says otherwise", () => {
@@ -183,100 +241,96 @@ test("the region is the runner's, US unless CAPTURE_REGION says otherwise", () =
   assert.equal(captureRegion({ CAPTURE_REGION: "eu" }), "EU");
 });
 
-// The owner's five display cases (2026-11-25), one test each, with their exact titles.
-const view = (...names) => cookieCheckView(factsWith(...names.map((n) => (typeof n === "string" ? read(n) : n))));
-const shown = (v) => ({ level: v.level, case: v.case, title: v.title, recommendation: v.recommendation });
+// The display mapping (owner, 2026-11-25, as revised after the review of #305): titles, levels and sentences.
+const shown = (v) => ({ level: v.level, title: v.title, recommendation: v.recommendation });
 
-test("display case 1: no tracking cookies and no tracker requests is a pass", () => {
-  for (const name of ["none-plain", "none-loader-only", "none-dom-unreadable"]) {
-    assert.deepEqual(shown(view(name)), { level: "pass", case: 1, title: "No tracking cookies", recommendation: null }, name);
-  }
-  assert.equal(view("none-plain").sentence, "No tracking cookies or trackers. Checked from the United States.");
+test("display: pass, no tracking cookies, hedged", () => {
+  assert.deepEqual(shown(view("none-plain")), { level: "pass", title: "No tracking cookies", recommendation: null });
+  assert.equal(view("none-plain").sentence, "On our visit on 25 Nov 2026 from the United States, no known tracker ran and no tracking cookie was set.");
 });
 
-test("display case 1: cookieless analytics alone is a pass with a note, never a fix", () => {
-  const v = view("none-cookieless");
-  assert.deepEqual(shown(v), { level: "pass", case: 1, title: "No tracking cookies", recommendation: null });
+test("display: a banner shown and nothing tracked before a choice is information, 'Asks before tracking'", () => {
+  assert.deepEqual(shown(view("after-consent-tool")), { level: "information", title: "Asks before tracking", recommendation: null });
+  assert.equal(
+    view("after-consent-tool").sentence,
+    "On our visit on 25 Nov 2026 from the United States, a cookie banner (Cookiebot) was shown and no known tracker of the site's own ran before a choice."
+  );
+});
+
+test("display: a consent tool, no banner, nothing tracked is information, never a fix", () => {
+  assert.deepEqual(shown(view("tool-no-banner-nothing-tracked")), { level: "information", title: "Has a consent tool; banner not shown to a United States visitor", recommendation: null });
+});
+
+test("display: a first-party tracking cookie with no tool and no banner is a fix, 'Sets tracking cookies without asking'", () => {
+  const v = view("no-consent-cookies");
+  assert.deepEqual(shown(v), {
+    level: "fix",
+    title: "Sets tracking cookies without asking",
+    recommendation: "Ask visitors before loading Google Analytics and Hotjar, or count visits with analytics that set no cookies (such as Plausible or Cloudflare Web Analytics).",
+  });
   assert.equal(
     v.sentence,
-    "No tracking cookies or trackers. Visits are counted with Plausible, Vercel Analytics, GoatCounter and Cloudflare Web Analytics, which set no cookies. Checked from the United States."
+    "On our visit on 25 Nov 2026 from the United States, Google Analytics and Hotjar set tracking cookies on the site's own domain, and no cookie banner or consent tool was found."
   );
 });
 
-test("display case 2: a banner and nothing tracked before a choice is information", () => {
-  for (const name of ["after-consent-tool", "after-consent-generic"]) {
-    assert.deepEqual(shown(view(name)), { level: "information", case: 2, title: "Asks before tracking", recommendation: null }, name);
-  }
-  assert.equal(view("after-consent-tool").sentence, "A cookie banner (Cookiebot) is shown and nothing tracks the visit before a choice. Checked from the United States.");
+test("display: a main-frame beacon without a tracking cookie is a fix, 'Tracks visitors without asking', its advice fitting a pixel", () => {
+  const v = view("no-consent-beacon-only");
+  assert.deepEqual(shown(v), { level: "fix", title: "Tracks visitors without asking", recommendation: "Ask visitors before loading Meta Pixel." });
+  assert.match(v.sentence, /Meta Pixel tracked the visit from the page itself/);
 });
 
-test("display case 3: tracking with no consent tool anywhere is a fix, with its recommendation", () => {
-  for (const name of ["no-consent", "no-consent-requests-only"]) {
-    assert.deepEqual(
-      shown(view(name)),
-      {
-        level: "fix",
-        case: 3,
-        title: "Sets tracking cookies without asking",
-        recommendation: "Ask visitors before setting tracking cookies, or switch to analytics that set no cookies (such as Plausible or Cloudflare Web Analytics).",
-      },
-      name
-    );
+test("display: a banner shown and the site's own tracking before a choice is a fix, 'Tracks before you answer the banner'", () => {
+  for (const name of ["with-banner-tracker-fires-anyway", "with-banner-beacon-only"]) {
+    assert.equal(view(name).title, "Tracks before you answer the banner", name);
+    assert.equal(view(name).level, "fix", name);
   }
-  assert.equal(
-    view("no-consent").sentence,
-    "Tracks visitors without asking (Google Analytics and Hotjar): no cookie banner or consent tool was found. Checked from the United States."
-  );
-});
-
-test("display case 4: a banner or consent tool with tracking before any choice is a fix, with its recommendation", () => {
-  const expected = { level: "fix", case: 4, title: "Tracks before you answer the banner", recommendation: "Load tracking only after the visitor accepts the cookie banner, not before they answer it." };
-  // The banner shown and the tracker firing anyway.
-  assert.deepEqual(shown(view("with-banner-tracker-fires-anyway")), expected);
-  assert.deepEqual(shown(view("with-banner-third-party-only")), expected);
+  assert.equal(view("with-banner-tracker-fires-anyway").recommendation, "Load Google Analytics only after the visitor accepts the cookie banner, not before they answer it.");
   assert.equal(
     view("with-banner-tracker-fires-anyway").sentence,
-    "Tracking (Google Analytics) starts before the visitor answers the cookie banner. Checked from the United States."
+    "On our visit on 25 Nov 2026 from the United States, a cookie banner was shown, and Google Analytics started tracking before any choice was made."
   );
-  // A consent tool in the page's code that showed this visit no banner, and tracking anyway.
-  const hidden = view("no-consent-tool-shows-no-banner");
-  assert.deepEqual(shown(hidden), expected);
-  assert.match(hidden.sentence, /while OneTrust is in the page's code but showed no banner to this visit/);
-  // A banner only a browser with European settings is shown (same address): the page has a consent tool.
-  const eu = makeReading({ ...fixtures["with-banner-tracker-fires-anyway"], vantage: EU_SETTINGS, at: AT });
-  const v = view("no-consent", eu);
-  assert.deepEqual(shown(v), expected);
-  assert.match(v.sentence, /a cookie banner appears only for a browser set to European settings/);
-  const second = cookieCheckView(factsWith(read("no-consent"), eu), "US+eu-browser");
-  assert.equal(second.case, 4);
-  assert.match(second.sentence, /Checked from the United States with European browser settings\.$/);
 });
 
-test("display case 5: a consent tool with no banner shown and nothing tracked is information, never a fix", () => {
-  const v = view("none-tool-shows-no-banner");
-  assert.deepEqual(shown(v), { level: "information", case: 5, title: "Has a consent tool; banner not shown to a United States visitor", recommendation: null });
-  assert.equal(v.sentence, "OneTrust is in the page's code, but no banner was shown to this visit, and nothing tracked it. Checked from the United States.");
+test("display: a consent tool with no banner shown and tracking is information, 'Tracks without asking visitors from the United States'", () => {
+  const v = view("region-only-tool-tracks");
+  assert.deepEqual(shown(v), { level: "information", title: "Tracks without asking visitors from the United States", recommendation: null });
+  assert.match(v.sentence, /OneTrust is in the page's code and may ask visitors from other regions\.$/);
+});
+
+test("display: an embed's or an ad's tracking beside a fix comes back as notes", () => {
+  const r = makeReading({
+    ...fixtures["youtube-embed"],
+    cookies: [...fixtures["youtube-embed"].cookies, { name: "_ga", domain: ".yt.example.me" }],
+    requests: [...fixtures["youtube-embed"].requests, "https://www.google-analytics.com/g/collect?v=2"],
+    at: AT,
+  });
+  const v = cookieCheckView(factsWith(r));
+  assert.equal(v.title, TITLES.setsCookies);
+  assert.deepEqual(v.notes.map((n) => n.title), ["Embeds YouTube, which sets its own cookies"]);
 });
 
 test("display: old captures and failed readings are not measured, never 'no tracking'", () => {
-  const notMeasured = (v) => ({ level: v.level, case: v.case, title: v.title, recommendation: v.recommendation });
-  const expected = { level: "not-measured", case: null, title: "Not measured", recommendation: null };
+  const notMeasured = (v) => [v.level, v.title, v.recommendation];
+  const expected = ["not-measured", "Not measured", null];
   assert.deepEqual(notMeasured(cookieCheckView({ v: 4, resume: true })), expected, "facts from before the cookie check");
   assert.deepEqual(notMeasured(cookieCheckView(null)), expected);
   assert.deepEqual(notMeasured(cookieCheckView("not json")), expected);
   assert.deepEqual(notMeasured(cookieCheckView(JSON.stringify({ v: 4, privacy: { v: 99, readings: { US: { state: "none" } } } }))), expected, "another version");
-  assert.deepEqual(notMeasured(cookieCheckView(factsWith(read("none-plain")), "EU")), expected, "no reading from that vantage");
-  const failed = cookieCheckView(factsWith(read("unknown-dom-unreadable")));
-  assert.deepEqual(notMeasured(failed), expected, "a reading that could not tell");
-  assert.match(failed.sentence, /^The cookie check could not tell: tracking started, but/);
+  assert.deepEqual(notMeasured(cookieCheckView(factsWith(read("none-plain")), "EU")), expected, "no reading from that region");
+  assert.deepEqual(notMeasured(view("unknown-dom-unreadable")), expected, "a reading that could not tell");
   assert.deepEqual(notMeasured(cookieCheckView(factsWith(makeReading({ error: "the cookies could not be read (Target closed)", at: AT })))), expected, "a failed reading");
   assert.equal(cookieReading(JSON.stringify(factsWith(read("none-plain")))).state, "none");
 });
 
-test("display: every fixture maps to one of the five cases or not measured", () => {
+test("display: a recommendation exactly for a fix, and a fix only from the site's own evidence", () => {
   for (const [name] of cases) {
     const v = view(name);
-    assert.ok([1, 2, 3, 4, 5, null].includes(v.case), name);
     assert.equal(v.level === "fix", v.recommendation != null, `${name}: a recommendation exactly for a fix`);
+    if (v.level === "fix") {
+      const r = read(name);
+      assert.ok(r.own_cookies.length > 0 || r.beacons.length > 0, `${name}: a fix needs the site's own evidence`);
+    }
+    assert.ok(v.level === "not-measured" || v.sentence.startsWith("On our visit on 25 Nov 2026 from the United States"), `${name}: stated as an observation`);
   }
 });
