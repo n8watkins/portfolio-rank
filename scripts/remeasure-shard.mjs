@@ -12,16 +12,44 @@
 // delisted one is not on the list). The split is by a hash of the address, so
 // the shards never overlap, together they cover the list, and a re-run gives
 // the same split. --skip-version V leaves out sites whose stored facts
-// already carry version V or newer (the `v` field of portfolios.facts) and a
-// cookie check reading at its current version (facts.privacy,
-// pipeline/cookie-check.mjs), so a re-run after a failure only does what is
-// left, and the whole-list run fills in the cookie check where it is missing. --limit caps the shard (a
+// already carry version V or newer (the `v` field of portfolios.facts) and,
+// when the code being run has pipeline/cookie-check.mjs, a done cookie check
+// reading (facts.privacy, hasCookieCheck), so a re-run after a failure only
+// does what is left, and the whole-list run fills in the cookie check where it
+// is missing. It imports nothing from pipeline/ but roster.mjs, which every
+// release has (the workflow runs it from main against the released code). --limit caps the shard (a
 // small trial run); it keeps the first addresses in address order.
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { hasCookieCheck } from "../pipeline/cookie-check.mjs";
+
+/**
+ * The cookie check's reading version this script fills in (pipeline/cookie-check.mjs
+ * PRIVACY_VERSION; tests/remeasure-shard.test.mjs keeps the two equal). Written
+ * out here, not imported: the workflow runs this script from main against the
+ * released code tree, which may not have pipeline/cookie-check.mjs yet.
+ */
+export const PRIVACY_VERSION = 1;
+/** A reading that could not tell (`unknown`) younger than this counts as done, so a re-run that day does not redo it. */
+export const UNKNOWN_RETRY_MS = 20 * 60 * 60 * 1000;
+
+/**
+ * Whether stored facts (an object or its JSON) carry a cookie check reading
+ * that is done: at PRIVACY_VERSION, from any region, and not `unknown`, or
+ * `unknown` but made within UNKNOWN_RETRY_MS of `now` (a site that can never
+ * be read is tried once per run of the whole list, not again on its re-runs).
+ */
+export function hasCookieCheck(facts, now = Date.now()) {
+  try {
+    const f = typeof facts === "string" ? JSON.parse(facts) : facts;
+    const p = f?.privacy;
+    if (!p || Number(p.v) !== PRIVACY_VERSION || !p.readings || typeof p.readings !== "object") return false;
+    return Object.values(p.readings).some((r) => r && (r.state !== "unknown" || now - Date.parse(r.at) < UNKNOWN_RETRY_MS));
+  } catch {
+    return false;
+  }
+}
 
 /** The shard (0-based) an address belongs to, out of `shards`. Stable: a hash of the address alone. */
 export function shardOf(url, shards) {
@@ -43,17 +71,21 @@ export function factsVersion(facts) {
  * `feed`: data/feed.json entries; `rows`: { url, facts } of the live, captured,
  * listed rows. Returns { urls, listed, skipped }: `listed` the sites of the
  * whole list that qualify, `skipped` those left out of them for already
- * carrying `skipVersion`, in this shard only.
+ * carrying `skipVersion`, in this shard only. `cookieCheck`: whether the code
+ * being run measures the cookie check (it has pipeline/cookie-check.mjs); only
+ * then is a row without a done reading (hasCookieCheck) still to do, or every
+ * row would stay to do on a release without it.
  */
-export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 0 }) {
+export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 0, cookieCheck = false, now = Date.now() }) {
   if (!Number.isInteger(shards) || shards < 1) throw new Error(`shards must be a whole number of 1 or more, got ${shards}`);
   if (!Number.isInteger(shard) || shard < 1 || shard > shards) throw new Error(`shard must be a whole number from 1 to ${shards}, got ${shard}`);
   const facts = new Map(rows.map((r) => [String(r.url), r.facts]));
   const urls = [...new Set(feed.map((p) => String(p.url)))].filter((u) => facts.has(u)).sort();
   const mine = urls.filter((u) => shardOf(u, shards) === shard - 1);
-  // Still to do: facts older than skipVersion, or facts with no cookie check reading at its current version
-  // (pipeline/cookie-check.mjs hasCookieCheck), so the whole-list run fills the readings in.
-  const wanted = skipVersion > 0 ? mine.filter((u) => factsVersion(facts.get(u)) < skipVersion || !hasCookieCheck(facts.get(u))) : mine;
+  // Still to do: facts older than skipVersion, or, when the code measures it, facts with no done cookie
+  // check reading (hasCookieCheck), so the whole-list run fills the readings in.
+  const done = (u) => factsVersion(facts.get(u)) >= skipVersion && (!cookieCheck || hasCookieCheck(facts.get(u), now));
+  const wanted = skipVersion > 0 ? mine.filter((u) => !done(u)) : mine;
   const capped = limit > 0 ? wanted.slice(0, limit) : wanted;
   return { urls: capped, listed: urls.length, inShard: mine.length, skipped: mine.length - wanted.length };
 }
@@ -84,12 +116,14 @@ async function main() {
     await db.execute("SELECT url, facts FROM portfolios WHERE status = 'live' AND shot_key IS NOT NULL AND delisted_at IS NULL")
   ).rows.map((r) => ({ url: String(r.url), facts: r.facts }));
 
-  const { urls, listed, inShard, skipped } = pickShard({ feed, rows, shard, shards, skipVersion, limit });
+  // The code tree being run (the release's, or this branch's): whether it measures the cookie check.
+  const cookieCheck = fs.existsSync(path.join(root, "pipeline", "cookie-check.mjs"));
+  const { urls, listed, inShard, skipped } = pickShard({ feed, rows, shard, shards, skipVersion, limit, cookieCheck });
   fs.writeFileSync(out, urls.map((u) => `${u}\n`).join(""));
   console.log(
     `shard ${shard} of ${shards}: ${urls.length} site(s) to re-capture ` +
       `(${inShard} of the ${listed} listed, live and captured sites belong to it; ` +
-      `${skipped} skipped for facts already at version ${skipVersion} or newer, with a cookie check; limit ${limit || "none"})`
+      `${skipped} skipped for facts already at version ${skipVersion} or newer${cookieCheck ? ", with a cookie check" : ""}; limit ${limit || "none"})`
   );
 }
 

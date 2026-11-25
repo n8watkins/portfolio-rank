@@ -32,17 +32,24 @@
 //     element), and whether a banner is shown: a known tool's element, a
 //     consent tool's own frame, or a generic banner (findConsent).
 //
-// The site's own tracking (`own`): a first-party tracking cookie, or a beacon
-// from the main frame or a same-site frame to an analytics or pixel tracker.
-// An ad network's cookie or request from the main frame (a rotating ad
-// creative) is kept as `ads`; an embed's cookies and beacons as `embeds`.
-// Neither is the site's own tracking, so neither changes the state.
+// The site's own tracking (`own`): a first-party tracking cookie on the
+// analytics list (TRACKING_COOKIES), or a beacon from the main frame or a
+// same-site frame to an analytics or pixel tracker. An ad network's cookie or
+// request (a rotating ad creative), its first-party cookies included (__gads,
+// _gcl_*), is kept as `ads`; an embed's cookies and beacons as `embeds`; any
+// other third-party tracking cookie (a LinkedIn badge's or an X timeline's
+// script) as `widgets`. None of them is the site's own tracking, so none
+// changes the state. Infrastructure cookies (INFRA_COOKIES: __cf_bm,
+// _cfuvid, cf_clearance, load balancers, consent records) are never tracking.
 //
-// The state (stateOf), from the site's own tracking only:
-//   none           no own tracking (ads or embeds may still be recorded);
-//   after-consent  a banner is shown and no own tracking before a choice;
-//   with-banner    a banner is shown and own tracking started before any choice;
-//   no-consent     own tracking and no banner shown (with or without a consent tool);
+// The state (makeReading), from the site's own tracking only:
+//   none           no own tracking (ads, embeds or widgets may still be recorded);
+//   after-consent  a strict banner is shown and no own tracking before a choice;
+//   with-banner    a banner with a choice is shown (strict, or loose with a decision
+//                  button) and own tracking started before any choice;
+//   with-notice    own tracking, and only a loose cookie notice (an OK, no decision);
+//   no-consent     own tracking and no banner or notice at either level (with or
+//                  without a consent tool);
 //   unknown        the capture could not tell, with the reason.
 //
 // Each reading records where it was made from: `region`, the capture
@@ -63,7 +70,7 @@
 export const PRIVACY_VERSION = 1;
 /** Where the capture runs, unless CAPTURE_REGION says otherwise. */
 export const DEFAULT_REGION = "US";
-export const STATES = ["none", "after-consent", "with-banner", "no-consent", "unknown"];
+export const STATES = ["none", "after-consent", "with-banner", "with-notice", "no-consent", "unknown"];
 /** At most this many cookies and hosts are stored per list (the counts are kept whole). */
 export const MAX_LISTED = 40;
 /** How long a reading waits once more for a late banner, when it saw the site's own tracking and no banner. */
@@ -77,21 +84,33 @@ export const READ_MARGIN_MS = 120000;
 export const captureRegion = (env = process.env) => String(env.CAPTURE_REGION ?? "").trim().toUpperCase() || DEFAULT_REGION;
 
 /**
- * Known tracking cookies by name: [pattern, vendor]. A cookie is a tracking
- * cookie when its name matches one of these, wherever it is set (Google
- * Analytics' _ga is a first-party cookie the site's own page writes).
+ * Known tracking cookies by name: [pattern, vendor, kind]. A cookie is a
+ * tracking cookie when its name matches one of these, wherever it is set
+ * (Google Analytics' _ga is a first-party cookie the site's own page writes).
+ *
+ * `kind` "ads" (the advertising list): cookies an ad network's script sets,
+ * on the site's own domain too (AdSense's __gads, __gpi, __eoi; the Google
+ * Ads and Microsoft Ads conversion cookies _gcl_*, _uet*; doubleclick's IDE,
+ * DSID, test_cookie, APC). They come and go with the ad served, appearing on
+ * some visits and not others, so they are filed under `ads` and never make a
+ * fix. Every other entry is the analytics and session-recording list (Google
+ * Analytics and its server-side FPID and FPLC, Hotjar, Clarity, Segment,
+ * PostHog, Meta Pixel's _fbp, and the rest): the site's own measuring, which
+ * can make a fix when it is first-party.
  */
 export const TRACKING_COOKIES = [
   [/^_ga(_[A-Z0-9]+)?$/, "Google Analytics"],
   [/^_gid$/, "Google Analytics"],
   [/^_gat(_.+)?$/, "Google Analytics"],
   [/^__utm[abcztv]$/, "Google Analytics"],
-  [/^_gcl_/, "Google Ads"],
-  [/^(IDE|DSID|test_cookie|__gads|__gpi|__eoi|APC)$/, "Google Ads"],
+  // Server-side Google Tag Manager's first-party identifiers.
+  [/^(FPID|FPLC)$/, "Google Analytics"],
+  [/^_gcl_/, "Google Ads", "ads"],
+  [/^(IDE|DSID|test_cookie|__gads|__gpi|__eoi|APC)$/, "Google Ads", "ads"],
   [/^_fb[pc]$/, "Meta Pixel"],
   [/^_hj/, "Hotjar"],
   [/^_cl(ck|sk)$/, "Microsoft Clarity"],
-  [/^_uet(sid|vid)$/, "Microsoft Advertising"],
+  [/^_uet(sid|vid)$/, "Microsoft Advertising", "ads"],
   [/^(li_fat_id|li_sugr|bcookie|lidc|UserMatchHistory|AnalyticsSyncHistory|ln_or|_li_ss)$/, "LinkedIn"],
   [/^(_ttp|_tt_enable_cookie|ttcsid(_.+)?)$/, "TikTok"],
   [/^(_pin_unauth|_pinterest_ct_ua|_epik)$/, "Pinterest"],
@@ -103,7 +122,7 @@ export const TRACKING_COOKIES = [
   [/^ajs_(anonymous|user)_id$/, "Segment"],
   [/^ph_.+_posthog$/, "PostHog"],
   [/^(_ym_uid|_ym_d|_ym_isad|yandexuid)$/, "Yandex Metrica"],
-  [/^_hp2_/, "Heap"],
+  [/^_hp[25]_/, "Heap"],
   [/^fs_uid$/, "FullStory"],
   [/^_pk_(id|ses|ref)/, "Matomo"],
   [/^_ce\.(s|clock_data|gtld)$/, "Crazy Egg"],
@@ -113,6 +132,15 @@ export const TRACKING_COOKIES = [
   [/^_rdt_uuid$/, "Reddit"],
   [/^_lfa$/, "Leadfeeder"],
 ];
+
+/**
+ * Infrastructure cookies: bot protection, load balancing, a site's or a
+ * widget's own consent and language records. Never tracking, on any domain
+ * (a __cf_bm on linkedin.com or x.com is Cloudflare's bot check, not LinkedIn's
+ * or X's tracking).
+ */
+export const INFRA_COOKIES =
+  /^(__cf_bm|_cfuvid|cf_clearance|__cflb|cf_ob_info|cf_use_ob|__cfruid|__cfwaitingroom|AWSALB(CORS|TG|TGCORS)?|AWSELB(CORS)?|ARRAffinity(SameSite)?|__ddg\d*_?|incap_ses_.*|visid_incap_.*|nlbi_.*|_dd_s|datadome|JSESSIONID|li_gc|lang|lms_ads_consent|CookieConsent|OptanonConsent|OptanonAlertBoxClosed|cookieyes-consent|__Host-.*|__Secure-next-auth\..*|csrftoken|XSRF-TOKEN)$/i;
 
 /**
  * Known trackers: { host, vendor, kind, beacon? }. `kind` is "analytics" or
@@ -171,10 +199,15 @@ export const TRACKERS = [
   { host: "posthog.com", vendor: "PostHog", kind: "analytics", beacon: /^\/(e|i\/v0\/e|batch|capture|s)\/?/ },
   { host: "mc.yandex.ru", vendor: "Yandex Metrica", kind: "analytics", beacon: /^\/(watch|webvisor)\// },
   { host: "mc.yandex.com", vendor: "Yandex Metrica", kind: "analytics", beacon: /^\/(watch|webvisor)\// },
-  { host: "heapanalytics.com", vendor: "Heap", kind: "analytics", beacon: /^\/h\b/ },
+  // verified on hotjar.com: cdn.us.heap-api.com (heap.js, heap_config.js) loads, c.us.heap-api.com/api/capture/v2/track
+  // is the beacon, heapanalytics.com/api/telemetry is the library's own telemetry (not counted)
+  { host: "heapanalytics.com", vendor: "Heap", kind: "analytics", beacon: null },
+  { host: "heap-api.com", vendor: "Heap", kind: "analytics", beacon: /^\/api\/capture\// },
   { host: "fullstory.com", vendor: "FullStory", kind: "analytics", beacon: /^\/rec\// },
   { host: "matomo.cloud", vendor: "Matomo", kind: "analytics", beacon: /^\/(matomo|piwik)\.php\b/ },
-  { host: "alb.reddit.com", vendor: "Reddit", kind: "pixel", beacon: /^\/rp\.gif\b/ },
+  // Reddit's pixel: no request path verified live, so cookie-only (its first-party _rdt_uuid; rbu on reddit.com).
+  { host: "alb.reddit.com", vendor: "Reddit", kind: "pixel", beacon: null },
+  { host: "pixel-config.reddit.com", vendor: "Reddit", kind: "pixel", beacon: null },
   { host: "redditstatic.com", vendor: "Reddit", kind: "pixel", beacon: null },
   { host: "crazyegg.com", vendor: "Crazy Egg", kind: "analytics", beacon: null },
   { host: "visualwebsiteoptimizer.com", vendor: "VWO", kind: "analytics", beacon: null },
@@ -193,7 +226,11 @@ export const TRACKERS = [
   { host: "bing.com", vendor: "Microsoft Advertising", kind: "ads", path: /^\/c\.gif\b/ },
 ];
 
-/** Domains whose own cookies are tracking cookies of their vendor; their requests are content, not tracking. */
+/**
+ * Domains whose own cookies (other than INFRA_COOKIES) are tracking cookies
+ * of their vendor; their requests are content, not tracking. `kind` "ads":
+ * an ad network's (bing.com's MUID is Microsoft Advertising's).
+ */
 export const TRACKING_COOKIE_DOMAINS = [
   { host: "youtube.com", vendor: "YouTube" },
   { host: "linkedin.com", vendor: "LinkedIn" },
@@ -201,7 +238,8 @@ export const TRACKING_COOKIE_DOMAINS = [
   { host: "twitter.com", vendor: "X (Twitter)" },
   { host: "x.com", vendor: "X (Twitter)" },
   { host: "tiktok.com", vendor: "TikTok" },
-  { host: "bing.com", vendor: "Microsoft Advertising" },
+  { host: "reddit.com", vendor: "Reddit" },
+  { host: "bing.com", vendor: "Microsoft Advertising", kind: "ads" },
 ];
 
 /** Embeds by the host of their frame, for the name shown and the advice that fits ("privacy" mode, else click to load). */
@@ -337,11 +375,22 @@ export function isBeacon(t, path) {
 }
 
 /** The vendor of a tracking cookie, or null: by its name, else by the tracker domain that set it. */
-export function trackingCookieVendor({ name, domain }) {
-  const byName = TRACKING_COOKIES.find(([re]) => re.test(String(name ?? "")));
-  if (byName) return byName[1];
+export function trackingCookieVendor(cookie) {
+  return trackingCookie(cookie)?.vendor ?? null;
+}
+
+/**
+ * A tracking cookie's { vendor, ads } (ads: on the advertising list, or set
+ * from an ad network's own domain), or null: an infrastructure cookie
+ * (INFRA_COOKIES) is never one, on any domain.
+ */
+export function trackingCookie({ name, domain }) {
+  const n = String(name ?? "");
+  if (INFRA_COOKIES.test(n)) return null;
+  const byName = TRACKING_COOKIES.find(([re]) => re.test(n));
+  if (byName) return { vendor: byName[1], ads: byName[2] === "ads" };
   const byDomain = [...TRACKERS.filter((t) => !t.path), ...TRACKING_COOKIE_DOMAINS].find((t) => onHost(domain, t.host));
-  return byDomain ? byDomain.vendor : null;
+  return byDomain ? { vendor: byDomain.vendor, ads: byDomain.kind === "ads" } : null;
 }
 
 /**
@@ -474,7 +523,8 @@ export function classifyCookies(cookies, pageUrl, { sitesFrom = new Map(), embed
     const from = sitesFrom.get(cookieSite);
     const embed =
       party === "first" ? null : (embedHosts.find((h) => siteOf(h) === cookieSite) ?? (from && from.size === 1 && !from.has("main") ? [...from][0] : null));
-    rows.push({ name, domain, party, tracking: trackingCookieVendor({ name, domain }), embed });
+    const t = trackingCookie({ name, domain });
+    rows.push({ name, domain, party, tracking: t?.vendor ?? null, ad: Boolean(t?.ads), embed });
   }
   // Tracking cookies first, then by domain and name, so the stored list keeps what matters when it is cut.
   rows.sort((a, b) => Number(Boolean(b.tracking)) - Number(Boolean(a.tracking)) || a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
@@ -505,8 +555,10 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
     const hit = COOKIELESS_ANALYTICS.find((c) => c.script?.test(s));
     if (hit && !cookieless.some((r) => r.vendor === hit.vendor)) cookieless.push({ host: hostOf(s) || siteOf(hostOf(pageUrl)), vendor: hit.vendor, requests: 0 });
   }
-  // The site's own: first-party tracking cookies and the main frame's beacons.
-  const ownCookies = jar.filter((c) => c.tracking && c.party === "first");
+  // The site's own: first-party tracking cookies of the analytics list and the main frame's beacons. An ad
+  // script's first-party cookies (__gads, _gcl_*) are an ad's: they come and go with the ad served.
+  const ownCookies = jar.filter((c) => c.tracking && c.party === "first" && !c.ad);
+  const firstPartyAds = jar.filter((c) => c.tracking && c.party === "first" && c.ad);
   // An embed's: its third-party tracking cookies and its beacons, by embed. An ad's own frame (an AdSense
   // slot is a doubleclick frame) is an ad, not an embed.
   const adFrame = (host) => trackerFor(host, "/")?.kind === "ads";
@@ -522,36 +574,49 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
     if (adFrame(b.embed)) adsFromFrames.push({ host: b.host, vendor: b.vendor, requests: b.requests });
     else embedRow(b.embed).trackers.push(`${b.host} x${b.requests}`);
   }
-  // An ad network's (or any other third party's) tracking cookies and requests from the main frame: not the site's own.
+  const own = ownCookies.length > 0 || req.beacons.length > 0;
+  const vendors = vendorsOf([...ownCookies.map((c) => ({ vendor: c.tracking })), ...req.beacons]);
+  // Third-party tracking cookies tied to no embed frame: an ad network's are an ad's; one of a vendor the
+  // site itself measures with (Clarity's own MUID beside its beacons) is part of that; any other is a
+  // widget's (a LinkedIn badge's or an X timeline's script).
+  const cookieRow = (c) => ({ host: c.domain.replace(/^\./, ""), vendor: c.tracking, cookie: c.name });
   const thirdCookies = jar.filter((c) => c.tracking && c.party === "third" && !c.embed);
-  const ads = [...req.ads, ...thirdCookies.map((c) => ({ host: c.domain.replace(/^\./, ""), vendor: c.tracking, cookie: c.name })), ...adsFromFrames].slice(0, MAX_LISTED);
+  const ads = [...req.ads, ...firstPartyAds.map(cookieRow), ...thirdCookies.filter((c) => c.ad).map(cookieRow), ...adsFromFrames].slice(0, MAX_LISTED);
+  const widgets = thirdCookies.filter((c) => !c.ad && !vendors.includes(c.tracking)).map(cookieRow).slice(0, MAX_LISTED);
   // A consent tool in the page's own code: its script host, a script address, or its element on the page.
   const scriptTool = CONSENT_TOOLS.find((t) => t.script && (dom?.scripts ?? []).some((s) => t.script.test(s)))?.name ?? null;
   const tool = dom?.tools?.find((t) => t.shown)?.name ?? dom?.tools?.[0]?.name ?? req.consentHosts[0] ?? scriptTool ?? null;
+  // The banner, at two levels (findConsent): `banner` the strict one, which alone earns "Asks before
+  // tracking"; `notice` the loose one, which keeps the site's own tracking from ever reading as "without
+  // asking": with a decision button (Accept, Decline) it is a banner the tracking ran before; with only an
+  // acknowledgement (OK, Got it) it is a cookie notice.
   const banner = dom ? Boolean(dom.banner) : null;
-  const own = ownCookies.length > 0 || req.beacons.length > 0;
-  const vendors = vendorsOf([...ownCookies.map((c) => ({ vendor: c.tracking })), ...req.beacons]);
+  const notice = dom?.loose ?? null;
   let state;
   let reason = null;
   if (!own) state = banner ? "after-consent" : "none";
   else if (banner === null) {
     state = "unknown";
     reason = "the site's own tracking started, but the page could not be read to tell whether a consent banner was shown";
-  } else state = banner ? "with-banner" : "no-consent";
+  } else if (banner) state = "with-banner";
+  else if (notice?.decision) state = "with-banner";
+  else if (notice) state = "with-notice";
+  else state = "no-consent";
   if (state === "no-consent" && tool) reason = `${tool} is in the page's code but showed no banner to this visit (from ${region})`;
   return {
     ...base,
     state,
     reason,
     banner,
-    banner_how: dom?.banner ?? null,
-    banner_sample: dom?.sample ?? null,
+    banner_how: dom?.banner ?? (notice ? (notice.decision ? "loose" : "notice") : null),
+    banner_sample: dom?.sample ?? notice?.sample ?? null,
     tool,
     vendors,
     own_cookies: ownCookies.map((c) => ({ name: c.name, vendor: c.tracking })),
     beacons: req.beacons,
     loaders: req.loaders,
     ads,
+    widgets,
     embeds: [...embeds.values()].filter((e) => e.cookies.length || e.trackers.length),
     embed_hosts: req.embedHosts.slice(0, MAX_LISTED),
     cookieless,
@@ -571,15 +636,24 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
  * analytics and consent tools served from the site itself). Pure DOM
  * reading: nothing is clicked or changed.
  *
- * The generic banner, and its false-positive guard: a visible element that
- * is fixed, sticky, a dialog, or named like a consent banner; under 1,500
- * characters; whose text says it uses cookies or tracking ("we use", "this
- * site uses" and the same in French, German, Spanish, Italian, Portuguese,
- * Dutch and Polish), or is named like a consent tool's banner; and that holds
- * a short choice button (accept, reject, agree, decline, allow, deny, manage,
- * settings, OK in those languages). A footer that says "No cookies, no
- * tracking. OK", a blog post about cookies, or a "Cookie Clicker" project
- * card is not a banner.
+ * The generic banner, at two levels. Both need a visible element that is
+ * fixed, sticky, a dialog, or named like a consent banner, under 1,500
+ * characters, holding a short choice control (accept, reject, agree,
+ * decline, allow, deny, manage, settings, OK in English, French, German,
+ * Spanish, Italian, Portuguese, Dutch and Polish; read from its text, value,
+ * aria-label or title).
+ *   strict (`banner: "generic"`): its text says it uses cookies or tracking
+ *     ("we use", "this site uses", "stores cookies", "cookie preferences",
+ *     "cookies help us" and the same in those languages), or it is named like
+ *     a consent tool's banner. Only this level earns "Asks before tracking".
+ *   loose (`loose: { decision, sample }`): its text names cookies or consent
+ *     at all. It never earns praise; it keeps the site's own tracking from
+ *     reading as "without asking" (makeReading). `decision`: a control that
+ *     decides (accept, decline...), not only acknowledges (OK, Got it).
+ * The false-positive guard, for both: a footer that says "No cookies, no
+ * tracking. OK", a footer link to a cookie policy (no choice control), a
+ * blog post about cookies or a "Cookie Clicker" project card (not pinned,
+ * not a dialog) is not a banner.
  */
 export function findConsent([tools, frameHosts]) {
   const vw = window.innerWidth;
@@ -633,7 +707,13 @@ export function findConsent([tools, frameHosts]) {
       // A notice that says what the cookies do: "this site counts visits with cookies".
       String.raw`\b(counts?|measures?|tracks?|remembers?)\b[^.]{0,40}\bwith (analytics |tracking )?cookies\b`,
       String.raw`\bwe and our (\d+ )?(partners|vendors)\b`,
-      String.raw`\bby (using|continuing|browsing)\b[^.]{0,80}\b(agree|accept|consent)`,
+      String.raw`\bby (using|continuing|browsing|clicking)\b[^.]{0,80}\b(agree|accept|consent)`,
+      // "This website stores cookies", "the storing of cookies", "We'd like to set cookies",
+      // "Choose your cookie preferences", "Cookies help us understand how the site is used".
+      String.raw`\b(stores?|storing|sets?|setting|place|places|placing)\s+(of\s+)?(analytics\s+|optional\s+|some\s+)?cookies\b`,
+      String.raw`\b(like|want|need) to (use|set|store|place) (analytics |optional |some )?cookies\b`,
+      String.raw`\bcookie (preferences|settings|choices|consent)\b`,
+      String.raw`\bcookies (help|allow|enable|let) us\b`,
       String.raw`nous utilisons|ce site( web)? utilise|utilise des cookies|nous et nos partenaires|en poursuivant (votre )?navigation`,
       String.raw`wir (verwenden|nutzen|setzen)|diese (web)?seite (verwendet|nutzt|setzt)|(verwendet|nutzt|setzt) cookies|wir und unsere partner`,
       String.raw`(utilizamos|usamos)\s+(cookies|galletas)|este (sitio( web)?|portal) (utiliza|usa)|nosotros y nuestros socios`,
@@ -664,47 +744,77 @@ export function findConsent([tools, frameHosts]) {
       String.raw`)(?=$|[^\p{L}])`,
     "iu"
   );
+  // The loose level's wording: cookies or consent named at all, in the same languages.
+  const COOKIE_WORDS =
+    /cookie|ciasteczk|traceur|t[ée]moin|galleta|consent|zustimmung|einwilligung|consentement|consentimiento|consenso|consentimento|toestemming|zgod[aęy]|privacy (settings|preferences|choices)|datenschutzeinstellungen/i;
+  // Says it does not use them: "No cookies, no tracking", "cookie-free". Never a banner at either level.
+  const NONE_USED =
+    /\b(no|zero|without)\s+(cookies|tracking|trackers)\b|cookie-?free|cookieless|sans (cookies|traceurs)|ohne cookies|sin cookies|senza cookie|sem cookies|zonder cookies|bez (plik[oó]w )?cookie/i;
+  // A decision, not only an acknowledgement: accept, agree, allow, reject, decline, deny, refuse.
+  const DECISION = new RegExp(
+    String.raw`^[^\p{L}]*(` +
+      [
+        "accept|i accept|agree|i agree|allow|reject|decline|deny|refuse|only necessary|necessary only|essential only",
+        "accepter|tout accepter|j'accepte|j’accepte|refuser|tout refuser|continuer sans accepter|autoriser",
+        "akzeptieren|alle akzeptieren|annehmen|zustimmen|einverstanden|ablehnen|alle ablehnen|erlauben|zulassen|verweigern|nur notwendige",
+        "aceptar|rechazar|permitir|denegar",
+        "accetta|accetto|rifiuta|consenti|nega",
+        "aceitar|aceito|rejeitar|recusar|negar",
+        "accepteren|alles accepteren|akkoord|weigeren|afwijzen|toestaan",
+        "akceptuj|akceptuj[eę]|zaakceptuj|zgadzam si[eę]|odrzu[cć]|odrzucam|zezw[oó]l|pozw[oó]l|odm[oó]w",
+      ].join("|") +
+      String.raw`)(?=$|[^\p{L}])`,
+    "iu"
+  );
   const nameOf = (el) => `${el.id ?? ""} ${typeof el.className === "string" ? el.className : ""}`;
+  // A control's labels: its text, value, aria-label and title (a "✓" button labelled "Accept cookies").
+  const labelsOf = (b) =>
+    [b.innerText, b.value, b.getAttribute("aria-label"), b.getAttribute("title")].map((l) => String(l ?? "").replace(/\s+/g, " ").trim()).filter((l) => l.length > 0 && l.length <= 40);
   let sample = null;
-  if (!banner) {
-    const pinned = (el) => {
-      for (let e = el; e && e !== document.body; e = e.parentElement) {
-        const p = getComputedStyle(e).position;
-        if (p === "fixed" || p === "sticky") return true;
-      }
-      return false;
-    };
-    const DIALOG = "[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]";
-    const candidates = new Set(document.querySelectorAll(`${DIALOG}, [role=region][aria-label]`));
-    for (const el of document.querySelectorAll("[id], [class]")) if (NAMED.test(nameOf(el))) candidates.add(el);
-    let n = 0;
-    for (const el of document.querySelectorAll("body *")) {
-      if (++n > 6000) break;
-      const p = getComputedStyle(el).position;
-      if (p === "fixed" || p === "sticky") candidates.add(el);
+  let loose = null;
+  const pinned = (el) => {
+    for (let e = el; e && e !== document.body; e = e.parentElement) {
+      const p = getComputedStyle(e).position;
+      if (p === "fixed" || p === "sticky") return true;
     }
-    for (const el of candidates) {
-      if (!el.isConnected || !visible(el)) continue;
-      const text = (el.innerText ?? "").trim();
-      if (!text || text.length > 1500) continue;
-      const named = NAMED.test(nameOf(el));
-      // About using cookies or tracking, or named as a consent banner: "No cookies, no tracking" is not.
-      if (!(named || (USES.test(text) && ABOUT.test(text)))) continue;
-      // Pinned on the screen (fixed, sticky), a dialog, or named as a banner: not a section of the page.
-      if (!named && !pinned(el) && !el.matches(DIALOG)) continue;
-      const controls = [...el.querySelectorAll("button, a, [role=button], input[type=button], input[type=submit]")].filter(visible);
-      const choice = controls.find((b) => {
-        const label = (b.innerText || b.value || b.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
-        return label.length > 0 && label.length <= 40 && CHOICE.test(label);
-      });
-      if (!choice) continue;
+    return false;
+  };
+  const DIALOG = "[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]";
+  const candidates = new Set(document.querySelectorAll(`${DIALOG}, [role=region][aria-label]`));
+  for (const el of document.querySelectorAll("[id], [class]")) if (NAMED.test(nameOf(el))) candidates.add(el);
+  let n = 0;
+  for (const el of document.querySelectorAll("body *")) {
+    if (++n > 6000) break;
+    const p = getComputedStyle(el).position;
+    if (p === "fixed" || p === "sticky") candidates.add(el);
+  }
+  for (const el of banner ? [] : candidates) {
+    if (!el.isConnected || !visible(el)) continue;
+    const text = (el.innerText ?? "").trim();
+    if (!text || text.length > 1500) continue;
+    const named = NAMED.test(nameOf(el));
+    // Pinned on the screen (fixed, sticky), a dialog, or named as a banner: not a section of the page.
+    if (!named && !pinned(el) && !el.matches(DIALOG)) continue;
+    const uses = USES.test(text) && ABOUT.test(text);
+    // "No cookies, no tracking. OK" is neither level, unless it also says it uses some.
+    if (NONE_USED.test(text) && !uses) continue;
+    if (!(named || COOKIE_WORDS.test(text))) continue;
+    const labels = [...el.querySelectorAll("button, a, [role=button], input[type=button], input[type=submit]")].filter(visible).flatMap(labelsOf);
+    const choice = labels.find((l) => CHOICE.test(l));
+    if (!choice) continue;
+    const words = text.replace(/\s+/g, " ").slice(0, 160);
+    // Strict: says it uses cookies or tracking, or is named as a consent banner. Earns "Asks before tracking".
+    if (named || uses) {
       banner = "generic";
-      sample = text.replace(/\s+/g, " ").slice(0, 160);
+      sample = words;
       break;
     }
+    // Loose: cookie or consent wording and a choice. Never praise; it keeps tracking from reading as "without asking".
+    const decision = labels.some((l) => DECISION.test(l));
+    if (!loose || (decision && !loose.decision)) loose = { decision, sample: words };
   }
   const scripts = [...document.scripts].map((s) => s.src).filter(Boolean).slice(0, 200);
-  return { tools: found, banner, sample, scripts };
+  return { tools: found, banner, sample, loose: banner ? null : loose, scripts };
 }
 
 /** The arguments findConsent is evaluated with: the tools' banner selectors, and the hosts of their frames. */
@@ -800,15 +910,4 @@ export function withReading(previous, ...readings) {
   const next = { ...old };
   for (const r of readings) if (r) next[r.region] = r;
   return { v: PRIVACY_VERSION, readings: next };
-}
-
-/** Whether stored facts (an object or its JSON) carry a cookie check reading at the current version (scripts/remeasure-shard.mjs). */
-export function hasCookieCheck(facts) {
-  try {
-    const f = typeof facts === "string" ? JSON.parse(facts) : facts;
-    const p = f?.privacy;
-    return Boolean(p && Number(p.v) === PRIVACY_VERSION && p.readings && Object.keys(p.readings).length > 0);
-  } catch {
-    return false;
-  }
 }

@@ -8,15 +8,48 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
-import { consentArgs, findConsent, readCookieCheck, watchRequests } from "../pipeline/cookie-check.mjs";
+import { consentArgs, findConsent, readCookieCheck, watchRequests, withReading } from "../pipeline/cookie-check.mjs";
+import { cookieCheckView } from "../lib/cookie-check.mjs";
 
 const bar = (inner) => `<div style="position:fixed;bottom:0;left:0;right:0;padding:16px;background:#222;color:#fff">${inner}</div>`;
 const BANNER = bar(`<p>This website uses cookies to measure traffic.</p><button>Reject all</button> <button>Accept all</button>`);
 const SITE = `<main><h1>Jane Doe</h1><p>${"I build payment systems and developer tools. ".repeat(10)}</p></main>`;
 
+// The site's own Google Analytics, firing before any choice: a first-party _ga and a collect beacon.
+const GA = `<script>document.cookie="_ga=GA1.1.1.1; path=/"; fetch("https://www.google-analytics.com/g/collect?v=2&tid=G-T").catch(()=>{})</script>`;
+
+// The banners the confirmation review of #305 found missed, each on a page with the site's own GA: none may
+// read as "without asking". `level` is what the detector must find: "strict" (says it uses cookies), or
+// "loose" (cookie wording and a choice only).
+const REVIEW_BANNERS = {
+  "/r-help-us": { level: "strict", html: bar(`<p>Cookies help us understand how the site is used.</p><button>Accept</button> <button>Decline</button>`) },
+  "/r-stores": { level: "strict", html: bar(`<p>This website stores cookies on your computer.</p><button>Accept</button> <button>Decline</button>`) },
+  "/r-storing": { level: "strict", html: bar(`<p>By clicking Accept, you agree to the storing of cookies on your device.</p><button>Accept</button>`) },
+  "/r-preferences": { level: "strict", html: bar(`<p>Choose your cookie preferences</p><button>Save</button> <button>Accept all</button>`) },
+  "/r-like-to-set": { level: "strict", html: bar(`<p>We'd like to set cookies to understand how you use the site.</p><button>Accept</button> <button>Reject</button>`) },
+  "/r-aria": { level: "loose", html: bar(`<p>Cookies on this site</p><button aria-label="Accept cookies">✓</button> <button aria-label="Decline cookies">✕</button>`) },
+  "/r-title": { level: "loose", html: bar(`<p>Cookies on this site.</p><button title="Allow">✓</button>`) },
+};
+
+// The first trial's banners (2026-11-25), as each site showed it: all strict.
+const TRIAL_BANNERS = {
+  "/t-hiteshsahu": bar(`<b>🍪 This website uses cookies</b><p>No personal data is stored on our servers however third party tools Google Analytics cookies to measure traffic and improve your website experience. <a href="/p">Learn more</a></p><button>ALLOW ALL</button> <button>REJECT ALL</button>`),
+  "/t-gperrucci": bar(`<h3>We value your privacy</h3><p>We use cookies to enhance your browsing experience, personalize content, and analyze website traffic. You can choose your cookie preferences.</p><button>Preferences</button> <button>Reject all</button> <button>Accept all</button>`),
+  "/t-atanas": bar(`<p>This web app uses cookies from third party providers to enhance user experience.</p><button>ACCEPT</button> <button>DECLINE</button>`),
+  "/t-elangodev": bar(`<p>We use essential cookies to keep the site working, and optional cookies for analytics if you accept. Read our <a href="/privacy">Privacy Policy</a>, <a href="/cookies">Cookie Policy</a>.</p><button>Reject optional</button> <button>Accept all</button>`),
+  "/t-sskd": `<div style="position:fixed;right:16px;bottom:16px;border:1px solid">this site counts visits with <a href="/cookies">cookies</a> <button>ok</button></div>`,
+  "/t-valentinlefrancois": bar(`<p>Ce site utilise des cookies analytiques pour mesurer l'audience et améliorer l'expérience. Aucun cookie n'est déposé sans votre consentement. <a href="/c">En savoir plus</a></p><button>Tout refuser</button> <button>Tout accepter</button>`),
+};
+
 let base;
 let embedBase;
 const pages = () => ({
+  ...Object.fromEntries(Object.entries(REVIEW_BANNERS).map(([p, b]) => [p, `<!doctype html><body>${SITE}${b.html}${GA}</body>`])),
+  ...Object.fromEntries(Object.entries(TRIAL_BANNERS).map(([p, html]) => [p, `<!doctype html><body>${SITE}${html}</body>`])),
+  // A notice with only an OK and cookie wording, and the site's own GA: information, never "without asking".
+  "/ok-notice": `<!doctype html><body>${SITE}${bar(`<p>Cookie notice: see our cookie policy.</p><button>OK</button>`)}${GA}</body>`,
+  // The footer false hit, with GA: neither level, so the site's own tracking is "without asking".
+  "/no-cookies-footer-ga": `<!doctype html><body>${SITE}${bar(`<p>No cookies, no tracking. This site respects your privacy.</p><button>OK</button>`)}${GA}</body>`,
   "/generic": `<!doctype html><body>${SITE}${BANNER}</body>`,
   "/french": `<!doctype html><html lang="fr"><body>${SITE}${bar(`<p>Ce site utilise des cookies pour mesurer l'audience.</p><button>Tout refuser</button> <button>Personnaliser</button> <button>Tout accepter</button>`)}</body></html>`,
   // A notice in the corner (sskd.tech, 2026-11-25): it says what its cookies do, with an OK.
@@ -47,7 +80,7 @@ before(async () => {
   server = http.createServer((req, res) => {
     const body = pages()[req.url];
     if (!body) return res.writeHead(404).end("not found");
-    res.writeHead(200, { "content-type": "text/html" }).end(body);
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(body);
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const port = server.address().port;
@@ -154,6 +187,51 @@ test("the reading is bounded: with no time left in the capture it is unknown at 
   const gone = await readCookieCheck(page, watch, { region: "US", lateMs: 0 });
   assert.equal(gone.state, "unknown");
   assert.match(gone.reason, /could not be read/);
+});
+
+/** The reading of a page and what a profile would show for it. */
+async function readingOf(path) {
+  const { ctx, page, watch } = await open(path);
+  try {
+    const r = await readCookieCheck(page, watch, { region: "US", lateMs: 0 });
+    return { r, v: cookieCheckView({ privacy: withReading(null, r) }) };
+  } finally {
+    await ctx.close();
+  }
+}
+
+for (const [path, { level }] of Object.entries(REVIEW_BANNERS)) {
+  test(`review banner ${path} is found (${level}), and the site's own tracking before it is never "without asking"`, async () => {
+    const consent = await consentOn(path);
+    if (level === "strict") assert.equal(consent.banner, "generic", JSON.stringify(consent));
+    else assert.ok(consent.banner === null && consent.loose?.decision === true, JSON.stringify(consent));
+    const { r, v } = await readingOf(path);
+    assert.equal(r.state, "with-banner", JSON.stringify(r));
+    assert.equal(v.title, "Tracks before you answer the banner");
+    assert.doesNotMatch(v.title, /without asking/);
+  });
+}
+
+test("the first trial's banners are strict banners", async () => {
+  for (const path of Object.keys(TRIAL_BANNERS)) assert.equal((await consentOn(path)).banner, "generic", path);
+});
+
+test("a cookie notice with only an OK, and the site's own tracking: information, never 'without asking'", async () => {
+  const consent = await consentOn("/ok-notice");
+  assert.deepEqual([consent.banner, consent.loose?.decision], [null, false]);
+  const { r, v } = await readingOf("/ok-notice");
+  assert.equal(r.state, "with-notice");
+  assert.deepEqual([v.level, v.title], ["information", "Tracks, and shows a cookie notice"]);
+  assert.match(v.sentence, /a cookie notice \("Cookie notice: see our cookie policy\. OK"\) was shown without a choice/);
+});
+
+test("'No cookies, no tracking. OK' and a footer cookie-policy link count at neither level", async () => {
+  for (const path of ["/no-cookies-footer", "/not-banners"]) {
+    const c = await consentOn(path);
+    assert.deepEqual([c.banner, c.loose], [null, null], path);
+  }
+  const { r } = await readingOf("/no-cookies-footer-ga");
+  assert.equal(r.state, "no-consent", "a page that says no cookies but sets _ga is tracked without asking");
 });
 
 test("the listener stops when the reading is done", async () => {

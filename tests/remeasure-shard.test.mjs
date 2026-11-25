@@ -3,8 +3,10 @@
 // same split on a re-run, and honour the limit and the facts-version skip.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { factsVersion, pickShard, shardOf } from "../scripts/remeasure-shard.mjs";
-import { PRIVACY_VERSION } from "../pipeline/cookie-check.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { PRIVACY_VERSION, UNKNOWN_RETRY_MS, factsVersion, hasCookieCheck, pickShard, shardOf } from "../scripts/remeasure-shard.mjs";
+import { PRIVACY_VERSION as MEASURED_VERSION } from "../pipeline/cookie-check.mjs";
 
 const urls = Array.from({ length: 500 }, (_, i) => `https://site-${i}.example/`);
 const feed = urls.map((url) => ({ url, name: url }));
@@ -92,14 +94,39 @@ test("a row without a cookie check reading at its current version is still to do
     { url: "https://old-check.example/", facts: JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION + 1, readings: { US: { state: "none" } } } }) },
     { url: "https://empty-check.example/", facts: JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION, readings: {} } }) },
   ];
-  const got = pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4 });
+  const got = pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true });
   assert.deepEqual(got.urls, ["https://empty-check.example/", "https://no-check.example/", "https://old-check.example/"]);
   assert.equal(got.skipped, 1);
   // The run filled them in: a re-run after a failure has nothing left.
   const after = some.map((r) => ({ ...r, facts: JSON.stringify({ v: 4, privacy: CHECKED }) }));
-  assert.deepEqual(pickShard({ feed: after, rows: after, shard: 1, shards: 1, skipVersion: 4 }).urls, []);
+  assert.deepEqual(pickShard({ feed: after, rows: after, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true }).urls, []);
   // skip-version 0 still takes everything.
-  assert.equal(pickShard({ feed: after, rows: after, shard: 1, shards: 1, skipVersion: 0 }).urls.length, 4);
+  assert.equal(pickShard({ feed: after, rows: after, shard: 1, shards: 1, skipVersion: 0, cookieCheck: true }).urls.length, 4);
+});
+
+test("on a released code tree without the cookie check, the privacy rule is off: rows at the facts version are done", () => {
+  const some = [
+    { url: "https://a.example/", facts: JSON.stringify({ v: 4 }) },
+    { url: "https://b.example/", facts: JSON.stringify({ v: 3 }) },
+  ];
+  assert.deepEqual(pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: false }).urls, ["https://b.example/"]);
+  assert.deepEqual(pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true }).urls, ["https://a.example/", "https://b.example/"]);
+});
+
+test("an unknown reading is not done, except within a bound, so a site that can never be read is not redone on every re-run", () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  const unknownAt = (ms) => JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION, readings: { US: { state: "unknown", at: new Date(now - ms).toISOString() } } } });
+  assert.equal(hasCookieCheck(unknownAt(UNKNOWN_RETRY_MS + 60000), now), false, "an old unknown reading is redone");
+  assert.equal(hasCookieCheck(unknownAt(60 * 60 * 1000), now), true, "a fresh one (this run's) is not redone by a re-run");
+  assert.equal(hasCookieCheck(JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION, readings: { US: { state: "none", at: "2020-01-01T00:00:00Z" } } } }), now), true);
+  assert.equal(hasCookieCheck("not json", now), false);
+});
+
+test("the shard script's privacy version is the measuring code's, and it imports nothing from pipeline/ but roster.mjs", () => {
+  assert.equal(PRIVACY_VERSION, MEASURED_VERSION);
+  const src = fs.readFileSync(path.join(import.meta.dirname, "..", "scripts", "remeasure-shard.mjs"), "utf8");
+  const pipelineImports = [...src.matchAll(/(?:from|import\()\s*["']\.\.\/pipeline\/([^"']+)["']/g)].map((m) => m[1]);
+  assert.deepEqual(pipelineImports, ["roster.mjs"]);
 });
 
 test("a bad shard number or count is refused", () => {

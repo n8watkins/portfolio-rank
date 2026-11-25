@@ -17,15 +17,16 @@ import {
   classifyCookies,
   classifyRequests,
   deniedConsentPing,
-  hasCookieCheck,
   isBeacon,
   makeReading,
   originOf,
   siteOf,
+  trackingCookie,
   trackingCookieVendor,
   withReading,
 } from "../pipeline/cookie-check.mjs";
 import { TITLES, cookieCheckView, cookieReading } from "../lib/cookie-check.mjs";
+import { hasCookieCheck } from "../scripts/remeasure-shard.mjs";
 
 const fixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "fixtures", "cookie-check", "readings.json"), "utf8"));
 const cases = Object.entries(fixtures).filter(([k]) => !k.startsWith("_"));
@@ -48,7 +49,7 @@ test("every state and every display kind is covered by a fixture", () => {
   const states = new Set(cases.map(([, fx]) => fx.expect));
   for (const s of ["none", "after-consent", "with-banner", "no-consent", "unknown"]) assert.ok(states.has(s), s);
   const kinds = new Set(cases.map(([, fx]) => fx.shown));
-  for (const k of ["none", "asks", "tool-no-banner", "sets-cookies", "tracks-without", "before-choice", "region-only", "embed", "ad", "not-measured"]) assert.ok(kinds.has(k), k);
+  for (const k of ["none", "asks", "tool-no-banner", "sets-cookies", "tracks-without", "before-choice", "notice", "region-only", "embed", "widget", "ad", "not-measured"]) assert.ok(kinds.has(k), k);
 });
 
 test("a script or a configuration fetch is never tracking: loaders are kept apart", () => {
@@ -171,7 +172,7 @@ test("unknown: the site's own tracking with a page that could not be read, and a
 test("cookie values are never kept, and cookies are first or third party by site", () => {
   const r = read("no-consent-cookies");
   assert.ok(!JSON.stringify(r).includes("GA1") && !JSON.stringify(r).includes("eyJ"), "no value");
-  for (const c of r.cookies) assert.deepEqual(Object.keys(c).sort(), ["domain", "embed", "name", "party", "tracking"]);
+  for (const c of r.cookies) assert.deepEqual(Object.keys(c).sort(), ["ad", "domain", "embed", "name", "party", "tracking"]);
   assert.deepEqual(r.cookies.map((c) => [c.name, c.party, c.tracking]), [
     ["_ga", "first", "Google Analytics"],
     ["_hjSessionUser_6380611", "first", "Hotjar"],
@@ -219,6 +220,53 @@ test("tracking cookies by name and by the network's own domain", () => {
   for (const name of ["__cf_bm", "cf_clearance", "session", "CookieConsent", "OptanonConsent", "theme", "_GRECAPTCHA"]) {
     assert.equal(trackingCookieVendor({ name, domain: ".a.dev" }), null, name);
   }
+  // Server-side Google Tag Manager's first-party identifiers are the site's own analytics.
+  assert.deepEqual(trackingCookie({ name: "FPID", domain: ".a.dev" }), { vendor: "Google Analytics", ads: false });
+  assert.deepEqual(trackingCookie({ name: "FPLC", domain: ".a.dev" }), { vendor: "Google Analytics", ads: false });
+  assert.equal(trackingCookieVendor({ name: "_hp5_meta.1", domain: ".a.dev" }), "Heap");
+});
+
+test("infrastructure cookies are never tracking, on any domain, a tracker's own included", () => {
+  for (const domain of [".a.dev", ".linkedin.com", ".x.com", ".twitter.com", ".facebook.com", ".bing.com", ".clarity.ms", ".doubleclick.net"]) {
+    for (const name of ["__cf_bm", "_cfuvid", "cf_clearance", "__cflb", "AWSALB", "AWSALBCORS", "JSESSIONID", "li_gc", "lang"]) {
+      assert.equal(trackingCookie({ name, domain }), null, `${name} on ${domain}`);
+    }
+  }
+});
+
+test("the advertising list: an ad script's cookies are an ad's, on the site's own domain too; the analytics list stays the site's own", () => {
+  for (const name of ["__gads", "__gpi", "__eoi", "_gcl_au", "_gcl_aw", "_uetsid", "_uetvid", "IDE", "test_cookie"]) {
+    assert.equal(trackingCookie({ name, domain: ".a.dev" }).ads, true, name);
+  }
+  assert.equal(trackingCookie({ name: "MUID", domain: ".bing.com" }).ads, true);
+  for (const name of ["_ga", "_gid", "_hjSessionUser_1", "_clck", "ajs_anonymous_id", "_fbp", "ph_phc_x_posthog", "FPID"]) {
+    assert.equal(trackingCookie({ name, domain: ".a.dev" }).ads, false, name);
+  }
+  const r = read("adsense-first-party-cookies");
+  assert.equal(r.state, "none");
+  assert.deepEqual(r.own_cookies, []);
+  assert.deepEqual(r.ads.filter((a) => a.cookie).map((a) => a.cookie).sort(), ["__eoi", "__gads", "__gpi", "_gcl_au"]);
+  const v = view("adsense-first-party-cookies");
+  assert.deepEqual([v.level, v.title], ["information", "Tracking seen from an ad on the page"]);
+});
+
+test("a LinkedIn badge's and an X timeline's tracking cookies are a widget's, and their bot-check cookies are not counted", () => {
+  const lk = read("linkedin-badge");
+  assert.deepEqual(lk.widgets.map((w) => w.cookie).sort(), ["bcookie", "lidc"]);
+  assert.deepEqual(lk.ads, []);
+  const lkv = view("linkedin-badge");
+  assert.deepEqual([lkv.level, lkv.title], ["information", "Tracking cookies from a third-party widget (LinkedIn)"]);
+  assert.doesNotMatch(lkv.sentence, /an ad/);
+  const xt = read("x-timeline");
+  assert.deepEqual(xt.widgets.map((w) => w.cookie).sort(), ["guest_id_marketing", "personalization_id"]);
+  assert.equal(view("x-timeline").title, "Tracking cookies from a third-party widget (X (Twitter))");
+});
+
+test("loose banner: a decision button keeps tracking from 'without asking'; an OK alone is a notice; neither earns praise", () => {
+  assert.equal(view("loose-banner-with-decision").title, "Tracks before you answer the banner");
+  assert.deepEqual([view("loose-notice-ok-only").level, view("loose-notice-ok-only").title], ["information", "Tracks, and shows a cookie notice"]);
+  assert.match(view("loose-notice-ok-only").sentence, /^On our visit on 25 Nov 2026 from the United States, Google Analytics tracked the visit, and a cookie notice \("Cookie notice: see our cookie policy\. OK"\) was shown without a choice to accept or decline\.$/);
+  assert.equal(view("loose-notice-nothing-tracked").title, "No tracking cookies", "a loose notice never earns 'Asks before tracking'");
 });
 
 test("readings are kept by region: a new reading replaces its own, the others stay", () => {

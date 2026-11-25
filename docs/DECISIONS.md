@@ -263,19 +263,28 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   The cookies are read with their name, domain and first or third party, and whether each is a known tracking cookie; never their values.
   A third-party cookie on an embed's site, or on a site only the embed asked for, belongs to the embed.
   A request is tracking only when it is a known beacon (`/g/collect`, `/tr`, `/v1/p`, Clarity's `/collect`); a script or a configuration fetch (gtm.js, fbevents.js, sdk.js, Segment's settings, Clarity's tag) never is.
-  Consent tools count only from the page's own code: their script host, a script address, or their banner element; a consent banner is a known tool's element or frame, or a generic banner that says it uses cookies or tracking, in English, French, German, Spanish, Italian, Portuguese, Dutch or Polish, with a choice button in the same element.
-  Only the site's own evidence is tracking: a first-party tracking cookie, or a beacon from the page itself.
-  An ad network's cookie or request from the page (a rotating ad creative) is kept as `ads`, and an embed's cookies and beacons as `embeds`; neither changes the state.
-  It stores one of five states in `facts.privacy.readings.US`: `none`, `after-consent`, `with-banner`, `no-consent` and `unknown`, with the reason.
+  Consent tools count only from the page's own code: their script host, a script address, or their banner element.
+  A banner is a known tool's element or frame, or a generic banner at one of two levels, each needing a visible fixed, sticky, dialog or consent-named element with a choice control (its text, value, aria-label or title) in English, French, German, Spanish, Italian, Portuguese, Dutch or Polish.
+  The strict level also needs the text to say it uses cookies ("we use", "this site uses", "stores cookies", "cookie preferences", "cookies help us" and their translations) or a consent tool's markers, and alone earns "Asks before tracking".
+  The loose level needs only cookie or consent wording: it never earns praise, but it keeps the site's own tracking from ever reading as "without asking" (with a decision button such as Accept or Decline it is a banner the tracking ran before; with only an OK it is a cookie notice).
+  Neither level counts "No cookies, no tracking. OK" or a footer link to a cookie policy.
+  Only the site's own evidence is tracking: a first-party cookie on the analytics list, or a beacon from the page itself.
+  The cookie lists (`pipeline/cookie-check.mjs` `TRACKING_COOKIES`): the analytics list (Google Analytics' `_ga`, `_gid`, `_gat`, and server-side Tag Manager's `FPID` and `FPLC`; Hotjar's `_hj*`; Clarity's `_clck`, `_clsk`; Segment's `ajs_*`; PostHog's `ph_*`; Meta Pixel's `_fbp`, `_fbc`; and the other analytics and session-recording tools) is the site's own measuring, so a first-party one can make a fix.
+  The advertising list (AdSense's `__gads`, `__gpi`, `__eoi`; the Google Ads and Microsoft Ads conversion cookies `_gcl_*`, `_uet*`; doubleclick's `IDE`, `DSID`, `test_cookie`, `APC`) never makes a fix, even on the site's own domain: an ad script sets them, and they come and go with the ad served, on some visits and not others.
+  Infrastructure cookies are never tracking on any domain: bot checks and load balancers (`__cf_bm`, `_cfuvid`, `cf_clearance`, `AWSALB`, `JSESSIONID`), and consent and language records (`li_gc`, `lang`, `CookieConsent`, `OptanonConsent`); a `__cf_bm` on linkedin.com or x.com is Cloudflare's, not LinkedIn's or X's tracking.
+  An ad's cookies and requests are kept as `ads`, an embed's as `embeds`, and any other third-party tracking cookie (a LinkedIn badge's or an X timeline's script) as `widgets`; none changes the state.
+  It stores one of six states in `facts.privacy.readings.US`: `none`, `after-consent`, `with-banner`, `with-notice`, `no-consent` and `unknown`, with the reason.
   Plain observed facts: no score, no AI, no legal verdict, and no profile, score, rank or tier changes with it yet.
   The owner approved how the profile will show it (2026-11-25, revised after the review), in `lib/cookie-check.mjs` `cookieCheckView`, which a follow-up wires into the profile; every sentence is an observation ("On our visit on 25 Nov 2026 from the United States, ..."):
   pass, "No tracking cookies": no known tracker of the site's own ran (cookieless analytics named as a note);
   information, "Asks before tracking": a banner was shown and nothing tracked before a choice;
   information, "Has a consent tool; banner not shown to a United States visitor": a consent tool in the page's own code, no banner, nothing tracked;
   fix, "Sets tracking cookies without asking": a first-party tracking cookie, no consent tool and no banner ("Tracks visitors without asking" with a beacon but no tracking cookie);
-  fix, "Tracks before you answer the banner": only when a banner was shown and the site's own tracking started before any choice;
+  fix, "Tracks before you answer the banner": only when a banner with a choice was shown and the site's own tracking started before any choice;
+  information, "Tracks, and shows a cookie notice": the site's own tracking ran and only a loose cookie notice was shown (an OK, no decision), with what was seen;
   information, "Tracks without asking visitors from the United States": a consent tool in the page's own code, no banner shown to our visit, and tracking ran (the tool may ask visitors from other regions; the owner may make this a fix later);
   information, "Embeds YouTube, which sets its own cookies", with the advice that fits the embed (a privacy mode such as youtube-nocookie, or loading it on a click);
+  information, "Tracking cookies from a third-party widget (LinkedIn)", for a widget's tracking cookies tied to no embed frame and no ad;
   information, "Tracking seen from an ad on the page", when an ad's tracking is all there is;
   "Not measured" for old captures and readings that could not tell.
   Each fix carries a recommendation that fits what was seen (analytics only: ask first, or count visits without cookies; a pixel: ask first; a banner: load it only after the visitor accepts).
@@ -283,7 +292,8 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   Google consent mode's pings sent with storage denied are not tracking either.
   Readings are kept by region: `US`, the runner's address; a runner in Europe can store `EU` beside it later without a change of shape.
   A second visit with European browser settings from the same address was tried and removed: it found 0 banners in 12 sites, could not read non-English banners, was a second navigation of the kind #300 removes, and could push a slow capture over its time limit.
-  The whole-list re-measure (`remeasure-all.yml`) treats a row with no cookie check reading at the current `privacy.v` as still to do, so it fills the readings in, and a re-run after a failure skips the rows done (`scripts/remeasure-shard.mjs`).
+  The whole-list re-measure (`remeasure-all.yml`) treats a row with no done cookie check reading at the current `privacy.v` as still to do, so it fills the readings in, and a re-run after a failure skips the rows done (`scripts/remeasure-shard.mjs`).
+  It does so only when the code it runs has `pipeline/cookie-check.mjs` (it runs the released code, which may not have it yet), and the shard script imports nothing from it; an `unknown` reading is not done, except within 20 hours, so a site that can never be read is not redone by every re-run.
   The capture does not click Accept or Reject: whether the capture may click such things is the owner's open "guard the clicks" decision.
   The facts version stays 4: the cookie check has its own version (`facts.privacy.v`), and a row without `privacy` reads as not measured, never as no tracking, so nothing else about the facts changes and the Capture problems page does not treat every next re-capture as new measuring code.
 

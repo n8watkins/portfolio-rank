@@ -204,6 +204,90 @@
     "requests": ["https://cd.example.com/", "https://cdn.carbonads.com/carbon.js", "https://srv.carbonads.net/ads/CWBI4KJE.json", "https://ad.doubleclick.net/ddm/trackimp/N1.png", "https://api.openpanel.dev/track"],
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },
+  "loose-banner-with-decision": {
+    "expect": "with-banner",
+    "shown": "before-choice",
+    "pageUrl": "https://lb.example.com/",
+    "cookies": [{ "name": "_ga", "domain": ".lb.example.com", "value": "GA1" }],
+    "requests": ["https://lb.example.com/", "https://www.google-analytics.com/g/collect?v=2"],
+    "dom": { "tools": [], "banner": null, "sample": null, "loose": { "decision": true, "sample": "Cookies on this site ✓" }, "scripts": [] }
+  },
+  "loose-notice-ok-only": {
+    "expect": "with-notice",
+    "shown": "notice",
+    "pageUrl": "https://ln.example.com/",
+    "cookies": [{ "name": "_ga", "domain": ".ln.example.com", "value": "GA1" }],
+    "requests": ["https://ln.example.com/", "https://www.google-analytics.com/g/collect?v=2"],
+    "dom": { "tools": [], "banner": null, "sample": null, "loose": { "decision": false, "sample": "Cookie notice: see our cookie policy. OK" }, "scripts": [] }
+  },
+  "loose-notice-nothing-tracked": {
+    "expect": "none",
+    "shown": "none",
+    "pageUrl": "https://lq.example.com/",
+    "cookies": [],
+    "requests": ["https://lq.example.com/"],
+    "dom": { "tools": [], "banner": null, "sample": null, "loose": { "decision": true, "sample": "Cookies on this site ✓" }, "scripts": [] }
+  },
+  "adsense-first-party-cookies": {
+    "expect": "none",
+    "shown": "ad",
+    "pageUrl": "https://as.example.com/",
+    "cookies": [
+      { "name": "__gads", "domain": ".as.example.com", "value": "ID=x" },
+      { "name": "__gpi", "domain": ".as.example.com", "value": "UID=x" },
+      { "name": "__eoi", "domain": ".as.example.com", "value": "ID=x" },
+      { "name": "_gcl_au", "domain": ".as.example.com", "value": "1.1" }
+    ],
+    "requests": [
+      "https://as.example.com/",
+      "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+      "https://pagead2.googlesyndication.com/pagead/ping?e=1",
+      "https://www.googletagmanager.com/gtag/js?id=AW-1"
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
+  "linkedin-badge": {
+    "expect": "none",
+    "shown": "widget",
+    "pageUrl": "https://lk.example.dev/",
+    "cookies": [
+      { "name": "bcookie", "domain": ".linkedin.com", "value": "v=2" },
+      { "name": "lidc", "domain": ".linkedin.com", "value": "b=x" },
+      { "name": "li_gc", "domain": ".linkedin.com", "value": "consent" },
+      { "name": "lang", "domain": ".linkedin.com", "value": "v=2&lang=en-us" },
+      { "name": "__cf_bm", "domain": ".linkedin.com", "value": "bot" }
+    ],
+    "requests": ["https://lk.example.dev/", "https://platform.linkedin.com/badges/js/profile.js", "https://badges.linkedin.com/profile?locale=en_US"],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": ["https://platform.linkedin.com/badges/js/profile.js"] }
+  },
+  "x-timeline": {
+    "expect": "none",
+    "shown": "widget",
+    "pageUrl": "https://xt.example.dev/",
+    "cookies": [
+      { "name": "personalization_id", "domain": ".x.com", "value": "v1_x" },
+      { "name": "guest_id_marketing", "domain": ".x.com", "value": "v1" },
+      { "name": "__cf_bm", "domain": ".x.com", "value": "bot" },
+      { "name": "__cf_bm", "domain": ".twitter.com", "value": "bot" }
+    ],
+    "requests": [
+      "https://xt.example.dev/",
+      "https://platform.twitter.com/widgets.js",
+      { "url": "https://syndication.twitter.com/srv/timeline-profile/screen-name/someone", "frame": "https://syndication.twitter.com/srv/timeline-profile/screen-name/someone" }
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": ["https://platform.twitter.com/widgets.js"] }
+  },
+  "server-side-gtm": {
+    "expect": "no-consent",
+    "shown": "sets-cookies",
+    "pageUrl": "https://ss.example.com/",
+    "cookies": [
+      { "name": "FPID", "domain": ".ss.example.com", "value": "FPID2.2.x" },
+      { "name": "FPLC", "domain": ".ss.example.com", "value": "x" }
+    ],
+    "requests": ["https://ss.example.com/", "https://sgtm.ss.example.com/gtag/js?id=G-1", "https://sgtm.ss.example.com/g/collect?v=2"],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
   "unknown-dom-unreadable": {
     "expect": "unknown",
     "shown": "not-measured",
