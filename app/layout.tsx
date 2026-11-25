@@ -1,12 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Inter } from "next/font/google";
 import { ClaimVotes } from "@/components/ClaimVotes";
 import { UndoToastProvider } from "@/components/UndoToast";
 import { SignInProvider } from "@/components/SignInModal";
 import { AppShell } from "@/components/shell/AppShell";
 import { SITE_URL } from "@/lib/site";
-import { THEME_INIT } from "@/lib/theme-init";
 import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 import "./globals.css";
 
@@ -18,10 +16,8 @@ const DESCRIPTION =
   `${PORTFOLIO_COUNT_LABEL} community-curated developer portfolios, ranked by your votes and AI. Browse, compare, get inspired.`;
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#070709" },
-    { media: "(prefers-color-scheme: light)", color: "#f6f6f7" },
-  ],
+  themeColor: "#070709",
+  colorScheme: "dark",
 };
 
 export const metadata: Metadata = {
@@ -42,13 +38,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // suppressHydrationWarning: the theme script sets data-theme before React loads.
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <head>
-        {/* A saved Light or Dark theme applies before first paint (lib/theme-init.ts). */}
-        <Script id="theme-init" strategy="beforeInteractive">
-          {THEME_INIT}
-        </Script>
         {/* Without JavaScript, scroll-reveal blocks show at once. */}
         <noscript>
           <style>{".reveal{opacity:1;transform:none}"}</style>

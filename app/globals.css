@@ -2,10 +2,7 @@
 
 /* Calm palette (owner, 2026-11-10): neutral surfaces, one accent (amber),
    and colour only where it carries meaning: up and down, pass and fail.
-   Dark is the default; light follows the system unless the visitor picks a
-   theme (lib/theme.ts THEME_INIT sets data-theme before paint).
-   The amber fill is the same in both themes; only accent text darkens on
-   light so it keeps 4.5:1. */
+   Dark only (owner, 2026-11-25): there is no light theme. */
 @theme {
   --color-bg: #070709;
   --color-card: #101013;
@@ -43,58 +40,6 @@
   --stat-2: #a99be6;
   --stat-3: #fbbf24;
   --stat-4: #6fcf97;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    color-scheme: light;
-    --color-bg: #f6f6f7;
-    --color-card: #ffffff;
-    --color-raised: #f0f0f2;
-    --color-edge: #e2e2e6;
-    --color-edge-strong: #cdcdd3;
-    --color-ink: #18181b;
-    --color-mute: #5c5c66;
-    --color-accent: #9a5d06;
-    --color-accent-soft: #fdf5e1;
-    --color-up: #157a3a;
-    --color-down: #b91c1c;
-    --glow: rgba(251, 191, 36, 0.1);
-    --card-top: rgba(255, 255, 255, 0);
-    --card-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
-    --card-drop: 0 1px 2px rgba(16, 16, 24, 0.05), 0 12px 28px -18px rgba(16, 16, 24, 0.16);
-    --card-drop-hover: 0 2px 6px rgba(16, 16, 24, 0.06), 0 22px 40px -22px rgba(16, 16, 24, 0.26);
-    --band: #ececef;
-    --stat-1: #3b5bb5;
-    --stat-2: #6a55c7;
-    --stat-3: #9a5d06;
-    --stat-4: #1f8a4c;
-  }
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --color-bg: #f6f6f7;
-  --color-card: #ffffff;
-  --color-raised: #f0f0f2;
-  --color-edge: #e2e2e6;
-  --color-edge-strong: #cdcdd3;
-  --color-ink: #18181b;
-  --color-mute: #5c5c66;
-  --color-accent: #9a5d06;
-  --color-accent-soft: #fdf5e1;
-  --color-up: #157a3a;
-  --color-down: #b91c1c;
-  --glow: rgba(251, 191, 36, 0.1);
-  --card-top: rgba(255, 255, 255, 0);
-  --card-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
-  --card-drop: 0 1px 2px rgba(16, 16, 24, 0.05), 0 12px 28px -18px rgba(16, 16, 24, 0.16);
-  --card-drop-hover: 0 2px 6px rgba(16, 16, 24, 0.06), 0 22px 40px -22px rgba(16, 16, 24, 0.26);
-  --band: #ececef;
-  --stat-1: #3b5bb5;
-  --stat-2: #6a55c7;
-  --stat-3: #9a5d06;
-  --stat-4: #1f8a4c;
 }
 
 /* ------------------------------------------------------------ layout */
@@ -504,8 +449,7 @@
 
 /* Print (Download PDF): the report alone, on white, nothing animated. */
 @media print {
-  :root,
-  :root[data-theme="dark"] {
+  :root {
     color-scheme: light;
     --color-bg: #ffffff;
     --color-card: #ffffff;
