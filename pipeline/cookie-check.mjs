@@ -20,7 +20,7 @@
 //     with both storages denied (gcs=G100) are counted apart too.
 //   - cookieless analytics (COOKIELESS_ANALYTICS: Plausible, Fathom, Simple
 //     Analytics, Umami, Cloudflare Web Analytics, Vercel Analytics,
-//     GoatCounter, Pirsch, Tinylytics): recorded as `cookieless`, never as
+//     GoatCounter, Pirsch, Tinylytics, OpenPanel): recorded as `cookieless`, never as
 //     tracking. They set no cookies and keep no identifier on the device.
 //   - a consent banner: a known consent tool (CONSENT_TOOLS) from its script
 //     hosts and its page markers, and a generic banner (findConsent): a
@@ -201,6 +201,7 @@ export const COOKIELESS_ANALYTICS = [
   { host: "pirsch.io", vendor: "Pirsch" },
   { host: "tinylytics.app", vendor: "Tinylytics" },
   { host: "counter.dev", vendor: "Counter.dev" },
+  { host: "openpanel.dev", vendor: "OpenPanel" },
   { script: /\/umami(\.js)?(\?|$)|umami.*\/script\.js/i, vendor: "Umami" },
   { script: /plausible/i, vendor: "Plausible" },
 ];
