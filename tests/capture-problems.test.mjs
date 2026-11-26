@@ -215,7 +215,8 @@ test("plainReason: every kind of failure the re-capture saw, in plain words", ()
   assert.equal(plainReason(null).text, "No reason recorded.");
 });
 
-test("refreshNeedsReview: only a bot check or a dialog still covering the page; never the phone view alone", () => {
+// The phone view never fails a capture any more (pipeline/capture.mjs narrowView), so none of its verdicts reaches here.
+test("refreshNeedsReview: only a bot check or a dialog still covering the page", () => {
   assert.equal(refreshNeedsReview({ reason: BOT_WALL_REASON }), true);
   assert.equal(refreshNeedsReview({ reason: `${BLOCKED_PREFIX}still a dialog on top after the click` }), true);
   // What the owner did not ask for stays a refresh failure (group A lists it with its reason).
@@ -229,7 +230,6 @@ test("refreshNeedsReview: only a bot check or a dialog still covering the page; 
   ]) {
     assert.equal(refreshNeedsReview({ reason }), false, reason);
   }
-  assert.equal(refreshNeedsReview({ reason: `${BOT_WALL_REASON} (phone view)`, phone: true }), false);
 });
 
 /** The pending review rows of a site. */

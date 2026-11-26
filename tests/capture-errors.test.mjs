@@ -8,7 +8,8 @@
 //   - a parked page drawn by script is parked, not live, also when the home
 //     page only sends the browser to it; a language redirect is the site;
 //   - the desktop view decides: a gate only phones see is a note in the
-//     meta, while an error status on the phone's own navigation is a retry;
+//     meta, and an error status on a reload the phone width caused is a
+//     missing phone view, never a failed capture;
 //   - a forced re-capture whose pre-check fails keeps a captured site live;
 //   - the page text stored is the text judged;
 //   - a failed refresh waits out a backoff in the refresh queue, and the next
@@ -24,7 +25,7 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { captureSite, keyOf } from "../pipeline/capture.mjs";
-import { BLOCKED_PREFIX, BOT_WALL, isBlockedReason } from "../pipeline/capture-blocked.mjs";
+import { BLOCKED_PREFIX, BOT_WALL } from "../pipeline/capture-blocked.mjs";
 import { ACTIVE, ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
 
@@ -45,12 +46,14 @@ const pages = {
   // Parked, drawn by script: the plain pre-check sees no phrase.
   "/parked": `<!doctype html><title>Loading</title><body><div id=a></div><script>
     setTimeout(()=>{document.title="janedoe.dev";document.getElementById("a").innerHTML='<h1>janedoe.dev</h1><p>This domain is for sale. Buy this domain today.</p><p><a href="https://registrar.invalid/buy">Make an offer</a></p>'},300)</script></body>`,
-  // The site on a desktop; on a phone a gate whose button does nothing.
-  "/phonegate": `<!doctype html><title>Jane Doe</title><body style="margin:0"><script>
-    if (innerWidth < 500) document.write('<div style="height:100vh;background:#000;color:#fff;display:grid;place-items:center"><button style="font-size:24px">CLICK TO ENTER</button></div>');
-    else document.write(${JSON.stringify(SITE)});</script></body>`,
-  // The desktop view leaves a cookie; the phone view's navigation (which sends it) gets a 503.
-  "/phone503": SITE.replace("</body>", `<script>document.cookie="seen=1; path=/"</script></body>`),
+  // The site on a desktop; at phone width only a gate whose button does nothing.
+  "/phonegate": SITE.replace("<body ", `<body class=site `).replace(
+    "</body>",
+    `<div class=gate style="display:none;height:100vh;background:#000;color:#fff;place-items:center"><button style="font-size:24px">CLICK TO ENTER</button></div>
+    <style>@media (max-width: 500px) { body.site > :not(.gate) { display: none } .gate { display: grid !important } }</style></body>`
+  ),
+  // The desktop view leaves a cookie and reloads the page when the window narrows; that load (which sends the cookie) gets a 503.
+  "/phone503": SITE.replace("</body>", `<script>document.cookie="seen=1; path=/";addEventListener("resize",()=>{if(innerWidth<500)location.reload()})</script></body>`),
   // A preloader line until the page is scrolled; the scroll-through shows the site.
   "/scrollreveal": `<!doctype html><title>Jane Doe</title><body style="font:18px system-ui;margin:0"><p>Loading the portfolio of Jane Doe, please wait while it gets ready: 87%</p><div style="height:3000px"></div>
     <script>addEventListener("scroll",()=>{if(!window.done){window.done=1;document.body.innerHTML=${JSON.stringify(SITE)}+'<div style="height:2000px"></div>'}})</script></body>`,
@@ -209,15 +212,14 @@ test("a gate shown only on the phone view does not fail a site the desktop view 
   assert.match(String(row.page_text), /Backend engineer/);
 });
 
-test("an error status on the phone view's own navigation is a retry, not a failure the health check acts on", async () => {
-  assert.equal(results["/phone503"], "error (HTTP 503 (phone view))");
+test("an error status on a reload the phone view caused never fails the site: the phone view is recorded as missing", async () => {
+  assert.match(results["/phone503"], /^live/, results["/phone503"]);
   const row = await rowOf("/phone503");
-  assert.equal(row.status, "error");
-  assert.equal(row.reason, "HTTP 503 (phone view)");
-  assert.equal(isBlockedReason(row.reason), false, "not a blocked reason, so the health check never fails it on the capture's word");
-  assert.ok(row.retry_at, "retried later");
-  assert.equal(captured("/phone503"), false);
-  assert.equal(phoneLazyRequests, 0, "the phone's error page was not scrolled through");
+  assert.deepEqual([row.status, row.reason, Number(row.capture_attempts ?? 0)], ["live", "", 0]);
+  assert.match(String(row.page_text), /Backend engineer/, "the desktop view is stored");
+  assert.equal(JSON.parse(String(row.meta)).phoneMissing, "HTTP 503");
+  assert.equal(captured("/phone503"), true);
+  assert.equal(phoneLazyRequests, 0, "the error page was not scrolled through");
 });
 
 test("a 429 rate-limit page on a refresh keeps the good capture and waits out a backoff", async () => {

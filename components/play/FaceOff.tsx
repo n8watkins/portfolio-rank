@@ -10,7 +10,7 @@ import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { INTRO_COOKIE } from "@/components/play/intro";
 import { useStoredFlag } from "@/lib/client-state";
 import { isTextField } from "@/lib/dom";
-import { frameOf } from "@/lib/shot-url";
+import { frameOf, hasPhoneFrame } from "@/lib/shot-url";
 
 // The face-off on the real votes (/api/rank): two portfolios, pick the one
 // you'd hire from, then see how the crowd leans on the cards themselves.
@@ -55,7 +55,8 @@ function Frame({ e }: { e: Entry }) {
     );
   return (
     <picture>
-      <source media="(max-width: 767px)" srcSet={frameOf(e.shot, "mobile.jpg")} />
+      {/* A capture without a phone view shows its desktop frame on every screen (lib/shot-url.ts hasPhoneFrame). */}
+      {hasPhoneFrame(e.shot) && <source media="(max-width: 767px)" srcSet={frameOf(e.shot, "mobile.jpg")} />}
       <img
         src={frameOf(e.shot, "hero.jpg")}
         alt={`Screenshot of ${domain}`}

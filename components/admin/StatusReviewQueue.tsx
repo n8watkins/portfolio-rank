@@ -7,7 +7,7 @@ import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
-import { frameOf } from "@/lib/shot-url";
+import { frameOf, hasPhoneFrame, withoutPhone } from "@/lib/shot-url";
 import { RULE_NAMES, ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
@@ -29,6 +29,13 @@ import { UNDO_QUESTION, bulkWords, decidedLabel, declineOf, declinedEffect, hint
 // A verdict: the answer and its reason. Older rows also hold scores; no Gemini score is shown (owner, 2026-11-23).
 type Verdict = { is_portfolio: boolean; reason?: string } | null;
 type Grader = { batch?: Verdict; solo?: Verdict };
+/** A row's capture base, marked when its capture has no phone view (lib/shot-url.ts withoutPhone), or null without a capture. */
+function shotBaseOf(shotsBase: string | null, r: Pick<Review, "shotKey" | "phoneMissing">): string | null {
+  if (!shotsBase || !r.shotKey) return null;
+  const base = `${shotsBase.replace(/\/+$/, "")}/${r.shotKey}`;
+  return r.phoneMissing ? withoutPhone(base) : base;
+}
+
 export type Review = {
   id: number;
   batch: string;
@@ -41,6 +48,8 @@ export type Review = {
   reason: string | null;
   offList: boolean;
   shotKey: string | null;
+  /** The capture at shotKey has no phone view (its meta.phoneMissing; set by the page, app/admin/(tools)/review/page.tsx). */
+  phoneMissing?: boolean;
   /** prompt: the grading prompt's version (absent on rows written before it was recorded). gemini35: the nightly grade at the door. */
   verdicts: { gemini31?: Grader; haiku?: Grader; gemini35?: Grader; prompt?: string };
   signals: {
@@ -250,7 +259,7 @@ function Row({
   onView: (frame: ViewerFrame, from: HTMLElement) => void;
 }) {
   const domain = domainOf(r.url);
-  const base = shotsBase && r.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${r.shotKey}` : null;
+  const base = shotBaseOf(shotsBase, r);
   const box = `review-${r.id}`;
   const action = r.signals?.capture?.action ?? null;
   const blocked = r.signals?.capture?.blocked ?? null;
@@ -317,13 +326,13 @@ function Row({
                 <button
                   type="button"
                   aria-haspopup="dialog"
-                  aria-label={`View the whole phone screenshot of ${domain}`}
+                  aria-label={base && !hasPhoneFrame(base) ? `No phone screenshot of ${domain}: open the viewer` : `View the whole phone screenshot of ${domain}`}
                   onClick={(e) => onView("phone", e.currentTarget)}
                   className={`${thumb} w-[22%] max-w-[5.25rem] shrink-0`}
                   data-review-thumb="phone"
                 >
                   {/* Too narrow for the fallback's domain (it would break mid-word): the icon only; the desktop frame names it. */}
-                  <ScreenshotFrame src={base ? frameOf(base, "mobile.jpg") : null} alt="" domain={domain} kind="mobile" className="[&>span>span:last-child]:hidden" />
+                  <ScreenshotFrame src={base && hasPhoneFrame(base) ? frameOf(base, "mobile.jpg") : null} alt="" domain={domain} kind="mobile" className="[&>span>span:last-child]:hidden" />
                 </button>
                 {blocked && (
                   <p className="pointer-events-none absolute inset-x-2 top-2 rounded-md bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-down shadow-[var(--card-drop)] ring-1 ring-down/40" data-review-blocked>
@@ -421,7 +430,7 @@ function AutoApplied({
               return `${label}: ${v ? (v.is_portfolio ? "portfolio" : "not a portfolio") : "no verdict"}`;
             })
             .join(" · ");
-          const base = shotsBase && r.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${r.shotKey}` : null;
+          const base = shotBaseOf(shotsBase, r);
           const removed = r.proposed === "remove";
           return (
             <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-review-auto-row={r.id}>
@@ -703,7 +712,7 @@ export function StatusReviewQueue({
       key={`${viewing.review.id}-${viewing.frame}`}
       domain={domainOf(viewing.review.url)}
       url={viewing.review.url}
-      base={shotsBase && viewing.review.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${viewing.review.shotKey}` : null}
+      base={shotBaseOf(shotsBase, viewing.review)}
       frame={viewing.frame}
       proposed={viewing.review.proposed}
       busy={busy.has(viewing.review.id)}
