@@ -102,7 +102,7 @@
     // The redesigned profile (the owner's "Banner" pick, lib/profile-next): served
     // at /p/<address>/next only while this is "true", noindex and linked from
     // nowhere; the current profile at /p/<address> is unchanged either way.
-    "PROFILE_NEXT": "false",
+    "PROFILE_NEXT": "true",
     // The public images bucket's own domain (pipeline/shot-store.mjs), where
     // the tall images and thumbnails are served straight from R2. Empty
     // until the owner connects it (docs/audits/fullpage-images.md "Delivery").
