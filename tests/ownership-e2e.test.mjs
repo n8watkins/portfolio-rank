@@ -115,7 +115,7 @@ test("verify by file: a token, then one fetch of /portfoliorank-<token>.txt at t
   await db.execute({ sql: "DELETE FROM site_freshness WHERE url = ?", args: [LISTED] });
   const recheck = await call("POST", "/api/recheck", { url: LISTED }, { cookie });
   assert.equal(recheck.status, 200, JSON.stringify(recheck.body));
-  assert.match(recheck.body.message, /speed numbers .* update within a day/);
+  assert.match(recheck.body.message, /speed numbers update within a day/);
   const forced = (await db.execute({ sql: "SELECT forced_at FROM site_freshness WHERE url = ?", args: [LISTED] })).rows[0];
   assert.ok(forced && Number(forced.forced_at) > Date.now() - 60000, "Lighthouse is forced for the next daily run");
   assert.equal(JSON.parse(String((await db.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`psi:${LISTED}`] })).rows[0].v)).runs, 2, "the stored average is left alone");

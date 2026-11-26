@@ -7,18 +7,38 @@ import { btnSecondary } from "@/components/ui/styles";
 /**
  * "Re-check my site": shown only to the portfolio's verified owner
  * (GET /api/recheck says so), at most once an hour. Runs every check again
- * (about a minute) and reloads the profile with the new results.
+ * (about a minute) and reloads the profile with the new results. The speed
+ * numbers (Lighthouse, two runs on each device) come from the daily job, so
+ * they update within a day: the answer says so, and the notice is kept across
+ * the reload (sessionStorage, once) so the owner sees it on the new page.
  */
+const noticeKey = (url: string) => `recheck-notice:${url}`;
+const SPEED_NOTICE = "Re-checked. The speed numbers update within a day.";
+
 export function RecheckButton({ url }: { url: string }) {
   const [state, setState] = useState<{ owner: boolean; nextAt: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let alive = true;
     fetch(`/api/recheck?url=${encodeURIComponent(url)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((s) => alive && setState(s))
+      .then((s) => {
+        if (!alive) return;
+        setState(s);
+        // The notice a re-check left before it reloaded the page: shown once.
+        try {
+          const saved = sessionStorage.getItem(noticeKey(url));
+          if (saved) {
+            sessionStorage.removeItem(noticeKey(url));
+            setNotice(saved);
+          }
+        } catch {
+          // Storage may be blocked: the notice is a courtesy.
+        }
+      })
       .catch(() => {});
     return () => {
       alive = false;
@@ -38,7 +58,14 @@ export function RecheckButton({ url }: { url: string }) {
           setError("");
           const r = await fetch("/api/recheck", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) }).catch(() => null);
           const b = (await r?.json().catch(() => ({}))) as { message?: string; nextAt?: string };
-          if (r?.ok) return window.location.reload();
+          if (r?.ok) {
+            try {
+              sessionStorage.setItem(noticeKey(url), b?.message ?? SPEED_NOTICE);
+            } catch {
+              // Without storage the page reloads without the notice.
+            }
+            return window.location.reload();
+          }
           setBusy(false);
           setError(b?.message ?? "Couldn't re-check. Try again later.");
           if (b?.nextAt) setState({ owner: true, nextAt: b.nextAt });
@@ -50,6 +77,11 @@ export function RecheckButton({ url }: { url: string }) {
       </button>
       {wait && !busy && (
         <span className="text-xs text-mute">Again at {wait.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span>
+      )}
+      {notice && !busy && !error && (
+        <span role="status" className="max-w-[28ch] text-right text-xs text-mute">
+          {notice}
+        </span>
       )}
       {error && (
         <span role="alert" className="text-xs text-down">
