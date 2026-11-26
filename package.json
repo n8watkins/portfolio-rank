@@ -45,7 +45,7 @@
     "eslint-config-next": "^16.4.6",
     "playwright": "^1.65.1",
     "pngjs": "^7.0.0",
-    "release-kit": "github:n8watkins/release-kit#v2.10.1",
+    "release-kit": "github:n8watkins/release-kit#v2.11.0",
     "sharp": "0.35.5",
     "tailwindcss": "^4.1.8",
     "typescript": "^7.0.2",
