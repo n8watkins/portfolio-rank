@@ -39,7 +39,7 @@ async function ownerPage(viewport, { storage = true } = {}) {
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owner: true, nextAt }) });
   });
-  await page.goto(PROFILE, { waitUntil: "networkidle" });
+  await page.goto(PROFILE, { waitUntil: "domcontentloaded" });
   return { page, context };
 }
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
@@ -50,7 +50,7 @@ for (const [name, viewport] of [["phone", { width: 390, height: 844 }], ["deskto
     const button = page.getByRole("button", { name: "Re-check my site" });
     await button.waitFor();
     assert.equal(await page.getByRole("status").filter({ hasText: "within a day" }).count(), 0, "no notice before a re-check");
-    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle" }), button.click()]);
+    await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), button.click()]);
     const notice = page.getByRole("status").filter({ hasText: "within a day" });
     await notice.waitFor();
     assert.equal((await notice.innerText()).trim(), MESSAGE);
@@ -59,7 +59,7 @@ for (const [name, viewport] of [["phone", { width: 390, height: 844 }], ["deskto
     assert.ok(box && box.x >= 0 && box.x + box.width <= viewport.width, "the notice is inside the screen");
     assert.ok(await page.getByText(/^Again at /).isVisible(), "the hourly limit note is still shown beside it");
     // Shown once: the next load has none.
-    await page.reload({ waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Re-check my site" }).waitFor();
     assert.equal(await page.getByRole("status").filter({ hasText: "within a day" }).count(), 0);
     await context.close();
@@ -70,7 +70,7 @@ test("with browser storage refusing writes the re-check still reloads, without t
   const { page, context } = await ownerPage({ width: 390, height: 844 }, { storage: false });
   const button = page.getByRole("button", { name: "Re-check my site" });
   await button.waitFor();
-  await Promise.all([page.waitForNavigation({ waitUntil: "networkidle" }), button.click()]);
+  await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded" }), button.click()]);
   await page.getByText(/^Again at /).waitFor();
   assert.equal(await page.getByRole("status").filter({ hasText: "within a day" }).count(), 0);
   await context.close();
