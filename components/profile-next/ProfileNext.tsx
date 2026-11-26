@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ClipboardCheck,
+  Cookie,
   Copy,
   FileText,
   FolderCode,
@@ -65,7 +66,7 @@ function Status({ st }: { st: string }) {
 }
 
 const CARD_ICON: Record<string, typeof ClipboardCheck> = { basics: ClipboardCheck, projects: FolderCode, mobile: Smartphone };
-const BASICS_ICON: Record<string, typeof Mail> = { resume: FileText, mail: Mail, image: ImageIcon, search: Search, lock: Lock, calendar: Calendar };
+const BASICS_ICON: Record<string, typeof Mail> = { resume: FileText, mail: Mail, image: ImageIcon, search: Search, lock: Lock, calendar: Calendar, cookie: Cookie };
 
 const tint = (id: string) => s[`t-${id}`] ?? "";
 const fixesWord = (n: number) => (n === 0 ? "Nothing to fix" : n === 1 ? "1 thing to fix" : `${n} things to fix`);
