@@ -2081,5 +2081,84 @@
     "evidence": {
       "review": "Owner verdict: not a portfolio (owner, 23 Nov). The listed address is a GitHub profile page, not a website of the person's own. The owner's words: \"Someone's GitHub is not a portfolio page.\""
     }
+  },
+  {
+    "url": "http://ryanmaclean.com",
+    "name": "Ryan Maclean",
+    "reason": "AI grading says this is not a portfolio (confirmed by the owner)",
+    "kind": "not_portfolio",
+    "removed": "2026-11-26",
+    "first_failed": "2026-11-23T19:59:14.673Z",
+    "last_checked": "2026-11-26T04:38:59.244Z",
+    "checks": 3,
+    "decided_by": "owner",
+    "evidence": {
+      "review": 359,
+      "signals": 1
+    }
+  },
+  {
+    "url": "https://hyperautomation.substack.com",
+    "name": "Evangelos Pappas",
+    "reason": "AI grading says this is not a portfolio (confirmed by the owner)",
+    "kind": "not_portfolio",
+    "removed": "2026-11-26",
+    "first_failed": "2026-11-23T19:52:25.873Z",
+    "last_checked": "2026-11-26T04:34:56.842Z",
+    "checks": 3,
+    "decided_by": "owner",
+    "evidence": {
+      "review": 386,
+      "gemini": "visual design: This is a generic Substack newsletter landing page with no custom design elements; five second test: It is clear this is a newsletter about automation, but there is no information about the author; storytelling: There is no project portfolio or personal narrative present; writing: The content is limited to a generic newsletter subscription prompt; memorability: The site is indistinguishable from thousands of other Substack newsletters; motion: There is no motion present as the site is a static subscription modal.",
+      "signals": 5
+    }
+  },
+  {
+    "url": "https://jakegines.in",
+    "name": "Jake Ginesin",
+    "reason": "AI grading says this is not a portfolio",
+    "kind": "not_portfolio",
+    "removed": "2026-11-26",
+    "first_failed": "2026-11-18T21:15:58.799Z",
+    "last_checked": "2026-11-26T04:35:59.890Z",
+    "checks": 3,
+    "decided_by": "rule:gemini-not-portfolio",
+    "evidence": {
+      "review": 387,
+      "gemini": "visual design: The design is clean and minimalist, though it relies on a very basic template aesthetic; five second test: It is unclear what the user does beyond being a student or researcher, as there is no professional summary; storytelling: There is no project storytelling present, only links to external pages; writing: The writing is concise and error-free, but lacks a distinct voice or professional context; memorability: The site is too generic to be particularly memorable; motion: There is no motion present on the site.",
+      "signals": 1
+    }
+  },
+  {
+    "url": "https://khangnd.info",
+    "name": "Khang Nguyen",
+    "reason": "AI grading says this is not a portfolio",
+    "kind": "not_portfolio",
+    "removed": "2026-11-26",
+    "first_failed": "2026-11-18T21:15:58.799Z",
+    "last_checked": "2026-11-26T04:36:24.246Z",
+    "checks": 3,
+    "decided_by": "rule:gemini-not-portfolio",
+    "evidence": {
+      "review": 388,
+      "gemini": "visual design: The design is extremely dated and relies on generic, low-quality stock icons; five second test: It is clear that this is a personal site, but it fails to communicate who the person is or what they actually do; storytelling: There is no storytelling present as the site is merely a landing page with navigation links; writing: The writing is minimal and lacks any professional voice or substance; memorability: The site is entirely generic and lacks any unique branding or personality; motion: There is no discernible motion or animation between the two states.",
+      "signals": 3
+    }
+  },
+  {
+    "url": "https://parthh.in",
+    "name": "Parth Sharma",
+    "reason": "AI grading says this is not a portfolio",
+    "kind": "not_portfolio",
+    "removed": "2026-11-26",
+    "first_failed": "2026-11-18T21:15:58.799Z",
+    "last_checked": "2026-11-26T04:37:57.353Z",
+    "checks": 3,
+    "decided_by": "rule:gemini-not-portfolio",
+    "evidence": {
+      "review": 390,
+      "gemini": "visual design: The design is clean and minimalist but lacks any unique personality or content; five second test: The site is blocked by a gate, so it fails to communicate who the person is or what they do; storytelling: There is no content to evaluate regarding projects or professional narrative; writing: The copy is sparse and generic, serving only as a technical error message; memorability: A generic 'access restricted' screen is entirely unmemorable; motion: There is no discernible motion between the frames provided.",
+      "signals": 3
+    }
   }
 ]
