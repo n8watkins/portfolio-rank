@@ -26,7 +26,7 @@
     "@sentry/cloudflare": "11.16.0",
     "@sentry/core": "11.16.0",
     "jpeg-js": "0.4.4",
-    "lucide-react": "^1.77.0",
+    "lucide-react": "^1.78.0",
     "next": "^16.4.6",
     "next-auth": "^5.0.0-beta.32",
     "openskill": "5.0.1",
