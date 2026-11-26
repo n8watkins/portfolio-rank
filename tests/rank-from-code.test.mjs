@@ -530,7 +530,7 @@ test("the prewarm measures Lighthouse for every member, graded or not, never for
   await client.execute({ sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES ('https://graded.example/', 'live', ?)", args: [JSON.stringify(grade(3))] });
   await client.execute({ sql: "INSERT INTO portfolios (url, status, ai_rubric, facts) VALUES ('https://notone.example/', 'live', ?, ?)", args: [JSON.stringify(grade(3, "B", { is_portfolio: false })), JSON.stringify(facts(6))] });
   await client.execute("INSERT INTO portfolios (url, status) VALUES ('https://nothing.example/', 'live')");
-  const urls = await prewarmQueue(client, { active: ACTIVE, now: NOW });
+  const urls = (await prewarmQueue(client, { active: ACTIVE, now: NOW })).map((s) => s.url);
   assert.deepEqual(urls.sort(), ["https://code-only.example/", "https://graded.example/"]);
 });
 

@@ -156,10 +156,12 @@ export function Socials({ url, initial = null }: { url: string; initial?: Inspec
 /** What a PageSpeed failure means for the visitor, and whether trying again can help. */
 function psiProblem(error: string | undefined): { text: string; retry: boolean } {
   if (error === "site_down") return { text: "This site is down or parked, so there's nothing to measure.", retry: false };
-  if (error === "in_progress") return { text: "Lighthouse is already running for this site. Try again in a minute.", retry: true };
-  if (error === "timeout") return { text: "Google's Lighthouse timed out on this site.", retry: true };
-  if (/429|quota|rate/i.test(error ?? "")) return { text: "Google's Lighthouse quota is used up for now. Try again later.", retry: true };
-  return { text: "Lighthouse couldn't analyze this site right now.", retry: true };
+  // This browser could not load the answer (offline, or the server answered something that is not JSON): nothing is known about the site.
+  if (error === "failed") return { text: "Couldn't load this.", retry: true };
+  // A page view never measures (app/api/psi): the daily job does, and tries a failed site again the next day.
+  if (error === "timeout") return { text: "Google's Lighthouse timed out on this site the last time. It is tried again daily.", retry: false };
+  if (/429|quota|rate/i.test(error ?? "")) return { text: "Google's Lighthouse quota was used up the last time. It is tried again daily.", retry: false };
+  return { text: "Lighthouse couldn't analyze this site the last time. It is tried again daily.", retry: false };
 }
 
 function RetryButton({ onClick }: { onClick: () => void }) {
@@ -257,7 +259,8 @@ function ShareSkeleton() {
 export function DetailDiagnostics({ url, initialInspection = null }: { url: string; initialInspection?: Inspection | null }) {
   const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { initial: initialInspection });
   const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`);
-  const psiFailure = psi && !psi.ok ? psiProblem(psi.error) : null;
+  const psiNotMeasured = psi && !psi.ok && psi.error === "not_measured";
+  const psiFailure = psi && !psi.ok && !psiNotMeasured ? psiProblem(psi.error) : null;
 
   return (
     <div className="space-y-4">
@@ -283,11 +286,26 @@ export function DetailDiagnostics({ url, initialInspection = null }: { url: stri
             </div>
             <p className="mt-3 flex items-center gap-2 text-xs text-mute" role="status">
               <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-edge border-t-accent" />
-              Running Lighthouse (about 30s)…
+              Loading Lighthouse…
             </p>
             {/* The "Measured on" line. */}
             <p aria-hidden className="mt-3 text-xs">
               &nbsp;
+            </p>
+          </>
+        ) : psiNotMeasured ? (
+          <>
+            {/* The score grid's shape, so the page doesn't move when the first result is stored. */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Object.entries(PSI_LABELS).map(([id, label]) => (
+                <div key={id} className="rounded-lg border border-edge p-3 text-center">
+                  <p className="text-2xl font-bold tabular-nums text-mute">-</p>
+                  <p className="mt-1 text-xs text-mute">{label}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-mute" role="status">
+              Not measured yet
             </p>
           </>
         ) : psiFailure ? (
@@ -467,7 +485,7 @@ function Remeasure({ url, onDone }: { url: string; onDone: () => void }) {
         {busy ? "Asking…" : "Re-measure"}
       </button>
       <p className="min-w-0 flex-1 text-xs text-mute">
-        Admin: runs Lighthouse and the polish check again now; the screenshots and link checks tonight.
+        Admin: runs the polish check again now; Lighthouse in the next daily run, the screenshots and link checks tonight.
         {asked && !Number.isNaN(asked.getTime()) && (
           <>
             {" "}

@@ -5,6 +5,8 @@ import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
 import { fail, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
 import { reserveTool, toolCaps } from "./caps.mjs";
+import type { PsiResult } from "./psi";
+import { storeIfBetter as storeIfBetterRow } from "@/lib/psi-store.mjs";
 import { addPending } from "@/lib/discovery/sites.mjs";
 import { addRefusal } from "@/lib/ownership/same-site.mjs";
 
@@ -118,4 +120,14 @@ export const answerHead = (g: Gate) => ({ url: g.url, listed: Boolean(g.listed),
 /** Saves a result under its cache key (the same keys the profile reads). */
 export async function store(key: string, value: object, at = Date.now()): Promise<void> {
   await db().execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [key, JSON.stringify(value), at] });
+}
+
+/**
+ * Saves a Lighthouse result unless the stored one is better: a result of one
+ * run (a visitor's speed check) never replaces an average of two, and a
+ * failure never replaces a good result. One SQL statement, the rule the daily
+ * prewarm job writes with too (lib/psi-store.mjs). Returns whether it wrote.
+ */
+export function storeIfBetter(key: string, value: PsiResult, at = Date.now()): Promise<boolean> {
+  return storeIfBetterRow(db(), key, value, at);
 }

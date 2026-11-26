@@ -232,7 +232,7 @@ The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mj
 
 | Check | Where it is stored | Maximum age | A failure is retried after | When a due result runs again |
 | --- | --- | --- | --- | --- |
-| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` |
+| Lighthouse (PageSpeed) | `cache` `psi:<url>` (phone) and `psi-desktop:<url>`: each the average of two runs, with the run count, each run's performance score and the date | 90 days (a result of one run, stored before two runs a device or by a visitor's speed check, is measured again too) | 20 hours (the job's own rule for a device that failed) | Only in the daily `prewarm.yml`, which calls PageSpeed itself and writes the rows (needs the `PSI_API_KEY` Actions secret; it runs the released code): never on a view. A page view shows what is stored, or "Not measured yet". The job puts sites the admin asked to re-measure first, then never-measured sites, then the oldest, and measures only the devices that are due. |
 | Polish checklist and share card | `cache` `inspect:<url>` | 30 days (the share image and favicon can break on their own) | 1 hour | On the next view, and `prewarm.yml` |
 | Project link checks | `portfolios.facts` (`facts_at`) | 30 days (links rot without the page changing) | the next night | Tonight's free checks (`evidence.mjs --links`, up to 120 a night) |
 | Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | a growing backoff (`refresh_failures`) | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, asked-for sites first) |
@@ -244,8 +244,8 @@ The state is `site_freshness`: per address `forced_at`.
 Its other columns (`hash`, `checked_at`, `attempted_at`, `changed_at` and the rest) held the removed fingerprints: nothing writes or reads them any more, and their rows stay.
 An old row's `changed_at` never makes anything due.
 
-**What people see:** under Lighthouse and the polish checklist, "Measured on <date>", with "updating in the background" while a due result runs again.
-**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`).
+**What people see:** under Lighthouse and the polish checklist, "Measured on <date>", with "updating in the background" while a due polish result runs again. Lighthouse never updates in the background: a site the daily job has not measured says "Not measured yet".
+**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`): it asks, and the next daily prewarm measures Lighthouse for that site first.
 
 ## End-of-day run
 
@@ -712,7 +712,7 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
   About 0.6 GB for 2,300 sites, plus ~0.2 MB/day of backups: under the cap, $0.
   Lean, 10,000 sites take 1.4 GB and 50,000 take 7.2 GB (`lib/admin/limits.mjs` PROJECTIONS).
 - **GitHub Actions:** unlimited (public repo).
-- **PSI/Lighthouse:** 25k runs/day - ample.
+- **PSI/Lighthouse:** 25k runs/day (the key's daily quota). A full measure is four runs (two phone, two desktop), so the prewarm's 400 sites a day are at most 1,600 runs (6.4% of the day) and, with three sites at a time, about 15 calls a minute at most and about 3 hours if a run takes 25 s (`lib/psi-pacing.mjs`). Measuring the whole list of 2,159 sites once takes about 6 days at 400 a day (8,636 runs); after that, every site every 90 days is about 96 runs a day. A try that ends without a new stored result is noted per site and device (`psi_attempts`), and that device waits 1, 3, 7, then 30 days before the next try (a re-measure asked for is tried once at once, then follows it; a new stored result clears the count; the queue puts untried sites first): 100 sites failing on both devices cost 400 runs on the first day, 400 more on days 1, 4, 11 and 41, then about 13 runs a day. An owner's "Re-check my site" marks Lighthouse forced, so the daily job measures that site first. The job measures directly with the `PSI_API_KEY` Actions secret (the prewarm step only); `AUTH_SECRET` is never given to GitHub Actions. A per-minute refusal is retried 3 times after 15, 30 and 60 seconds; only the day's quota stops the job. The admin limits page counts PageSpeed calls made (`psi_calls`), not results stored. **Unverified until `scripts/experiments/psi-two-runs.mjs` has been run once with a key (`pass-env run -- node scripts/experiments/psi-two-runs.mjs <url> 0` and again with `30`):** the per-minute limit (240 is assumed, not read from a Google page), how long a run takes, whether two runs of one URL 0 or 30 seconds apart are different runs, and how Google words a per-minute refusal against the day's (a 429 whose message does not say "per day" is treated as per-minute). A run that comes back with the same `fetchTime` as the one before counts once, whatever the gap.
 - **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.
 
 ## AI judge (Gemini)

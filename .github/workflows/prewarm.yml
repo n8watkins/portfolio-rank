@@ -1,9 +1,14 @@
 name: Prewarm metrics
 
-# Fill the PSI (Lighthouse) + inspect (polish) caches for every graded portfolio
+# Measure Lighthouse and fill the polish cache for every graded portfolio
 # (whatever Gemini's letter), so check points and comparisons have objective
-# metrics (the cache is otherwise only populated lazily by visitors). Hits the prod API endpoints,
-# which cache to Turso; PSI quota is 25k/day so this is comfortably free.
+# metrics. Lighthouse is measured here, directly: the job calls Google PageSpeed
+# from the runner (needs the PSI_API_KEY secret) and writes the results to Turso;
+# a page view never measures. The polish check goes through the prod API.
+# PSI quota is 25k/day. A full measure is four runs (two phone, two desktop,
+# averaged per device), so 400 sites are at most 1,600 runs, about 3 hours with
+# three sites at a time (lib/psi-pacing.mjs). The job runs the last release's
+# code (below), so a change here starts only with the next release.
 on:
   workflow_dispatch:
     inputs:
@@ -50,6 +55,9 @@ jobs:
         # Inputs reach the shell as variables, never pasted into the script.
         env:
           LIMIT: ${{ github.event.inputs.limit || '400' }}
+          # The Google PageSpeed key: only this step has it (not the job, not `npm ci`). The job calls PageSpeed
+          # itself and writes the results to Turso; the app's own secrets (AUTH_SECRET) are never given to it.
+          PSI_API_KEY: ${{ secrets.PSI_API_KEY }}
         run: node scripts/prewarm-metrics.mjs --limit="$LIMIT"
 
       - name: Notify on failure

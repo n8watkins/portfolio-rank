@@ -1,45 +1,33 @@
 import { NextResponse } from "next/server";
-import { cached } from "@/lib/cache";
-import { runPsi, type PsiResult } from "@/lib/tools/psi";
+import { peekCached } from "@/lib/cache";
+import type { PsiResult } from "@/lib/tools/psi";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
-import { CHECK_KINDS } from "@/lib/freshness.mjs";
 
-// Lighthouse for a listed portfolio's profile (mobile), from lib/tools/psi.ts,
-// which the free speed check (app/api/tools/speed) shares: a check there
-// saves under the same "psi:<url>" key, so it refreshes this too.
+// Lighthouse for a listed portfolio's profile: a pure read. GET
+// /api/psi?url=<listed site> returns what is stored under "psi:<url>" (the
+// phone result: the average of two runs, or one run for a row stored before
+// two runs a device or by a visitor's speed check; the run details are in the
+// result, lib/psi-runs.mjs), or { ok: false, error: "not_measured" } when
+// nothing is. It never starts PageSpeed, never takes a lease and never makes
+// the visitor wait. The measuring is the daily prewarm job's
+// (scripts/prewarm-metrics.mjs): it calls PageSpeed from its own runner and
+// writes the results, desktop ones to "psi-desktop:<url>".
 export type { PsiResult };
+
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { "cache-control": "private, no-store" };
 
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url");
-  // Only audit sites on the roster - keeps strangers from burning the PSI
-  // quota or pointing our server at arbitrary URLs.
+  // Only listed sites: nobody can use this to look at arbitrary addresses.
   if (!url || !isKnownPortfolio(url)) {
     return NextResponse.json({ ok: false, error: "unknown_url" }, { status: 403 });
   }
-  // A site the health check found down, dead or parked has nothing to
-  // measure: don't spend PageSpeed quota on it.
+  // A site the health check found down, dead or parked has nothing to show.
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
-  // When Lighthouse runs again (lib/freshness.mjs, AUTOMATION.md "When checks
-  // re-run"): a result is reused until the admin pressed "Re-measure" or it
-  // is 90 days old. A failure (quota, timeout, a site that won't load)
-  // is retried after an hour, so a broken site can't burn the quota by being
-  // asked again and again, and a good result is never replaced by a failure.
-  // A miss takes the lease first: one PageSpeed run per site at a time, the
-  // other callers hear "in_progress" and retry. A due result is served at
-  // once and refreshed in the background (lib/cache.ts).
-  const data = await cached<PsiResult>(
-    "psi",
-    url,
-    {
-      ttlMs: CHECK_KINDS.lighthouse.maxAgeMs,
-      isFailure: (d) => !d.ok,
-      failureTtlMs: CHECK_KINDS.lighthouse.failureRetryMs,
-      leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
-      freshness: { kind: "lighthouse", url },
-    },
-    () => runPsi(url, "mobile")
-  );
-  return NextResponse.json(data);
+  const stored = await peekCached<PsiResult>("psi", url);
+  return NextResponse.json(stored ?? ({ ok: false, error: "not_measured" } satisfies PsiResult), { headers: NO_STORE });
 }

@@ -5,7 +5,7 @@ import { checkShare, type ShareResult } from "./share";
 import { psiKey, quickKey, shareKey } from "./keys";
 import { reserveTool, toolCaps } from "./caps.mjs";
 import { db } from "@/lib/db";
-import { store } from "./server";
+import { store, storeIfBetter } from "./server";
 
 // Every check on one site at once (owner, 2026-11-12: "Add your portfolio"
 // and "Re-check my site" run them all): the free checks (checklist), the
@@ -46,8 +46,8 @@ export async function runAllChecks({ url, siteKey }: { url: string; siteKey: str
   const saves: Promise<void>[] = [];
   if (quick.ok) saves.push(store(quickKey(siteKey), quick, at));
   if (share.ok) saves.push(store(shareKey(url), share, at));
-  if (mobile?.ok) saves.push(store(psiKey("mobile", url), mobile, at));
-  if (desktop?.ok) saves.push(store(psiKey("desktop", url), desktop, at));
+  if (mobile?.ok) saves.push(storeIfBetter(psiKey("mobile", url), mobile, at).then(() => {}));
+  if (desktop?.ok) saves.push(storeIfBetter(psiKey("desktop", url), desktop, at).then(() => {}));
   await Promise.all(saves);
   return { quick, share, mobile, desktop, speedSkipped: !speed.ok };
 }

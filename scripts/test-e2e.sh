@@ -41,6 +41,8 @@ export MIN_GITHUB_ACCOUNT_AGE_DAYS=30
 export E2E_PSI_PORT="${E2E_PSI_PORT:-$FREE_PSI}"
 export PSI_API_BASE="http://127.0.0.1:$E2E_PSI_PORT/runPagespeed"
 unset PSI_API_KEY
+# No 30 s wait between a device's two Lighthouse runs against the stand-in.
+export PSI_RUN_GAP_MS=0
 # "Grade my portfolio" (tests/grader-api.test.mjs): on, with local stand-ins
 # for the portfolio sites, GitHub's API and Gemini served by that test, the
 # screenshots in a local folder and emails kept in the email_outbox table.
@@ -117,7 +119,11 @@ echo "e2e: app on port $PORT, stand-ins on $E2E_PSI_PORT, $E2E_GRADER_MOCK_PORT 
 # say) fails after five minutes instead of stalling the whole run.
 # Every test by default. E2E_TESTS=site runs only the ones that need this
 # server, for CI, where npm run test:unit has already run the rest.
-if [ "${E2E_TESTS:-all}" = "site" ]; then
+# E2E_ONLY="tests/a.test.mjs tests/b.test.mjs" runs just those files.
+if [ -n "${E2E_ONLY:-}" ]; then
+  read -r -a only_tests <<< "$E2E_ONLY"
+  node --test --test-concurrency=1 --test-timeout=300000 "${only_tests[@]}"
+elif [ "${E2E_TESTS:-all}" = "site" ]; then
   mapfile -t site_tests < <(node scripts/test-unit.mjs --list-site)
   if [ "${#site_tests[@]}" -eq 0 ]; then
     echo "e2e: no tests that need the site were found" >&2

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureSchema } from "@/lib/db";
 import { PRIVATE } from "@/lib/grader/server";
 import { runPsi, type PsiResult } from "@/lib/tools/psi";
-import { answerHead, gate, readFresh, remember, reserve, store, wantsFresh } from "@/lib/tools/server";
+import { answerHead, gate, readFresh, remember, reserve, storeIfBetter, wantsFresh } from "@/lib/tools/server";
 import { psiKey } from "@/lib/tools/keys";
 
 // The free speed check (/tools/speed): Lighthouse on mobile and desktop
@@ -19,7 +19,8 @@ import { psiKey } from "@/lib/tools/keys";
 //
 // No throwaway results: they are saved under the cache keys the profile
 // reads ("psi:<url>" for mobile, "psi-desktop:<url>"), and for a listed
-// portfolio under its listed address, so a check refreshes its profile. A
+// portfolio under its listed address, unless that holds an average of two runs
+// already (a visitor's single run never replaces it; the visitor still sees it). A
 // result younger than a day is reused for anyone and costs nothing, unless
 // the visitor asks to measure again (fresh); a run takes one speed check
 // (two PageSpeed runs) of the daily caps (lib/tools/caps.mjs). An unlisted
@@ -43,8 +44,8 @@ export async function POST(req: Request) {
     const [m, d] = await Promise.all([mobile ? null : runPsi(g.url, "mobile"), desktop ? null : runPsi(g.url, "desktop")]);
     // Only a good result is saved: a failure never replaces what a profile shows.
     const saves: Promise<void>[] = [];
-    if (m?.ok) saves.push(store(psiKey("mobile", g.url), m, at));
-    if (d?.ok) saves.push(store(psiKey("desktop", g.url), d, at));
+    if (m?.ok) saves.push(storeIfBetter(psiKey("mobile", g.url), m, at).then(() => {}));
+    if (d?.ok) saves.push(storeIfBetter(psiKey("desktop", g.url), d, at).then(() => {}));
     await Promise.all(saves);
     const measuredAt = new Date(at).toISOString();
     mobile = mobile ?? (m!.ok ? { ...m!, measuredAt } : m!);

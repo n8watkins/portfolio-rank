@@ -1,6 +1,7 @@
 import { db, ensureSchema } from "./db";
 import { runInBackground } from "./background";
 import { decide, type CheckKind } from "./freshness.mjs";
+import { releaseLease as releaseLeaseRow, takeLease as takeLeaseRow } from "./cache-lease.mjs";
 
 /** Why a stored result is being measured again (lib/freshness.mjs decide). */
 export type StaleReason = "forced" | "max_age" | "failed";
@@ -19,22 +20,11 @@ export type CacheMeta = {
 // same table (`lease:<key>`), and the lease expires so a crashed refresh can't
 // block the key for good. Within an isolate, concurrent refreshes and first
 // fills of the same key share one promise.
-const LEASE_MS = 10 * 60 * 1000;
 const inflight = new Map<string, Promise<unknown>>();
 
-async function takeLease(k: string): Promise<boolean> {
-  const now = Date.now();
-  const res = await db().execute({
-    sql: `INSERT INTO cache (k, v, at) VALUES (?, '', ?)
-          ON CONFLICT(k) DO UPDATE SET at = excluded.at WHERE cache.at < ?`,
-    args: [`lease:${k}`, now, now - LEASE_MS],
-  });
-  return res.rowsAffected > 0;
-}
-
-async function releaseLease(k: string): Promise<void> {
-  await db().execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`lease:${k}`] });
-}
+// The lease rows are shared with the daily prewarm job (lib/cache-lease.mjs).
+const takeLease = (k: string): Promise<boolean> => takeLeaseRow(db(), k);
+const releaseLease = (k: string): Promise<void> => releaseLeaseRow(db(), k);
 
 function once<T>(k: string, run: () => Promise<T>): Promise<T> {
   const running = inflight.get(k) as Promise<T> | undefined;

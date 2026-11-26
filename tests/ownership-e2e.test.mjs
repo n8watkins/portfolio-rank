@@ -108,6 +108,19 @@ test("verify by file: a token, then one fetch of /portfoliorank-<token>.txt at t
   assert.equal(ok.body.claim.verified, true);
   assert.equal(ok.body.claim.method, "file");
   assert.equal((await call("GET", `/api/recheck?url=${encodeURIComponent(LISTED)}`, undefined, { cookie })).body.owner, true);
+  // Re-check: the owner's checks run now, and Lighthouse is asked for again, so the next daily run measures it first
+  // with two runs a device (the owner's own single run never replaces a stored average of two).
+  const average = JSON.stringify({ ok: true, strategy: "mobile", scores: { performance: 77 }, runs: 2, runsAttempted: 2 });
+  await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [`psi:${LISTED}`, average, Date.now() - 86400000] });
+  await db.execute({ sql: "DELETE FROM site_freshness WHERE url = ?", args: [LISTED] });
+  const recheck = await call("POST", "/api/recheck", { url: LISTED }, { cookie });
+  assert.equal(recheck.status, 200, JSON.stringify(recheck.body));
+  assert.match(recheck.body.message, /Speed numbers and screenshots update within a day/);
+  const forced = (await db.execute({ sql: "SELECT forced_at FROM site_freshness WHERE url = ?", args: [LISTED] })).rows[0];
+  assert.ok(forced && Number(forced.forced_at) > Date.now() - 60000, "Lighthouse is forced for the next daily run");
+  assert.equal(JSON.parse(String((await db.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`psi:${LISTED}`] })).rows[0].v)).runs, 2, "the stored average is left alone");
+  await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`psi:${LISTED}`] });
+  await db.execute({ sql: "DELETE FROM site_freshness WHERE url = ?", args: [LISTED] });
   // Remove is unlocked (then withdrawn, so the site stays listed for other tests).
   const removed = await call("POST", "/api/owner/actions", { url: LISTED, action: "remove", confirm: true }, { cookie });
   assert.equal(removed.status, 200, JSON.stringify(removed.body));
