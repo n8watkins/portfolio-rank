@@ -21,11 +21,11 @@ export const KINDS = ["inspect", "psi"];
 // Sites a daily run measures at most. A full measure is four runs (two phone,
 // two desktop, lib/psi-runs.mjs), so 400 sites are at most 1,600 runs, 6.4% of
 // PageSpeed's 25,000 a day (lib/psi-pacing.mjs pacing()); a site with only one
-// device due costs two. A full measure takes about 80 s if a run takes ~25 s (a
-// guess, not measured) with a 30 s gap between a device's runs, the two devices
+// device due costs two. A full measure takes about 110 s if a run takes 25 s (real
+// calls took 10 to 24 s) with a 60 s gap between a device's runs, the two devices
 // side by side, so the sites go PREWARM_CONCURRENCY at a time: 400 sites take
-// about 3 hours, inside the job's 330 minutes (one at a time they would take
-// 8.9 hours and the job would be cut off).
+// about 4 hours, inside the job's 330 minutes (one at a time they would take
+// 12 hours and the job would be cut off).
 //
 // A try of a device that ends without a new stored result (a failed measure,
 // or one run against a stored average) is noted (psi_attempts: when, and how

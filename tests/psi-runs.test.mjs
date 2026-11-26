@@ -172,11 +172,11 @@ test("a refused quota stops a device after one call", async () => {
 
 test("pacing: four runs a site against the daily and the per-minute limits", () => {
   assert.equal(RUNS_PER_SITE, 4);
-  const p = pacing({ sites: 400, concurrency: 3, runGapMs: 30_000, secondsPerRun: 25 });
+  const p = pacing({ sites: 400, concurrency: 3, runGapMs: 60_000, secondsPerRun: 25 });
   assert.equal(p.runsPerDay, 1600);
   assert.equal(p.shareOfDailyCap, 0.064);
-  assert.equal(p.secondsPerSite, 80);
-  assert.equal(Math.round(p.hours * 100) / 100, 2.96);
+  assert.equal(p.secondsPerSite, 110);
+  assert.equal(Math.round(p.hours * 100) / 100, 4.07);
   assert.equal(p.peakCallsPerMinute, 15);
   assert.equal(p.withinPerMinute, true);
   assert.equal(p.withinDay, true);
@@ -194,7 +194,8 @@ test("the prewarm's own schedule is inside Google's limits", () => {
   assert.ok(PREWARM_PLAN.runsPerDay < PSI_DAILY_CAP);
   assert.ok(PREWARM_PLAN.peakCallsPerMinute < PSI_PER_MINUTE_CAP);
   assert.equal(PREWARM_PLAN.peakCallsPerMinute, 15);
-  assert.equal(DEFAULT_RUN_GAP_MS, 30_000);
+  // 60 s: at 30 s PageSpeed handed the same run back on one of two real tries (lib/psi-pacing.mjs).
+  assert.equal(DEFAULT_RUN_GAP_MS, 60_000);
   assert.equal(PREWARM_CONCURRENCY, 3);
 });
 
