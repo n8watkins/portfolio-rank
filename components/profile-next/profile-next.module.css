@@ -213,16 +213,9 @@
   border-radius: 12px;
   background: var(--color-raised);
 }
-.tierNone {
-  width: 48px;
-  height: 48px;
-  border-radius: 13px;
-  display: grid;
-  place-items: center;
-  background: var(--color-card);
-  box-shadow: inset 0 0 0 1px var(--color-edge-strong);
-  color: var(--color-mute);
-  font-weight: 700;
+/* Without a tier letter (tiers not shown, or none yet): the ELO and its votes, no badge. */
+.tierElo {
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 .tierK {
   margin: 0;

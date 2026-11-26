@@ -33,6 +33,8 @@ import { applyRemovalsTick, removalAlertsTick } from "./owner-removals";
 import { purgeRemovedProfiles } from "../lib/games/claims.mjs";
 import { db as database, ensureSchema } from "../lib/db";
 import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
+import { profileOrigin } from "../lib/profile-next/origin.mjs";
+import { profileNextEnabled } from "../lib/profile-next/flag";
 import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
@@ -130,7 +132,10 @@ async function purgeNotWorkingProfiles(purgeTags: PurgeTags, env: CloudflareEnv,
         { waitUntil }
       );
     };
-    const origin = async (url: string) => (await app.fetch(new Request(`${env.SITE_URL}/p/${encodeURIComponent(url)}`), env, { waitUntil })).status;
+    // The profile, and while PROFILE_NEXT is on its redesigned page too (lib/profile-next/origin.mjs): both must answer.
+    const origin = profileOrigin(async (path: string) => (await app.fetch(new Request(`${env.SITE_URL}${path}`), env, { waitUntil })).status, {
+      next: profileNextEnabled(env as unknown as { PROFILE_NEXT?: string }),
+    });
     const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => purgeTags(urls.map(profileTag)), origin, revalidate });
     if (out.failed.length) purgeFailed("hourly-not-working", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
   } catch (e) {

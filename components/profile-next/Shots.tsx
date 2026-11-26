@@ -48,6 +48,7 @@ export function Shots({ desktop, phone, domain, url }: { desktop: ShotView; phon
   const stageRef = useRef<HTMLDivElement>(null);
   const figRef = useRef<HTMLElement>(null);
   const progRef = useRef<HTMLElement>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [viewer, setViewer] = useState<Kind | null>(null);
   const run = useRef({ phase: "idle" as Phase, steps: [] as Step[], last: 0, explicit: false, f: 0, raf: 0, hover: false, visible: false, held: false });
@@ -256,7 +257,7 @@ export function Shots({ desktop, phone, domain, url }: { desktop: ShotView; phon
         </div>
       )}
       <div className={s.compCtl}>
-        <button type="button" className={s.compOpen} onClick={() => setViewer(window.innerWidth < 640 && phone ? "mob" : "desk")} aria-label={phone ? "Open the screenshots large, to switch between Mobile and Desktop and zoom" : "Open the screenshot large, to zoom"}>
+        <button ref={expandRef} type="button" className={s.compOpen} onClick={() => setViewer(window.innerWidth < 640 && phone ? "mob" : "desk")} aria-label={phone ? "Open the screenshots large, to switch between Mobile and Desktop and zoom" : "Open the screenshot large, to zoom"}>
           <Expand className={s.icS} aria-hidden />
           <span>Expand</span>
         </button>
@@ -276,7 +277,20 @@ export function Shots({ desktop, phone, domain, url }: { desktop: ShotView; phon
         {domain} on {phone ? "Desktop and on Mobile, side by side" : "Desktop"}
         {tall ? ", scrolling slowly through the whole page." : ", the top of the page."}
       </figcaption>
-      {viewer && <Viewer kind={viewer} setKind={setViewer} desktop={desktop} phone={phone} domain={domain} onClose={() => setViewer(null)} />}
+      {viewer && (
+        <Viewer
+          kind={viewer}
+          setKind={setViewer}
+          desktop={desktop}
+          phone={phone}
+          domain={domain} 
+          onClose={() => {
+            setViewer(null);
+            // The pictures are not focusable, so focus returns to Expand, which opens the same viewer.
+            expandRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
     </figure>
   );
 }

@@ -1,10 +1,13 @@
 // The redesigned profile at /p/<address>/next, end to end against the running
-// production build (scripts/test-e2e.sh, which turns PROFILE_NEXT on): it
-// renders a listed site's real report from its saved checks, says noindex in
-// its metadata and its X-Robots-Tag header, is in no sitemap and linked from
-// nowhere (the current profile is unchanged), and has its own share card. With
-// the switch off, as in production, the page and its card answer 404: a
-// second server is started on the same build with PROFILE_NEXT=false.
+// production build (scripts/test-e2e.sh, which turns PROFILE_NEXT and the
+// other switches on): it renders a listed site's real report from its saved
+// checks, stored exactly as production stores them (the cache value without a
+// time, the time in the row's `at`), says noindex in its metadata and its
+// X-Robots-Tag header, is in no sitemap and linked from nowhere (the current
+// profile is unchanged), and has its card. Two more servers on the same build:
+// production's switches (TOOLS_ENABLED, GAMES_V2 and RANKING_V2 off) with the
+// page on, where it says only what is true there; and the page off, where it
+// and its card answer 404.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -19,61 +22,91 @@ const BASE = process.env.E2E_BASE_URL;
 const DB_URL = process.env.E2E_DB_URL;
 const on = process.env.PROFILE_NEXT === "true";
 const skip = !BASE || !DB_URL || !on;
-// One listed site no other test renders.
+const built = fs.existsSync(path.join(process.cwd(), ".next", "BUILD_ID"));
+// Listed sites no other test renders; each server renders its own (they share the build's page cache).
 const SITE = feed[1300];
+const OFF_SITE = feed[1301];
+const PROD_SITE = feed[1302];
 const nextPath = (url) => `/p/${encodeURIComponent(url)}/next`;
+// When the checks were saved: the row's `at`, as lib/cache.ts stores it.
+const INSPECT_AT = Date.parse("2026-11-20T10:00:00Z");
+const PSI_AT = Date.parse("2026-11-23T09:30:00Z");
 
-before(async () => {
-  if (skip) return;
-  const db = createClient({ url: DB_URL, timeout: 10000 });
-  await migrate(db);
+async function seed(db, url) {
   const facts = {
     v: 4,
-    final_url: SITE.url,
+    final_url: url,
     own_domain: true,
     resume: false,
     github: true,
     contact: true,
     footer_year: 2026,
     builder: null,
-    project_links: { checked: 4, ok: 3, broken: 1, blocked: 0 },
+    project_links: { checked: 4, ok: 1, broken: 2, blocked: 1 },
     measured_at: "2026-11-22T08:00:00Z",
   };
   await db.execute({
     sql: "INSERT INTO portfolios (url, status, facts) VALUES (?, 'live', ?) ON CONFLICT(url) DO UPDATE SET status = 'live', health = NULL, facts = excluded.facts",
-    args: [SITE.url, JSON.stringify(facts)],
+    args: [url, JSON.stringify(facts)],
   });
-  const inspect = { ok: true, finalUrl: SITE.url, https: true, customDomain: true, description: "A developer.", ogImage: null, ogImageLoads: false, githubUrl: "https://github.com/someone", hasResume: false, hasContact: true, copyrightYear: 2026, measuredAt: "2026-11-20T10:00:00Z" };
-  const psi = { ok: true, scores: { performance: 71, accessibility: 92, seo: 100, "best-practices": 96 }, measuredAt: "2026-11-23T09:30:00Z" };
-  for (const [k, v] of [[`inspect:${SITE.url}`, inspect], [`psi:${SITE.url}`, psi]]) {
-    await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(v), Date.now()] });
+  // The values as the polish check and Lighthouse save them: no time inside.
+  const inspect = { ok: true, finalUrl: url, https: true, customDomain: true, description: "A developer.", ogImage: null, ogImageLoads: false, githubUrl: "https://github.com/someone", hasResume: false, hasContact: true, copyrightYear: 2026 };
+  const psi = { ok: true, strategy: "mobile", scores: { performance: 71, accessibility: 92, seo: 100, "best-practices": 96 } };
+  for (const [k, v, at] of [[`inspect:${url}`, inspect, INSPECT_AT], [`psi:${url}`, psi, PSI_AT]]) {
+    await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(v), at] });
   }
+}
+
+before(async () => {
+  if (skip) return;
+  const db = createClient({ url: DB_URL, timeout: 10000 });
+  await migrate(db);
+  await seed(db, SITE.url);
+  await seed(db, PROD_SITE.url);
 });
 
+// React separates neighbouring text with <!-- --> markers; the text a visitor reads has none.
+const page = async (base, url) => {
+  const res = await fetch(base + nextPath(url));
+  return { res, html: (await res.text()).replaceAll("<!-- -->", "") };
+};
+const mainOf = (html) => html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+
 test("with the switch on: the report from the saved checks, the actions, the claim card; noindex", { skip }, async () => {
-  const res = await fetch(BASE + nextPath(SITE.url));
+  const { res, html } = await page(BASE, SITE.url);
   assert.equal(res.status, 200);
   assert.match(res.headers.get("x-robots-tag") ?? "", /noindex/);
-  // React separates neighbouring text with <!-- --> markers; the text a visitor reads has none.
-  const html = (await res.text()).replaceAll("<!-- -->", "");
   assert.match(html, /<meta name="robots" content="noindex, nofollow"\/>/);
   assert.ok(!html.includes("application/ld+json"), "no structured data");
   assert.ok(html.includes(`>${SITE.name}</h1>`), "the name");
-  for (const text of ["The report", "Basics", "Projects", "Mobile", "3 of 4 project links load", "Run this test", "One Lighthouse run on 23 Nov 2026.", "What we recommend changing", "Copy as a prompt", "Is this your portfolio? Claim it or share it"]) {
+  for (const text of [
+    "The report",
+    // The newest saved check shown, from the rows' `at`.
+    "Checked on 23 Nov 2026. No AI.",
+    "One Lighthouse run on 23 Nov 2026.",
+    // The product's words (pipeline/facts.mjs projectLinksText): the link behind a bot check is out of the total.
+    "1 of 3 project links load",
+    "1 behind a bot check.",
+    "Run this test",
+    "What we recommend changing",
+    "Copy as a prompt",
+    "Is this your portfolio? Claim it or share it",
+    // TOOLS_ENABLED is on in this run: the newer claim flow.
+    "Claim it to re-check the site, hide its grade or remove it.",
+    "press Verify.",
+  ]) {
     assert.ok(html.includes(text), `shows "${text}"`);
   }
-  // Each finding is one recommendation: no resume, no share image, a link that does not load, speed 71.
-  for (const r of ["Link your resume from the home page.", "Add a share image", "Fix or remove the project link that does not load.", "Speed up the page on mobile: Lighthouse gives it 71 of 100."]) {
+  for (const r of ["Link your resume from the home page.", "Add a share image", "Fix or remove the 2 project links that do not load.", "Speed up the page on mobile: Lighthouse gives it 71 of 100."]) {
     assert.ok(html.includes(r), `recommends "${r}"`);
   }
   assert.ok(html.includes(`href="https://pagespeed.web.dev/analysis?url=${encodeURIComponent(SITE.url)}&amp;form_factor=mobile"`), "the PageSpeed link");
   assert.ok(html.includes(`href="/claim?url=${encodeURIComponent(SITE.url)}"`), "the claim link");
-  // No score and no points anywhere, no Gemini card, no "Other portfolios in this tier" (the page, not the site's shell).
-  const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
-  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", ">Design<", ">Writing<", "Mobile only", "Tracking cookies", ">Desktop<"]) {
+  // No score, no points, no Gemini card, nothing unmeasured, and no promise about what a shared link shows.
+  const main = mainOf(html);
+  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", ">Design<", ">Writing<", "Mobile only", "Tracking cookies", ">Desktop<", "What people see when the link is posted", "this card goes with the link"]) {
     assert.ok(!main.includes(gone), `does not show "${gone}"`);
   }
-  // The share card it shows.
   const card = await fetch(`${BASE}${nextPath(SITE.url)}/card`);
   assert.equal(card.status, 200);
   assert.equal(card.headers.get("content-type"), "image/png");
@@ -94,7 +127,7 @@ test("in no sitemap and linked from nowhere: the current profile is unchanged", 
   assert.equal((await fetch(BASE + nextPath("https://not-listed.example"))).status, 404);
 });
 
-// ---------------------------------------------------------------- switch off
+// ---------------------------------------------------------------- more servers on the same build
 
 const freePort = () =>
   new Promise((ok, no) => {
@@ -106,36 +139,59 @@ const freePort = () =>
     });
   });
 
-let off = null;
+const servers = [];
 after(() => {
-  if (off?.pid) {
+  for (const s of servers) {
     try {
-      process.kill(-off.pid);
+      process.kill(-s.pid);
     } catch {
-      off.kill();
+      s.kill();
     }
   }
 });
 
-test("with the switch off (production): the page and its card answer 404", { skip: skip || !fs.existsSync(path.join(process.cwd(), ".next", "BUILD_ID")) }, async () => {
+/** A `next start` on the same build and database with these switches; its base address once it answers. */
+async function startServer(env) {
   const port = await freePort();
-  off = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], {
-    env: { ...process.env, PROFILE_NEXT: "false", PORT: String(port) },
+  const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], {
+    env: { ...process.env, ...env, PORT: String(port) },
     stdio: "ignore",
     detached: true,
   });
+  servers.push(child);
   const base = `http://localhost:${port}`;
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    up = await fetch(`${base}/`).then(() => true, () => false);
-    if (!up) await new Promise((r) => setTimeout(r, 1000));
+  for (let i = 0; i < 60; i++) {
+    if (await fetch(`${base}/`).then(() => true, () => false)) return base;
+    await new Promise((r) => setTimeout(r, 1000));
   }
-  assert.ok(up, "the second server started");
-  // A site the first server never rendered: both servers share the build's page cache (ISR), and in
-  // production turning the switch off ships with a deploy, which starts from a fresh one.
-  const other = feed[1301].url;
-  assert.equal((await fetch(base + nextPath(other))).status, 404);
-  assert.equal((await fetch(`${base}${nextPath(other)}/card`)).status, 404);
+  throw new Error("the server did not start");
+}
+
+test("production's switches with the page on: the claim card offers the older flow, the tier card shows the ELO", { skip: skip || !built }, async () => {
+  const base = await startServer({ PROFILE_NEXT: "true", TOOLS_ENABLED: "false", GAMES_V2: "false", RANKING_V2: "false", FULLPAGE_PREVIEW_ENABLED: "false", IMAGES_BASE_URL: "" });
+  const { res, html } = await page(base, PROD_SITE.url);
+  assert.equal(res.status, 200);
+  const main = mainOf(html);
+  for (const text of [
+    "Claim it to remove it from PortfolioRank or hide its grade.",
+    "It is verified at once when the site links to your GitHub profile; otherwise add a one-line meta tag to your site.",
+    // Today's profile in this configuration: the ELO and its votes, no letter.
+    ">ELO<",
+    "votes so far",
+    "The ELO comes from people&#x27;s votes in face-offs and moves as they vote.",
+    "One Lighthouse run on 23 Nov 2026.",
+  ]) {
+    assert.ok(main.includes(text), `shows "${text}"`);
+  }
+  for (const gone of ["re-check", "small file", "GitHub Pages", "press Verify", "re-grade", "Not placed in a tier", 'aria-label="Tier', ">Tier<", "Play the screenshots"]) {
+    assert.ok(!main.includes(gone), `does not show "${gone}"`);
+  }
+});
+
+test("with the switch off (production): the page and its card answer 404", { skip: skip || !built }, async () => {
+  const base = await startServer({ PROFILE_NEXT: "false" });
+  assert.equal((await fetch(base + nextPath(OFF_SITE.url))).status, 404);
+  assert.equal((await fetch(`${base}${nextPath(OFF_SITE.url)}/card`)).status, 404);
   // The current profile is there either way.
-  assert.equal((await fetch(`${base}/p/${encodeURIComponent(other)}`)).status, 200);
+  assert.equal((await fetch(`${base}/p/${encodeURIComponent(OFF_SITE.url)}`)).status, 200);
 });

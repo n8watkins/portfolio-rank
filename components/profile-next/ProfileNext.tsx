@@ -48,7 +48,7 @@ const HERO_ID = "pn-hero";
 type Report = NonNullable<NextProfile["report"]>;
 type Card = Report["cards"][number];
 type BasicsItem = { id: string; icon: string; label: string; chip: string; value: string; st: string; explain: string };
-type Links = { checked: number; ok: number; broken: number; blocked: number; pass: boolean | null; min: number };
+type Links = { ok: number; bad: number; headline: string; notes: string[]; rule: boolean; min: number };
 type Row = { key: string; label: string; def: string; value: number; st: string };
 
 const ST_CLASS: Record<string, string> = { yes: s.stYes, no: s.stNo, warn: s.stWarn, info: s.stInfo };
@@ -117,12 +117,20 @@ function Actions({ d, where }: { d: NextProfile; where: "hero" | "bar" }) {
 function Tier({ d }: { d: NextProfile }) {
   const t = d.tier;
   const votes = t.votes.toLocaleString("en-US");
+  // With tiers shown (RANKING_V2) the letter, as designed; otherwise what today's profile shows: the ELO and its votes.
+  const text = t.tier
+    ? t.seeded
+      ? "Started here from the code measurements; people's votes move it from here."
+      : "Placed by people's votes in face-offs; they move it from here."
+    : t.tiersShown
+      ? "Not ranked yet, so no tier. The ELO moves as people vote in face-offs."
+      : "The ELO comes from people's votes in face-offs and moves as they vote.";
   return (
-    <div className={s.tierx}>
-      {t.tier ? <EloTierBadge tier={t.tier} size="hero" /> : <span className={s.tierNone} aria-hidden>-</span>}
+    <div className={`${s.tierx} ${t.tier ? "" : s.tierElo}`}>
+      {t.tier && <EloTierBadge tier={t.tier} size="hero" />}
       <div>
-        <p className={s.tierK}>{t.tier ? "Tier" : "Rank"}</p>
-        <p className={s.tierV}>{t.tier ? t.word : `ELO ${t.elo.toLocaleString("en-US")}`}</p>
+        <p className={s.tierK}>{t.tier ? "Tier" : "ELO"}</p>
+        <p className={s.tierV}>{t.tier ? t.word : t.elo.toLocaleString("en-US")}</p>
       </div>
       <div className={s.tierVotes}>
         <b>{votes}</b>
@@ -131,9 +139,7 @@ function Tier({ d }: { d: NextProfile }) {
       <a className={s.tierInfo} href="/grading" aria-label="How ranking works" title="How ranking works">
         <Info aria-hidden />
       </a>
-      <p className={s.tierP}>
-        {t.tier && t.seeded ? "Started here from the code measurements; people's votes move it from here." : t.tier ? "Placed by people's votes in face-offs." : "Not placed in a tier yet. People's votes in face-offs move its rank."}
-      </p>
+      <p className={s.tierP}>{text}</p>
     </div>
   );
 }
@@ -177,39 +183,30 @@ function ProjectsBody({ links, builtWith }: { links: Links | null; builtWith: st
     <>
       {links && (
         <>
+          {/* The product's own words and counting (pipeline/facts.mjs projectLinksText), as today's profile reads them. */}
           <div className={s.linksHead}>
-            {links.checked > 0 && (
+            {links.ok + links.bad > 0 && (
               <span className={s.sq} aria-hidden>
                 {Array.from({ length: links.ok }, (_, i) => (
                   <i key={`o${i}`} className={s.ok}>
                     <Check />
                   </i>
                 ))}
-                {Array.from({ length: links.broken }, (_, i) => (
+                {Array.from({ length: links.bad }, (_, i) => (
                   <i key={`b${i}`} className={s.bad}>
                     <X />
                   </i>
                 ))}
-                {Array.from({ length: links.blocked }, (_, i) => (
-                  <i key={`k${i}`} className={s.blocked}>
-                    <Info />
-                  </i>
-                ))}
               </span>
             )}
-            <span className={s.linksN}>{links.checked === 0 ? "No project links found" : `${links.ok} of ${links.checked} project links load`}</span>
+            <span className={s.linksN}>{links.headline}</span>
           </div>
-          {links.blocked > 0 && (
-            <p className={s.note}>
-              {links.blocked === 1 ? "1 site" : `${links.blocked} sites`} turned the check away, so {links.blocked === 1 ? "it" : "they"} might load for a person.
+          {links.notes.map((n) => (
+            <p key={n} className={s.note}>
+              {n}
             </p>
-          )}
-          {links.broken > 0 && (
-            <p className={s.note}>
-              {links.broken === 1 ? "1 link" : `${links.broken} links`} answered with an error or not at all.
-            </p>
-          )}
-          <p className={s.note}>Read from the home page and its projects page. At least {links.min} project links that load is what counts.</p>
+          ))}
+          {links.rule && <p className={s.note}>Read from the home page and its projects page. At least {links.min} project links that load is what counts.</p>}
         </>
       )}
       {builtWith && (
@@ -435,17 +432,20 @@ export function ProfileNext({ d, cardImage }: { d: NextProfile; cardImage: strin
           <p className={s.hidden}>{p.hideGrade ? "The owner of this portfolio chose to hide its report." : "No measurements of this site are saved yet. They are taken when the site is captured."}</p>
         )}
 
+        {/* Share posts the current profile's address, whose share image is not this card yet. When this page
+            becomes the profile and this card its share image, the caption goes back to "What people see when
+            the link is posted." and the text gains "Share it and this card goes with the link." */}
         <section className={s.cta} aria-labelledby="pn-cta">
           <figure className={s.ctaPic}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- the share card is our own generated PNG */}
-            <img src={cardImage} width={1200} height={630} alt={`The share card for ${p.name}${tier.tier ? `: tier ${tier.letter}, ${tier.word}` : ""}, with a picture of the site`} loading="lazy" />
-            <figcaption className={s.ctaCap}>What people see when the link is posted.</figcaption>
+            {/* eslint-disable-next-line @next/next/no-img-element -- the card is our own generated PNG */}
+            <img src={cardImage} width={1200} height={630} alt={`A card for ${p.name}${tier.tier ? `: tier ${tier.letter}, ${tier.word}` : ""}, with a picture of the site`} loading="lazy" />
+            <figcaption className={s.ctaCap}>{p.name} on PortfolioRank.</figcaption>
           </figure>
           <div className={s.ctaT}>
             <h2 className={s.ctaH} id="pn-cta">
               Is this your portfolio? Claim it or share it
             </h2>
-            <p className={s.ctaP}>Claim it to re-check the site, hide its grade or remove it. Share it and this card goes with the link.</p>
+            <p className={s.ctaP}>{d.claim.can}</p>
             <div className={s.ctaActs}>
               <a className={s.ctaClaim} href={`/claim?url=${encodeURIComponent(p.url)}`}>
                 <ShieldCheck aria-hidden />
@@ -456,7 +456,7 @@ export function ProfileNext({ d, cardImage }: { d: NextProfile; cardImage: strin
                 Share
               </ShareButton>
             </div>
-            <p className={s.ctaSteps}>To claim: sign in with GitHub. A GitHub Pages site of your own account is verified at once; otherwise add a small file or one meta tag to your site and press Check.</p>
+            <p className={s.ctaSteps}>{d.claim.steps}</p>
           </div>
         </section>
       </div>
