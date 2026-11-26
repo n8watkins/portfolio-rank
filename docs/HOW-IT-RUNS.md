@@ -64,7 +64,7 @@ Times below are Pacific, with UTC in brackets, for winter.
    An owner's "Re-check my site" asks for a re-measure too: the owner's own single run is shown at once but never replaces a stored average of two runs, so the speed numbers update within a day, when the daily job measures the site first with two runs on each device.
    A per-minute refusal from Google is waited out and tried again up to three times; the day's quota stops the job, and so do a key Google refuses (a 400 or 403 about the key: it is invalid, or restricted so GitHub runners are blocked) and ten sites in a row refused per minute (which means something is wrong).
    The job is red when it could not do its work: no key, a key refused, the day's quota spent before anything was measured, every measure failing, the per-minute streak. It is not red because many sites fail; the counts are in the summary.
-   Three sites go at a time, about 3 hours for 400 sites if a run takes 25 s (not measured yet), 1,600 of the day's 25,000 runs; the first full pass over 2,159 sites takes about 6 days.
+   Three sites go at a time, about 4 hours for 400 sites (a run takes 10 to 24 s, and a device's two runs are 60 s apart so that PageSpeed gives two different runs), 1,600 of the day's 25,000 runs; the first full pass over 2,159 sites takes about 6 days.
    Running.
 6. **04:00 (12:00 UTC)**: the GitHub fallback for the nightly health check (`health.yml`).
    It skips when Cloudflare started one in the last 30 hours, which is normal.

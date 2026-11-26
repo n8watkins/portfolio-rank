@@ -58,6 +58,10 @@ jobs:
           # The Google PageSpeed key: only this step has it (not the job, not `npm ci`). The job calls PageSpeed
           # itself and writes the results to Turso; the app's own secrets (AUTH_SECRET) are never given to it.
           PSI_API_KEY: ${{ secrets.PSI_API_KEY }}
+          # The wait between a device's two runs. Set here as well as in lib/psi-pacing.mjs because this job runs
+          # the released code with this file from main: release v0.10.0 still has the 30 s default, at which
+          # PageSpeed sometimes hands the same run back. Remove once a release has the 60 s default.
+          PSI_RUN_GAP_MS: "60000"
         run: node scripts/prewarm-metrics.mjs --limit="$LIMIT"
 
       - name: Notify on failure
