@@ -7,8 +7,10 @@
 //
 // Per site, one visit the way the capture makes it: the same gate (a site
 // that went dead or parked is skipped), then pipeline/capture-once.mjs
-// (splash gate and dialog passed, a still first screen, both tall images). Only the four versioned
-// AVIF files are uploaded (pipeline/shot-store.mjs) and `fullPage` is
+// (splash gate and dialog passed, a still first screen, both tall images, the
+// phone's from the same page resized). Only the versioned AVIF files are
+// uploaded, four, or the desktop's two when the phone view failed
+// (pipeline/fullpage.mjs nextFullPage; shot-store.mjs), and `fullPage` is
 // written to the row's meta. Nothing else about the row changes: not
 // hero.jpg, not captured_at, not the page fingerprint, so no re-grade
 // follows. A site whose images fail is tried again a week later, three
@@ -25,7 +27,7 @@ import path from "path";
 import { httpGate } from "./gate.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb } from "./roster.mjs";
 import { captureOnce } from "./capture-once.mjs";
-import { IMAGE_FILES, fullPageComplete, fullPageDue, nextFullPage, recordFullPage } from "./fullpage.mjs";
+import { fullPageComplete, fullPageDue, nextFullPage, recordFullPage, versionFiles } from "./fullpage.mjs";
 import { imagesBucket, storeVersion } from "./shot-store.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -81,12 +83,7 @@ async function backfillSite(browser, row) {
       shotKey: row.shotKey,
       v: fullPage.v,
       prevV: row.fullPage?.v,
-      files: {
-        [IMAGE_FILES.desktop.tall]: desktopView.files.tall,
-        [IMAGE_FILES.desktop.thumb]: desktopView.files.thumb,
-        [IMAGE_FILES.phone.tall]: phoneView.files.tall,
-        [IMAGE_FILES.phone.thumb]: phoneView.files.thumb,
-      },
+      files: versionFiles(desktopView, phoneView),
     });
   }
   await recordFullPage(db, { url: row.url, shotKey: row.shotKey, fullPage });
@@ -124,7 +121,7 @@ try {
           continue;
         }
         if (fullPageComplete(fp)) ok++;
-        const part = (f) => (f?.error ? `error (${f.error.slice(0, 60)})` : `${f.width}x${f.height}${f.cropped ? " cropped" : ""} ${kb(f.bytes)} + thumb ${kb(f.thumbBytes)}`);
+        const part = (f) => (f?.error || f?.missing ? `${f.error ? "error" : "missing"} (${String(f.error || f.missing).slice(0, 60)})` : `${f.width}x${f.height}${f.cropped ? " cropped" : ""} ${kb(f.bytes)} + thumb ${kb(f.thumbBytes)}`);
         console.log(`[${n}/${due.length}] ${row.url} desktop ${part(fp.desktop)}, phone ${part(fp.phone)} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
       }
     })

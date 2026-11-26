@@ -92,14 +92,11 @@ export const Turnstile = forwardRef<
     load()
       .then((t) => {
         if (!alive || !box.current) return;
-        const dark =
-          document.documentElement.dataset.theme === "dark" ||
-          (!document.documentElement.dataset.theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
         id.current = t.render(box.current, {
           sitekey: TURNSTILE_SITE_KEY,
           action,
           appearance: "interaction-only",
-          theme: dark ? "dark" : "light",
+          theme: "dark",
           callback: (token: string) => cb.current.onToken(token),
           "expired-callback": () => cb.current.onExpire?.(),
           "before-interactive-callback": () => cb.current.onInteractive?.(),
