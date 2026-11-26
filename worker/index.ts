@@ -132,9 +132,11 @@ async function purgeNotWorkingProfiles(purgeTags: PurgeTags, env: CloudflareEnv,
         { waitUntil }
       );
     };
-    // The profile, and while PROFILE_NEXT is on its redesigned page too (lib/profile-next/origin.mjs): both must answer.
+    // The profile decides; while PROFILE_NEXT is on its redesigned page is asked too, and a disagreement is logged,
+    // never held against the site (lib/profile-next/origin.mjs).
     const origin = profileOrigin(async (path: string) => (await app.fetch(new Request(`${env.SITE_URL}${path}`), env, { waitUntil })).status, {
       next: profileNextEnabled(env as unknown as { PROFILE_NEXT?: string }),
+      log: (line) => console.log(JSON.stringify(line)),
     });
     const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => purgeTags(urls.map(profileTag)), origin, revalidate });
     if (out.failed.length) purgeFailed("hourly-not-working", `purge refused for ${out.failed.length} profile(s); tried again next hour`);

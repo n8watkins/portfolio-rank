@@ -29,6 +29,7 @@ import { EloTierBadge } from "@/components/ui/badges";
 import { GH_PATH, LI_PATH, SocialIcon, X_PATH } from "@/components/ui/social-icons";
 import type { NextProfile } from "@/lib/profile-next/load";
 import { SITE_URL } from "@/lib/site";
+import { BASE_ELO } from "@/lib/elo";
 import { FloatingBar } from "./FloatingBar";
 import { PromptButton } from "./PromptButton";
 import { Shots } from "./Shots";
@@ -116,21 +117,41 @@ function Actions({ d, where }: { d: NextProfile; where: "hero" | "bar" }) {
 
 function Tier({ d }: { d: NextProfile }) {
   const t = d.tier;
+  // A site added through "Add your portfolio" and not in the face-offs: "?", as today's profile shows it.
+  if (!t.inFaceoffs) {
+    return (
+      <div className={s.tierx}>
+        <span className={s.tierQ} aria-hidden>
+          ?
+        </span>
+        <div>
+          <p className={s.tierK}>Rank</p>
+          <p className={s.tierV}>Not ranked yet</p>
+        </div>
+        <span />
+        <a className={s.tierInfo} href="/grading" aria-label="How ranking works" title="How ranking works">
+          <Info aria-hidden />
+        </a>
+        <p className={s.tierP}>It joins the face-offs once it&apos;s graded.</p>
+      </div>
+    );
+  }
   const votes = t.votes.toLocaleString("en-US");
-  // With tiers shown (RANKING_V2) the letter, as designed; otherwise what today's profile shows: the ELO and its votes.
+  // With tiers shown (RANKING_V2) the letter, as designed; otherwise what today's profile shows: the ELO, printed
+  // as it prints it, and its votes.
   const text = t.tier
     ? t.seeded
       ? "Started here from the code measurements; people's votes move it from here."
       : "Placed by people's votes in face-offs; they move it from here."
     : t.tiersShown
-      ? "Not ranked yet, so no tier. The ELO moves as people vote in face-offs."
-      : "The ELO comes from people's votes in face-offs and moves as they vote.";
+      ? `Not ranked yet, so no tier. Every site starts at an ELO of ${BASE_ELO}; it moves as people vote in face-offs.`
+      : `Every site starts at an ELO of ${BASE_ELO}; it moves as people vote in face-offs.`;
   return (
     <div className={`${s.tierx} ${t.tier ? "" : s.tierElo}`}>
       {t.tier && <EloTierBadge tier={t.tier} size="hero" />}
       <div>
         <p className={s.tierK}>{t.tier ? "Tier" : "ELO"}</p>
-        <p className={s.tierV}>{t.tier ? t.word : t.elo.toLocaleString("en-US")}</p>
+        <p className={s.tierV}>{t.tier ? t.word : t.elo}</p>
       </div>
       <div className={s.tierVotes}>
         <b>{votes}</b>
@@ -178,7 +199,7 @@ function BasicsBody({ items }: { items: BasicsItem[] }) {
   );
 }
 
-function ProjectsBody({ links, builtWith }: { links: Links | null; builtWith: string | null }) {
+function ProjectsBody({ links, builtWith, notice }: { links: Links | null; builtWith: string | null; notice: string | null }) {
   return (
     <>
       {links && (
@@ -206,6 +227,11 @@ function ProjectsBody({ links, builtWith }: { links: Links | null; builtWith: st
               {n}
             </p>
           ))}
+          {notice && (
+            <p className={s.note}>
+              {notice}. It is not counted as a fix, because enough project links load.
+            </p>
+          )}
           {links.rule && <p className={s.note}>Read from the home page and its projects page. At least {links.min} project links that load is what counts.</p>}
         </>
       )}
@@ -289,7 +315,7 @@ function LighthouseBody({ speed, rows, measuredOn, testUrl }: { speed: number; r
 function CardBody({ card }: { card: Card }) {
   const data = card.data as Record<string, unknown>;
   if (card.kind === "basics") return <BasicsBody items={data.items as BasicsItem[]} />;
-  if (card.kind === "projects") return <ProjectsBody links={data.links as Links | null} builtWith={data.builtWith as string | null} />;
+  if (card.kind === "projects") return <ProjectsBody links={data.links as Links | null} builtWith={data.builtWith as string | null} notice={card.notice ?? null} />;
   if (card.kind === "lighthouse") return <LighthouseBody speed={data.speed as number} rows={data.rows as Row[]} measuredOn={data.measuredOn as string | null} testUrl={data.testUrl as string} />;
   return null;
 }
@@ -329,7 +355,8 @@ function ReportSection({ report, prompt }: { report: Report; prompt: string }) {
                 <Icon aria-hidden />
               </span>
               <span className={s.tileN}>{c.name}</span>
-              <span className={`${s.vd} ${c.fixes ? s.vdWarn : s.vdYes}`}>{fixesWord(c.fixes)}</span>
+              {/* "Nothing to fix" only when nothing is noted either: a note that is not a fix reads neutral. */}
+              <span className={`${s.vd} ${c.fixes ? s.vdWarn : c.notice ? s.vdInfo : s.vdYes}`}>{c.fixes || !c.notice ? fixesWord(c.fixes) : c.notice}</span>
             </TileLink>
           );
         })}

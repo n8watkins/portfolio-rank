@@ -27,6 +27,7 @@ const built = fs.existsSync(path.join(process.cwd(), ".next", "BUILD_ID"));
 const SITE = feed[1300];
 const OFF_SITE = feed[1301];
 const PROD_SITE = feed[1302];
+const ADDED = "https://profile-next-added.example";
 const nextPath = (url) => `/p/${encodeURIComponent(url)}/next`;
 // When the checks were saved: the row's `at`, as lib/cache.ts stores it.
 const INSPECT_AT = Date.parse("2026-11-20T10:00:00Z");
@@ -63,6 +64,21 @@ before(async () => {
   await migrate(db);
   await seed(db, SITE.url);
   await seed(db, PROD_SITE.url);
+  // A site added through "Add your portfolio" (TOOLS_ENABLED, on in this run): known by its grade job, not listed.
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: "INSERT OR REPLACE INTO grade_jobs (id, url, site_key, status, created_at, updated_at) VALUES ('profileNextAdded000001', ?, ?, 'queued', ?, ?)",
+    args: [ADDED, new URL(ADDED).hostname, now, now],
+  });
+});
+
+test("a site added through the tools and not in the face-offs shows \"?\", as today's profile does", { skip }, async () => {
+  const { res, html } = await page(BASE, ADDED);
+  assert.equal(res.status, 200);
+  const main = mainOf(html);
+  assert.ok(main.includes("Not ranked yet"), "not ranked");
+  assert.ok(main.includes("It joins the face-offs once it&#x27;s graded."));
+  assert.ok(!main.includes("votes so far") && !main.includes(">ELO<"), "no ELO for a site not in the face-offs");
 });
 
 // React separates neighbouring text with <!-- --> markers; the text a visitor reads has none.
@@ -92,7 +108,7 @@ test("with the switch on: the report from the saved checks, the actions, the cla
     "Copy as a prompt",
     "Is this your portfolio? Claim it or share it",
     // TOOLS_ENABLED is on in this run: the newer claim flow.
-    "Claim it to re-check the site, hide its grade or remove it.",
+    "First prove it&#x27;s yours: put a short code we give you on your site. Then you can re-check it, hide its grade or remove it.",
     "press Verify.",
   ]) {
     assert.ok(html.includes(text), `shows "${text}"`);
@@ -173,17 +189,19 @@ test("production's switches with the page on: the claim card offers the older fl
   assert.equal(res.status, 200);
   const main = mainOf(html);
   for (const text of [
-    "Claim it to remove it from PortfolioRank or hide its grade.",
-    "It is verified at once when the site links to your GitHub profile; otherwise add a one-line meta tag to your site.",
-    // Today's profile in this configuration: the ELO and its votes, no letter.
+    // /claim's own introduction for the older flow: hiding and removing need the code.
+    "First prove it&#x27;s yours: a link to your GitHub profile on the site, or a short code you add to the page. Then, with the code, you can hide its grade or remove it.",
+    "To claim: sign in with GitHub, then prove it on the claim page.",
+    // Today's profile in this configuration: the ELO printed as it prints it (no separator) and its votes, no letter.
     ">ELO<",
-    "votes so far",
-    "The ELO comes from people&#x27;s votes in face-offs and moves as they vote.",
+    ">1200<",
+    "<b>0</b><span>votes so far</span>",
+    "Every site starts at an ELO of 1200; it moves as people vote in face-offs.",
     "One Lighthouse run on 23 Nov 2026.",
   ]) {
     assert.ok(main.includes(text), `shows "${text}"`);
   }
-  for (const gone of ["re-check", "small file", "GitHub Pages", "press Verify", "re-grade", "Not placed in a tier", 'aria-label="Tier', ">Tier<", "Play the screenshots"]) {
+  for (const gone of ["re-check", "small file", "GitHub Pages", "press Verify", "re-grade", "verified at once", "1,200", "Not placed in a tier", 'aria-label="Tier', ">Tier<", "Play the screenshots"]) {
     assert.ok(!main.includes(gone), `does not show "${gone}"`);
   }
 });

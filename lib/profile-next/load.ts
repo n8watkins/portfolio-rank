@@ -6,7 +6,6 @@ import { loadProfileTier } from "@/lib/tiers-view";
 import { TIER_LADDER, tierLabel } from "@/lib/tiers.mjs";
 import { fullPagePreview, heroOf, mobileOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { toolsEnabled } from "@/lib/tools/server";
-import { gamesEnabled } from "@/lib/games/server";
 import { psiKey } from "@/lib/tools/keys";
 import { profileReport } from "./report.mjs";
 import { claimCopy } from "./claim-copy.mjs";
@@ -34,6 +33,8 @@ export type NextTier = {
   seeded: boolean;
   /** Tiers by ELO are shown at all (RANKING_V2). */
   tiersShown: boolean;
+  /** The site is in the face-offs (listed); an added site that is not shows "?" as today's profile does. */
+  inFaceoffs: boolean;
 };
 
 export type NextProfile = {
@@ -109,10 +110,12 @@ export const loadNextProfile = cache(async (url: string): Promise<NextProfile | 
       elo: t ? t.elo : p.standing.elo,
       seeded: Boolean(t?.seeded),
       tiersShown: t != null,
+      // A site added through "Add your portfolio" is not in the face-offs until it is graded and listed.
+      inFaceoffs: Boolean(p.listed),
     },
     shots: { desktop, phone, thumb: full ? full.desktop.thumb : desktop.src },
     socials: ins ? { github: httpsLink(ins.githubUrl), linkedin: httpsLink(ins.linkedinUrl), x: httpsLink(ins.xUrl) } : { github: null, linkedin: null, x: null },
     report,
-    claim: claimCopy({ tools: toolsEnabled(), games: gamesEnabled() }),
+    claim: claimCopy({ tools: toolsEnabled() }),
   };
 });

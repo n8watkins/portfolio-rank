@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { dayOf, fixPrompt, pageSpeedUrl, profileReport, scoreState } from "../lib/profile-next/report.mjs";
-import { claimCopy } from "../lib/profile-next/claim-copy.mjs";
+import { claimCopy, claimIntro } from "../lib/profile-next/claim-copy.mjs";
 import { profileOrigin } from "../lib/profile-next/origin.mjs";
 import { profileNextEnabled } from "../lib/profile-next/flag.ts";
 import { projectLinksText } from "../pipeline/facts.mjs";
@@ -188,8 +188,12 @@ test("projects: the product's words and counting, so this page and today's profi
   assert.equal(uncounted.data.links.headline, "No project links found in a projects section");
   assert.deepEqual(uncounted.data.links.notes, ["4 other links on the page were not counted."]);
   assert.match(run({ facts: facts({ project_links: { checked: 0, ok: 0, broken: 0, blocked: 0, not_counted: 4 } }) }).prompt, /\(4 other links on the page were not counted, as they are not in a projects section\)/);
-  // Enough load: passes even with one broken, as the rubric reads it.
-  assert.equal(card(run({ facts: facts({ project_links: { checked: 4, ok: 3, broken: 1, blocked: 0 } }) }), "projects").fixes, 0);
+  // Enough load: passes even with one broken, as the rubric reads it, but never "Nothing to fix" beside a red
+  // mark: the broken one is noted as information.
+  const enough = card(run({ facts: facts({ project_links: { checked: 4, ok: 3, broken: 1, blocked: 0 } }) }), "projects");
+  assert.deepEqual([enough.fixes, enough.notice, enough.data.links.bad], [0, "1 link does not load", 1]);
+  assert.equal(card(run({ facts: facts({ project_links: { checked: 6, ok: 4, broken: 2, blocked: 0 } }) }), "projects").notice, "2 links do not load");
+  assert.equal(card(run({ facts: facts() }), "projects").notice, null, "every tested link loads: nothing noted");
   // Too few: link more, on the home page and its projects page.
   const few = run({ facts: facts({ project_links: { checked: 2, ok: 2, broken: 0, blocked: 0 } }) });
   assert.deepEqual(few.recommendations, ["Link more projects: 2 load, and 3 is the least that counts."]);
@@ -201,38 +205,60 @@ test("projects: the product's words and counting, so this page and today's profi
 });
 
 test("the claim card says only what /claim offers in the running configuration", () => {
-  const tools = claimCopy({ tools: true, games: false });
-  assert.match(tools.can, /re-check the site/);
+  // The card says what /claim's own introduction says: one sentence, shared (claimIntro).
+  const tools = claimCopy({ tools: true });
+  assert.equal(tools.can, claimIntro(true));
+  assert.match(tools.can, /re-check it, hide its grade or remove it/);
   assert.match(tools.steps, /GitHub Pages site of your own account is verified at once; otherwise add a small file or one meta tag to your site and press Verify\./);
-  for (const games of [false, true]) {
-    const old = claimCopy({ tools: false, games });
-    assert.ok(!/re-check|small file|GitHub Pages/.test(`${old.can} ${old.steps}`), "no re-check and no file with the tools off");
-    assert.match(old.steps, /verified at once when the site links to your GitHub profile; otherwise add a one-line meta tag/);
-    assert.equal(/re-grade/.test(old.can), games, "a re-grade only while the games are on");
-  }
-  // The same switches as the claim page.
+  // The older flow: hiding the grade and removing the site need the code (the meta tag) even when the GitHub link
+  // verified the claim (lib/games/claims.mjs hide_needs_meta, remove_needs_meta).
+  const old = claimCopy({ tools: false });
+  assert.equal(old.can, "First prove it's yours: a link to your GitHub profile on the site, or a short code you add to the page. Then, with the code, you can hide its grade or remove it.");
+  assert.ok(!/re-check|small file|GitHub Pages|verified at once/.test(`${old.can} ${old.steps}`), "nothing the older flow does not offer");
+  const claims = fs.readFileSync(path.join(import.meta.dirname, "..", "lib", "games", "claims.mjs"), "utf8");
+  assert.match(claims, /hide_needs_meta/);
+  assert.match(claims, /remove_needs_meta/);
+  // The claim page reads the same sentence and decides its flow by the same switch.
   const page = fs.readFileSync(path.join(import.meta.dirname, "..", "app", "claim", "page.tsx"), "utf8");
+  assert.match(page, /\{claimIntro\(tools\)\}/);
+  assert.ok(!page.includes("First prove it's yours"), "not copied");
   assert.match(page, /if \(tools\) return <VerifyFlow/);
-  assert.match(page, /regrade=\{gamesEnabled\(\)\}/);
 });
 
-test("the hourly check of a site that stops working asks the redesigned page too while it is served", async () => {
+test("the hourly check of a site that stops working: the current profile decides, the redesigned page is asked and logged", async () => {
   const asked = [];
   const answers = { "/p/https%3A%2F%2Fa.dev": 404, "/p/https%3A%2F%2Fa.dev/next": 200 };
   const statusOf = async (p) => {
     asked.push(p);
     return answers[p];
   };
-  assert.equal(await profileOrigin(statusOf, { next: false })("https://a.dev"), 404);
+  const logged = [];
+  const log = (line) => logged.push(line);
+  assert.equal(await profileOrigin(statusOf, { next: false, log })("https://a.dev"), 404);
   assert.deepEqual(asked, ["/p/https%3A%2F%2Fa.dev"]);
-  // The redesigned page still answers 200 from a stale copy: not settled, asked again next hour.
-  assert.equal(await profileOrigin(statusOf, { next: true })("https://a.dev"), 0);
+  assert.deepEqual(logged, []);
+  // The current profile decides: the redesigned page answering otherwise is logged, never held against the
+  // site, so one broken page cannot keep it purged and reloaded every hour.
+  assert.equal(await profileOrigin(statusOf, { next: true, log })("https://a.dev"), 404);
+  assert.deepEqual(logged, [{ event: "profile_next.origin_disagrees", url: "https://a.dev", profile: 404, next: 200 }]);
+  // An error on the redesigned page: the same.
+  logged.length = 0;
+  const failing = async (p) => {
+    if (p.endsWith("/next")) throw new Error("boom");
+    return 200;
+  };
+  assert.equal(await profileOrigin(failing, { next: true, log })("https://a.dev"), 200);
+  assert.deepEqual(logged, [{ event: "profile_next.origin_disagrees", url: "https://a.dev", profile: 200, next: 0, error: "boom" }]);
+  // They agree: nothing logged.
+  logged.length = 0;
   answers["/p/https%3A%2F%2Fa.dev/next"] = 404;
-  assert.equal(await profileOrigin(statusOf, { next: true })("https://a.dev"), 404);
+  assert.equal(await profileOrigin(statusOf, { next: true, log })("https://a.dev"), 404);
+  assert.deepEqual(logged, []);
   // The Worker uses it, and the app drops the redesigned page's own cached copies with the profile's.
   const worker = fs.readFileSync(path.join(import.meta.dirname, "..", "worker", "index.ts"), "utf8");
   assert.match(worker, /const origin = profileOrigin\(/);
   assert.match(worker, /next: profileNextEnabled\(/);
+  assert.match(worker, /log: \(line\) => console\.log\(JSON\.stringify\(line\)\)/);
   const route = fs.readFileSync(path.join(import.meta.dirname, "..", "app", "api", "internal", "revalidate-profiles", "route.ts"), "utf8");
   assert.match(route, /revalidatePath\("\/p\/\[slug\]\/next", "page"\)/);
 });
