@@ -305,11 +305,11 @@ test("helpers: days in UTC, Lighthouse states, the PageSpeed link", () => {
   assert.equal(pageSpeedUrl("https://a.dev/x?y=1"), "https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fa.dev%2Fx%3Fy%3D1&form_factor=mobile");
 });
 
-test("the launch switch: off unless PROFILE_NEXT is exactly true (any case), and off in production", () => {
+test("the launch switch: off unless PROFILE_NEXT is exactly true (any case), and on in production (owner, 2026-11-26)", () => {
   assert.equal(profileNextEnabled({}), false);
   assert.equal(profileNextEnabled({ PROFILE_NEXT: "false" }), false);
   assert.equal(profileNextEnabled({ PROFILE_NEXT: "1" }), false);
   assert.equal(profileNextEnabled({ PROFILE_NEXT: "TRUE" }), true);
   const wrangler = fs.readFileSync(path.join(import.meta.dirname, "..", "wrangler.jsonc"), "utf8");
-  assert.deepEqual([...wrangler.matchAll(/"PROFILE_NEXT":\s*"(\w+)"/g)].map((m) => m[1]), ["false"]);
+  assert.deepEqual([...wrangler.matchAll(/"PROFILE_NEXT":\s*"(\w+)"/g)].map((m) => m[1]), ["true"]);
 });
