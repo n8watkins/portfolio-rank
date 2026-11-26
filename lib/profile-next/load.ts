@@ -5,6 +5,7 @@ import { freshFactsFor } from "@/lib/fresh-facts.mjs";
 import { loadProfileTier } from "@/lib/tiers-view";
 import { TIER_LADDER, tierLabel } from "@/lib/tiers.mjs";
 import { fullPagePreview, heroOf, mobileOf, mshotsUrl, shotBases } from "@/lib/shots";
+import { hasPhoneFrame } from "@/lib/shot-url";
 import { toolsEnabled } from "@/lib/tools/server";
 import { psiKey } from "@/lib/tools/keys";
 import { profileReport } from "./report.mjs";
@@ -91,9 +92,12 @@ export const loadNextProfile = cache(async (url: string): Promise<NextProfile | 
   const desktop: ShotView = full
     ? { src: full.desktop.src, width: full.desktop.width, height: full.desktop.height, tall: full.desktop.height > full.desktop.topHeight }
     : { src: base ? heroOf(base) : mshotsUrl(url, 1200), width: 1440, height: 900, tall: false };
+  // A capture whose phone view was missing has no phone picture (lib/shot-url.ts): the laptop alone, never a broken image.
   const phone: ShotView | null = full
-    ? { src: full.phone.src, width: full.phone.width, height: full.phone.height, tall: full.phone.height > full.phone.topHeight }
-    : base
+    ? full.phone
+      ? { src: full.phone.src, width: full.phone.width, height: full.phone.height, tall: full.phone.height > full.phone.topHeight }
+      : null
+    : base && hasPhoneFrame(base)
       ? { src: mobileOf(base), width: 390, height: 844, tall: false }
       : null;
 

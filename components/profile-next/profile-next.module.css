@@ -1,29 +1,11 @@
 /* The redesigned profile (app/p/[slug]/next), the owner's "Banner" pick in
-   round 7 of the preview (ops handoff profile-redesign-preview-r7). Dark only:
-   the page sets the site's dark tokens on its own root, whatever theme the
-   visitor chose, and every style here is scoped to this page (a CSS module).
-   Widths follow the preview: 760 px and up is the wide hero; 401 px and up is
-   the tall floating bar. */
+   round 7 of the preview (ops handoff profile-redesign-preview-r7). It uses
+   the site's own tokens (app/globals.css; the site is dark only), adding only
+   the page's own colours below, and every style here is scoped to this page (a
+   CSS module). Widths follow the preview: 760 px and up is the wide hero;
+   401 px and up is the tall floating bar. */
 
 .root {
-  color-scheme: dark;
-  --color-bg: #070709;
-  --color-card: #101013;
-  --color-raised: #18181c;
-  --color-edge: #232328;
-  --color-edge-strong: #34343b;
-  --color-ink: #ececef;
-  --color-mute: #8d8d96;
-  --color-accent: #fbbf24;
-  --color-fill: #fbbf24;
-  --color-on-fill: #1a1405;
-  --color-accent-soft: rgba(251, 191, 36, 0.1);
-  --color-up: #4ade80;
-  --color-down: #f87171;
-  --glow: rgba(251, 191, 36, 0.09);
-  --card-top: rgba(255, 255, 255, 0.035);
-  --card-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --card-drop: 0 1px 2px rgba(0, 0, 0, 0.45), 0 14px 32px -18px rgba(0, 0, 0, 0.7);
   --warn: #fbbf24;
   --up-soft: rgba(74, 222, 128, 0.15);
   --warn-soft: rgba(251, 191, 36, 0.15);
@@ -41,7 +23,6 @@
   --p: 0;
   position: relative;
   min-height: 100%;
-  background: radial-gradient(40rem 22rem at 70% -8%, var(--glow), transparent 65%), var(--color-bg);
   color: var(--color-ink);
   font-size: 14px;
   line-height: 1.45;
@@ -1502,7 +1483,7 @@
 }
 
 /* ---------------------------------------------------------------- dialogs */
-/* A bottom sheet on phones, a centred box when wide. Native <dialog>, inside the page's root, so it keeps the dark tokens. */
+/* A bottom sheet on phones, a centred box when wide. Native <dialog>, inside the page's root. */
 .dlg {
   margin: auto auto 0;
   width: 100%;
