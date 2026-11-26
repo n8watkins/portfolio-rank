@@ -10,6 +10,11 @@ const SIGN_IN_PROMPT = {
   body: "Likes are saved to your profile so you can find them later. Sign in to start liking.",
 };
 
+/** Sent on window when a like is saved, so other buttons for the same portfolio on the page follow (a profile's header and its floating bar). */
+const LIKED_EVENT = "portfoliorank:liked";
+/** `count` comes with a saved like (the new total); a looked-up state has none. */
+type LikedDetail = { url: string; liked: boolean; count?: number };
+
 /**
  * Heart toggle for liking (= personal bookmark, separate from the ⭐ super-vote).
  * Optimistic: flips instantly, reverts on error, and opens the sign-in modal if
@@ -25,6 +30,8 @@ export function LikeButton({
   showCount = false,
   variant = "button",
   className = "",
+  buttonClassName,
+  children,
   onChange,
 }: {
   url: string;
@@ -37,6 +44,10 @@ export function LikeButton({
   showCount?: boolean;
   variant?: Variant;
   className?: string;
+  /** Replaces the button's own look; its state is `aria-pressed` (the redesigned profile's icon buttons). */
+  buttonClassName?: string;
+  /** With buttonClassName: the button's content (an icon). */
+  children?: React.ReactNode;
   /** createdAt is the removed like's date on an unlike, for an Undo that restores its place. */
   onChange?: (liked: boolean, info?: { createdAt?: string }) => void;
 }) {
@@ -59,13 +70,30 @@ export function LikeButton({
     fetch(`/api/likes?urls=${encodeURIComponent(url)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (live && !touched.current && Array.isArray(d?.liked)) setLiked(d.liked.includes(url));
+        if (!live || touched.current || !Array.isArray(d?.liked)) return;
+        setLiked(d.liked.includes(url));
+        // Buttons for the same portfolio that don't look it up themselves follow this one.
+        window.dispatchEvent(new CustomEvent<LikedDetail>(LIKED_EVENT, { detail: { url, liked: d.liked.includes(url) } }));
       })
       .catch(() => {});
     return () => {
       live = false;
     };
   }, [hydrate, url]);
+  // Another button for this portfolio saved a like: show the same.
+  useEffect(() => {
+    const follow = (e: Event) => {
+      const d = (e as CustomEvent<LikedDetail>).detail;
+      if (d?.url !== url) return;
+      setLiked(d.liked);
+      if (typeof d.count === "number") {
+        touched.current = true;
+        setN(d.count);
+      }
+    };
+    window.addEventListener(LIKED_EVENT, follow);
+    return () => window.removeEventListener(LIKED_EVENT, follow);
+  }, [url]);
 
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -101,6 +129,8 @@ export function LikeButton({
         }
         if (typeof data.count === "number") setN(data.count);
         if (typeof data.createdAt === "string") createdAt = data.createdAt;
+        const count = typeof data.count === "number" ? data.count : Math.max(0, n + (committed === liked ? 0 : committed ? 1 : -1));
+        window.dispatchEvent(new CustomEvent<LikedDetail>(LIKED_EVENT, { detail: { url, liked: committed, count } }));
       } else {
         committed = !next;
         setLiked(!next);
@@ -117,6 +147,22 @@ export function LikeButton({
 
   const heart = liked ? "♥" : "♡";
   const label = `${liked ? "Liked" : "Like"}${showCount && n > 0 ? ` · ${n}` : ""}`;
+
+  if (buttonClassName) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy}
+        aria-pressed={liked}
+        aria-label={name ? `Like ${name}` : "Like"}
+        title={liked ? "Liked" : "Like"}
+        className={buttonClassName}
+      >
+        {children}
+      </button>
+    );
+  }
 
   if (variant === "icon") {
     return (

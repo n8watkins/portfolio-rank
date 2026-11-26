@@ -1,5 +1,5 @@
 // The design tokens in app/globals.css: every text colour reaches 4.5:1 on
-// every surface, in the dark theme and the light one.
+// every surface. The site is dark only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -15,7 +15,6 @@ function block(opener) {
 }
 
 const dark = block("@theme {");
-const light = { ...dark, ...block(':root[data-theme="light"] {') };
 
 function luminance(hex) {
   const [r, g, b] = [1, 3, 5].map((i) => {
@@ -33,23 +32,21 @@ function contrast(a, b) {
 const TEXT = ["ink", "mute", "accent", "up", "down"];
 const SURFACES = ["bg", "card", "raised"];
 
-for (const [name, theme] of [
-  ["dark", dark],
-  ["light", light],
-]) {
-  test(`${name} theme: every text token reaches 4.5:1 on every surface`, () => {
-    for (const t of TEXT)
-      for (const s of SURFACES) {
-        const ratio = contrast(theme[t], theme[s]);
-        assert.ok(ratio >= 4.5, `${t} ${theme[t]} on ${s} ${theme[s]}: ${ratio.toFixed(2)}:1`);
-      }
-  });
-  test(`${name} theme: text on the amber fill reaches 4.5:1`, () => {
-    assert.ok(contrast(theme["on-fill"], theme.fill) >= 4.5);
-  });
-}
+test("every text token reaches 4.5:1 on every surface", () => {
+  for (const t of TEXT)
+    for (const s of SURFACES) {
+      const ratio = contrast(dark[t], dark[s]);
+      assert.ok(ratio >= 4.5, `${t} ${dark[t]} on ${s} ${dark[s]}: ${ratio.toFixed(2)}:1`);
+    }
+});
+test("text on the amber fill reaches 4.5:1", () => {
+  assert.ok(contrast(dark["on-fill"], dark.fill) >= 4.5);
+});
 
-test("the system light theme and the chosen light theme use the same colours", () => {
-  const system = block(':root:not([data-theme="dark"]) {');
-  for (const [k, v] of Object.entries(system)) assert.equal(light[k], v, `--color-${k}`);
+test("there is no light theme: no theme switch, no light scheme outside print", () => {
+  assert.ok(!/data-theme/.test(css), "globals.css still mentions data-theme");
+  const screen = css.slice(0, css.indexOf("@media print"));
+  assert.ok(!/prefers-color-scheme/.test(css), "globals.css still follows the system scheme");
+  assert.ok(!/color-scheme:\s*light/.test(screen), "a light colour-scheme outside print");
+  assert.match(screen, /:root\s*{\s*color-scheme:\s*dark/);
 });

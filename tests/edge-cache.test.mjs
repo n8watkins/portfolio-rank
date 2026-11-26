@@ -146,6 +146,11 @@ test("share images are made once per change: kept like their page, tagged with i
     assert.deepEqual(tagsFor(path), ["blog"], path);
   }
   assert.equal(ttlFor("/twitter-image"), 86400);
+  // The redesigned profile behind PROFILE_NEXT and its share card carry their site's tag, so its purge reaches them.
+  for (const path of [`/p/${slug}/next`, `/p/${slug}/next/card`]) {
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["profiles", profileTag(url)], path);
+  }
   // Grade reports' images stay private and uncached; other deeper paths are not pages.
   for (const path of ["/grade/abc/opengraph-image", "/og/p", "/og/x", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
 });

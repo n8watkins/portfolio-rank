@@ -34,7 +34,7 @@ Cookies:
 - **Print pass**: a one-hour pass to print a portfolio's report.
 - **Face-off intro seen**: so the how-to-play card doesn't show again.
 
-Saved only in your browser, never sent to the site: your theme (only if you pick Light or Dark), the auto-open setting, whether the face-off shows scores, and which reports already celebrated.
+Saved only in your browser, never sent to the site: the auto-open setting, whether the face-off shows scores, and which reports already celebrated.
 A few notes last only while the tab is open, such as whether the sign-in reminder was shown, and, if you grade with your own Gemini key, that key until the grade is done.
 
 The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.
