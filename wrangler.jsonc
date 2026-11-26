@@ -99,6 +99,10 @@
     // the capture makes the tall page images either way (stored once the
     // images bucket exists), but no page links to them until this is "true".
     "FULLPAGE_PREVIEW_ENABLED": "false",
+    // The redesigned profile (the owner's "Banner" pick, lib/profile-next): served
+    // at /p/<address>/next only while this is "true", noindex and linked from
+    // nowhere; the current profile at /p/<address> is unchanged either way.
+    "PROFILE_NEXT": "false",
     // The public images bucket's own domain (pipeline/shot-store.mjs), where
     // the tall images and thumbnails are served straight from R2. Empty
     // until the owner connects it (docs/audits/fullpage-images.md "Delivery").

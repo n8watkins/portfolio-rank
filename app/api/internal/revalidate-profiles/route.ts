@@ -30,6 +30,10 @@ export async function POST(req: Request) {
   // A profile's slug is a whole encoded address, which Next does not match by its literal path, so the
   // profile route itself is revalidated: every cached profile renders again on its next visit (one render
   // each, and only in an hour when a profile was hidden or came back).
-  if (list.length) revalidatePath("/p/[slug]", "page");
+  if (list.length) {
+    revalidatePath("/p/[slug]", "page");
+    // The redesigned profile behind PROFILE_NEXT (app/p/[slug]/next) is cached the same way.
+    revalidatePath("/p/[slug]/next", "page");
+  }
   return NextResponse.json({ revalidated: list.length }, { headers: { "cache-control": "no-store" } });
 }

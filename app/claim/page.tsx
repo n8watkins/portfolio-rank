@@ -10,6 +10,8 @@ import { btnPrimary } from "@/components/ui/styles";
 import { gamesEnabled } from "@/lib/games/server";
 import { isKnownPortfolio } from "@/lib/roster";
 import { heroOf, shotBases } from "@/lib/shots";
+// The introduction, shared with the redesigned profile's claim card.
+import { claimIntro } from "@/lib/profile-next/claim-copy.mjs";
 
 // Claim your portfolio: /claim?url=<a listed portfolio>, or /claim to find it
 // by its address (Settings, "Remove my portfolio"). Always on, so an owner can
@@ -62,9 +64,7 @@ export default async function ClaimPage({ searchParams }: { searchParams: Promis
             Remove or manage your portfolio
           </h1>
           <p className="mt-2 text-sm text-mute">
-            {tools
-              ? "First prove it's yours: put a short code we give you on your site. Then you can re-check it, hide its grade or remove it."
-              : "First prove it's yours: a link to your GitHub profile on the site, or a short code you add to the page. Then, with the code, you can hide its grade or remove it."}
+            {claimIntro(tools)}
           </p>
           <form method="get" className="mt-5 flex flex-col gap-2 sm:flex-row">
             <label className="sr-only" htmlFor="claim-url">

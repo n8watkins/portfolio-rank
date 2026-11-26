@@ -8,7 +8,7 @@ import { useState } from "react";
  * fallback for insecure contexts (HTTP over a LAN IP) where navigator.clipboard
  * is undefined. Returns whether the copy succeeded.
  */
-async function copyToClipboard(text: string): Promise<boolean> {
+export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
@@ -43,11 +43,19 @@ export function ShareButton({
   title,
   label = "Share",
   className = "",
+  buttonClassName,
+  ariaLabel,
+  children,
 }: {
   url?: string;
   title?: string;
   label?: string;
   className?: string;
+  /** Replaces the button's own look; while the link shows as copied it carries data-copied (the redesigned profile). */
+  buttonClassName?: string;
+  ariaLabel?: string;
+  /** With buttonClassName: the button's content (an icon, or an icon and a word). */
+  children?: React.ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -74,6 +82,17 @@ export function ShareButton({
       window.prompt("Copy this link:", href);
     }
   };
+
+  if (buttonClassName) {
+    return (
+      <button type="button" onClick={share} className={buttonClassName} aria-label={ariaLabel} title={copied ? "Link copied" : "Share"} data-copied={copied || undefined}>
+        {children}
+        <span role="status" className="sr-only">
+          {copied ? "Link copied" : ""}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button
