@@ -1,33 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 // The shell shows its Blog links (header, footer, the phone's More sheet)
 // only once a post is published (owner, 2026-11-11); /blog itself is always
-// reachable. The answer comes from /api/blog/live (cached 5 minutes) once
-// per page load and is remembered for the tab, so links don't blink between
-// pages (a "not yet" is asked again on the next page load). Once the blog always has posts, this gate can go.
+// reachable. The server decides while it renders the shell
+// (lib/blog-live.ts, through BlogLiveProvider), so on a site with posts the
+// links are in the HTML and nothing is fetched. Only when the server said
+// "not yet" (a page rendered before the first post, or a failed read) does
+// the browser ask /api/blog/live, at most once every 10 minutes per browser,
+// and the link joins the end of the nav without moving anything else.
+// Once the blog always has posts, this gate can go.
 
 const KEY = "pr-blog-live";
+const RECHECK_MS = 10 * 60_000;
 let pending: Promise<boolean> | null = null;
 
-function remembered(): boolean {
+const ServerSaid = createContext(false);
+
+export function BlogLiveProvider({ live, children }: { live: boolean; children: React.ReactNode }) {
+  return <ServerSaid.Provider value={live}>{children}</ServerSaid.Provider>;
+}
+
+/** The browser's last answer: true, false, or null when unknown or stale. */
+function remembered(): boolean | null {
   try {
-    return sessionStorage.getItem(KEY) === "1";
+    const v = JSON.parse(localStorage.getItem(KEY) ?? "null") as { live?: boolean; at?: number } | null;
+    if (!v || typeof v.live !== "boolean") return null;
+    if (v.live) return true;
+    return Date.now() - Number(v.at ?? 0) < RECHECK_MS ? false : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 function ask(): Promise<boolean> {
-  // Once live in this tab, it stays live: a blog rarely loses its last post.
-  if (remembered()) return Promise.resolve(true);
+  const known = remembered();
+  if (known !== null) return Promise.resolve(known);
   pending ??= fetch("/api/blog/live")
     .then((r) => (r.ok ? r.json() : { live: false }))
     .then((b: { live?: boolean }) => {
       const live = b.live === true;
       try {
-        sessionStorage.setItem(KEY, live ? "1" : "0");
+        localStorage.setItem(KEY, JSON.stringify({ live, at: Date.now() }));
       } catch {
         /* storage blocked: ask again next page */
       }
@@ -37,17 +52,19 @@ function ask(): Promise<boolean> {
   return pending;
 }
 
-/** True once the blog has a published post; false until then (and on the server). */
+/** True once the blog has a published post. */
 export function useBlogLive(): boolean {
-  const [live, setLive] = useState(false);
+  const serverSaid = useContext(ServerSaid);
+  const [live, setLive] = useState(serverSaid);
   useEffect(() => {
+    if (serverSaid) return;
     let alive = true;
-    ask().then((v) => alive && setLive(v));
+    ask().then((v) => alive && v && setLive(true));
     return () => {
       alive = false;
     };
-  }, []);
-  return live;
+  }, [serverSaid]);
+  return serverSaid || live;
 }
 
 /** The footer's Blog link, shown once the blog has a published post. */
