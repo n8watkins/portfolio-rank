@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { isTextField } from "@/lib/dom";
-import { frameOf } from "@/lib/shot-url";
+import { frameOf, hasPhoneFrame } from "@/lib/shot-url";
 
 // Guess the percentile on the real games API (lib/games, GAMES_V2): five
 // portfolios, guess where each lands among all of them ("top X%"), then
@@ -404,7 +404,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
             <div className="relative aspect-[390/290] w-full md:aspect-[16/10]">
               {r.shot ? (
                 <picture>
-                  <source media="(max-width: 767px)" srcSet={frameOf(r.shot, "mobile.jpg")} />
+                  {hasPhoneFrame(r.shot) && <source media="(max-width: 767px)" srcSet={frameOf(r.shot, "mobile.jpg")} />}
                   <img src={frameOf(r.shot, "hero.jpg")} alt={`Screenshot of ${r.domain}`} fetchPriority="high" className="absolute inset-0 h-full w-full bg-raised object-cover object-top" />
                 </picture>
               ) : (

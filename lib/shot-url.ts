@@ -2,14 +2,37 @@
 
 export type Frame = "hero.jpg" | "mobile.jpg";
 
+// A capture with no phone frame (its phone view was missing, meta.phoneMissing:
+// pipeline/capture.mjs narrowView) carries this mark on its base, so every page
+// that already passes the base around knows it without another read. It never
+// reaches an image URL: frameOf drops it.
+const NO_PHONE = "nophone";
+
+/** The base marked as having no phone frame (lib/shots.ts shotBases, from meta.phoneMissing). */
+export function withoutPhone(base: string): string {
+  return hasPhoneFrame(base) ? `${base}${base.includes("?") ? "&" : "?"}${NO_PHONE}=1` : base;
+}
+
+/** Whether a capture base has a phone frame (mobile.jpg); false when it is marked withoutPhone. */
+export function hasPhoneFrame(base: string): boolean {
+  return !new URLSearchParams(base.split("?")[1] ?? "").has(NO_PHONE);
+}
+
 /**
  * One frame of a capture. `base` is `${SHOTS_BASE_URL}/${shot_key}`, optionally
  * with `?v=<version>` (lib/shots.ts), which goes after the file name so a
- * recapture gets a new URL and every version can be cached for good.
+ * recapture gets a new URL and every version can be cached for good. A
+ * capture with no phone frame (withoutPhone) answers its hero.jpg for
+ * mobile.jpg: the desktop's first screen, never a missing file. Callers that
+ * show a phone view as such check hasPhoneFrame first.
  */
 export function frameOf(base: string, frame: Frame): string {
-  const [path, query] = base.split("?");
-  return `${path}/${frame}${query ? `?${query}` : ""}`;
+  const [path, query = ""] = base.split("?");
+  const params = new URLSearchParams(query);
+  const file = frame === "mobile.jpg" && params.has(NO_PHONE) ? "hero.jpg" : frame;
+  params.delete(NO_PHONE);
+  const q = params.toString();
+  return `${path}/${file}${q ? `?${q}` : ""}`;
 }
 
 /** One view as stored in portfolios.meta.fullPage (pipeline/fullpage.mjs captureView). */
@@ -22,7 +45,8 @@ export type FullPageFrame = { width: number; height: number; pageHeight?: number
  * `cropped`: the page goes on below `height`.
  */
 export type FullPageShot = { src: string; thumb: string; thumbWidth: number; width: number; height: number; topHeight: number; cropped: boolean };
-export type FullPagePreview = { desktop: FullPageShot; phone: FullPageShot };
+/** `phone` is null when the capture has no phone image (its narrow view was missing): show the desktop alone, never a broken image. */
+export type FullPagePreview = { desktop: FullPageShot; phone: FullPageShot | null };
 
 const isFrame = (f: unknown): f is FullPageFrame => {
   const x = f as Partial<FullPageFrame> | null;
@@ -36,14 +60,16 @@ const VIEWS = {
 } as const;
 
 /**
- * The tall images and thumbnails of a capture, or null unless both views
- * were taken. `base` is `${SHOTS_BASE_URL}/${shot_key}` (any ?v= on it is
- * dropped): the files sit under their own version, <shot_key>/<v>/, and
- * never change, so they can be cached for good.
+ * The tall images and thumbnails of a capture, or null unless the desktop
+ * view was taken; `phone` is null when only the desktop's were stored
+ * (pipeline/fullpage.mjs nextFullPage). `base` is
+ * `${SHOTS_BASE_URL}/${shot_key}` (any ?v= on it is dropped): the files sit
+ * under their own version, <shot_key>/<v>/, and never change, so they can
+ * be cached for good.
  */
 export function fullPageFrames(base: string, fullPage: unknown): FullPagePreview | null {
   const fp = fullPage as { v?: string; desktop?: unknown; phone?: unknown } | null;
-  if (!fp || !/^[0-9a-z]{1,16}$/.test(String(fp.v ?? "")) || !isFrame(fp.desktop) || !isFrame(fp.phone)) return null;
+  if (!fp || !/^[0-9a-z]{1,16}$/.test(String(fp.v ?? "")) || !isFrame(fp.desktop)) return null;
   const dir = `${base.split("?")[0]}/${fp.v}`;
   const shot = (name: keyof typeof VIEWS, f: FullPageFrame): FullPageShot => ({
     src: `${dir}/${VIEWS[name].tall}`,
@@ -54,7 +80,7 @@ export function fullPageFrames(base: string, fullPage: unknown): FullPagePreview
     topHeight: Math.min(VIEWS[name].topHeight, f.height),
     cropped: Boolean(f.cropped),
   });
-  return { desktop: shot("desktop", fp.desktop), phone: shot("phone", fp.phone) };
+  return { desktop: shot("desktop", fp.desktop), phone: isFrame(fp.phone) ? shot("phone", fp.phone) : null };
 }
 
 /** A roster site's icon, served by the Worker (worker/assets.ts) with a placeholder when it has none. */
