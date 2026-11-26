@@ -108,11 +108,12 @@ export const TRACKING_COOKIES = [
   // Server-side Google Tag Manager's first-party identifiers.
   [/^(FPID|FPLC)$/, "Google Analytics"],
   [/^_gcl_/, "Google Ads conversion tracking"],
-  [/^(IDE|DSID|test_cookie|__gads|__gpi|__eoi|APC)$/, "Google Ads", "ads"],
+  [/^(__gads|__gpi|__eoi)$/, "Google AdSense", "ads"],
+  [/^(IDE|DSID|test_cookie|APC)$/, "Google Ads", "ads"],
   [/^_fb[pc]$/, "Meta Pixel"],
   [/^_hj/, "Hotjar"],
   [/^_cl(ck|sk)$/, "Microsoft Clarity"],
-  [/^_uet(sid|vid)$/, "Microsoft Advertising (UET)"],
+  [/^_uet(sid|vid)$/, "Microsoft Advertising"],
   [/^(li_fat_id|li_sugr|bcookie|lidc|UserMatchHistory|AnalyticsSyncHistory|ln_or|_li_ss)$/, "LinkedIn"],
   [/^(_ttp|_tt_enable_cookie|ttcsid(_.+)?)$/, "TikTok"],
   [/^(_pin_unauth|_pinterest_ct_ua|_epik)$/, "Pinterest"],
@@ -600,7 +601,7 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
   // The banner, at two levels (findConsent): `banner` the strict one (a consent banner about analytics,
   // tracking or advertising with a decision, or a known tool's), which alone earns "Asks before tracking"
   // and the words "a cookie banner was shown"; `notice` the loose one (cookie wording and a choice in a
-  // banner-like box), which only lets the sentence quote what was on the page. Either way, the site's own
+  // banner-like box), which only chooses the public sentence (its words stay here). Either way, the site's own
   // tracking on arrival, before anything was clicked, started before asking.
   const banner = dom ? Boolean(dom.banner) : null;
   const notice = dom?.loose ?? null;
@@ -620,6 +621,8 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
     reason,
     banner,
     banner_how: dom?.banner ?? (notice ? "notice" : null),
+    // Whether the loose hit offered a decision (Accept, Decline); its words (banner_sample) are for the admin only.
+    notice_decision: notice ? Boolean(notice.decision) : null,
     banner_sample: dom?.sample ?? notice?.sample ?? null,
     tool,
     vendors,
@@ -650,8 +653,9 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
  *
  * The generic banner, at two levels. Both need a banner-like box: a visible
  * element that is fixed, sticky, a dialog, or named like a consent banner,
- * under 1,500 characters, and not a navigation bar, a page header or the
- * main content (unless named like a consent banner). Controls are read from
+ * under 1,500 characters; a navigation bar, a page header (or role=banner)
+ * or the main content only when it is named like a consent banner or offers
+ * a decision (a real cookie banner inside a <header> counts). Controls are read from
  * their text, value, aria-label or title, in English, French, German,
  * Spanish, Italian, Portuguese, Dutch and Polish.
  *   strict (`banner: "generic"`): a decision control (accept, reject, agree,
@@ -665,8 +669,9 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
  *   loose (`loose: { decision, sample }`): cookie-family words in a site
  *     context ("cookie" with use, site, browser, privacy, policy, accept...;
  *     never "consent" alone) and a decision or an acknowledgement (OK, Got
- *     it; never "settings", "preferences" or "manage" alone). It only lets the
- *     sentence quote what was on the page (lib/cookie-check.mjs).
+ *     it; never "settings", "preferences" or "manage" alone). It only chooses
+ *     the public sentence (lib/cookie-check.mjs); `sample` is the element's
+ *     own words, without its controls' labels, kept for the admin only.
  * The false-positive guard, for both: "No cookies, no tracking. OK", a footer
  * link to a cookie policy (no choice control), a blog post about cookies, a
  * "Cookie Clicker" project card or a "Cookie recipe finder" dialog (no site
@@ -800,9 +805,18 @@ export function findConsent([tools, frameHosts]) {
     const p = getComputedStyle(el).position;
     if (p === "fixed" || p === "sticky") candidates.add(el);
   }
-  // A navigation bar, a page header or the main content is never a banner (unless named like one).
+  // A navigation bar, a page header or the main content is not a banner, unless named like one or it offers a
+  // decision (Accept, Decline): a real cookie banner inside a <header> or a role=banner element counts.
   const LANDMARK_IN = "nav, header, [role=navigation], [role=banner]";
   const MAIN = "main, [role=main]";
+  const CONTROLS = "button, a, [role=button], input[type=button], input[type=submit]";
+  // An element's own words, without its controls' labels: kept in the reading for the admin, never shown publicly.
+  const ownWords = (el) => {
+    const parts = [];
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) if (!t.parentElement?.closest(CONTROLS)) parts.push(t.nodeValue);
+    return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 160);
+  };
   for (const el of banner ? [] : candidates) {
     if (!el.isConnected || !visible(el)) continue;
     const text = (el.innerText ?? "").trim();
@@ -810,23 +824,23 @@ export function findConsent([tools, frameHosts]) {
     const named = NAMED.test(nameOf(el));
     // Pinned on the screen (fixed, sticky), a dialog, or named as a banner: not a section of the page.
     if (!named && !pinned(el) && !el.matches(DIALOG)) continue;
-    if (!named && (el.closest(LANDMARK_IN) || el.matches(MAIN))) continue;
     const cookieText = COOKIE_FAMILY.test(text) && (COOKIE_CONTEXT.test(text) || USES.test(text));
     // "No cookies, no tracking. OK" is neither level, unless it also says it uses some.
     if (NONE_USED.test(text) && !USES.test(text)) continue;
     if (!(named || cookieText)) continue;
-    const labels = [...el.querySelectorAll("button, a, [role=button], input[type=button], input[type=submit]")].filter(visible).flatMap(labelsOf);
+    const labels = [...el.querySelectorAll(CONTROLS)].filter(visible).flatMap(labelsOf);
     const decision = labels.some((l) => DECISION.test(l));
     const ack = labels.some((l) => ACK.test(l));
     if (!decision && !ack) continue;
-    const words = text.replace(/\s+/g, " ").slice(0, 160);
+    if (!named && !decision && (el.closest(LANDMARK_IN) || el.matches(MAIN))) continue;
+    const words = ownWords(el);
     // Strict: a decision, and consent-banner markers or cookies with what they are for. Earns "Asks before tracking".
     if (decision && (named || (cookieText && PURPOSE.test(text)))) {
       banner = "generic";
       sample = words;
       break;
     }
-    // Loose: cookie wording in a banner-like box with a choice. It only lets the sentence quote it.
+    // Loose: cookie wording in a banner-like box with a choice. It only chooses the sentence; its words are kept for the admin.
     if (!loose || (decision && !loose.decision)) loose = { decision, sample: words };
   }
   const scripts = [...document.scripts].map((s) => s.src).filter(Boolean).slice(0, 200);

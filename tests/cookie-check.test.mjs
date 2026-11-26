@@ -286,14 +286,47 @@ test("a LinkedIn badge's and an X timeline's tracking cookies are a widget's, an
   assert.equal(view("x-timeline").title, "Tracking cookies from a third-party widget (X (Twitter))");
 });
 
-test("a loose hit only chooses the sentence: the fix is the same, and it quotes what was on the page", () => {
+test("a loose hit only chooses the sentence: the fix is the same, and the page's words are never quoted", () => {
   for (const name of ["loose-banner-with-decision", "loose-notice-ok-only"]) assert.equal(view(name).title, "Sets tracking cookies before asking permission", name);
   assert.equal(
-    view("loose-notice-ok-only").sentence,
-    `On our visit on 25 Nov 2026 from the United States, Google Analytics set tracking cookies on the site's own domain as the page loaded, before anything was clicked. A notice reading "Cookie notice: see our cookie policy. OK" was on the page.`
+    view("loose-banner-with-decision").sentence,
+    "On our visit on 25 Nov 2026 from the United States, Google Analytics set tracking cookies on the site's own domain as the page loaded, before anything was clicked. A message about cookies was on the page, but Google Analytics had already started."
   );
-  assert.doesNotMatch(view("loose-notice-ok-only").sentence, /cookie banner/);
+  assert.equal(
+    view("loose-notice-ok-only").sentence,
+    "On our visit on 25 Nov 2026 from the United States, Google Analytics set tracking cookies on the site's own domain as the page loaded, before anything was clicked. No cookie banner offering a choice was found on the page."
+  );
+  // The words stay in the stored reading, for the admin.
+  assert.equal(read("loose-notice-ok-only").banner_sample, "Cookie notice: see our cookie policy. OK");
+  assert.equal(read("loose-notice-ok-only").notice_decision, false);
+  for (const [name] of cases) assert.doesNotMatch(JSON.stringify(view(name)), /Cookie notice: see|Cookies on this site/, `${name}: no page text in the view`);
   assert.equal(view("loose-notice-nothing-tracked").title, "No tracking cookies", "a loose notice never earns 'Asks before tracking'");
+});
+
+test("a sentence never names the same vendor twice", () => {
+  // The vendor list a fix's sentence opens with ("On our visit ..., A, B and C set/tracked").
+  const twice = (s) => {
+    const m = s.match(/United States, (.+?) (?:set tracking cookies|tracked the visit)/);
+    if (!m) return false;
+    const list = m[1].split(/, | and /);
+    return new Set(list).size !== list.length;
+  };
+  // UET cookies with the bat.bing.com beacon: one "Microsoft Advertising".
+  const uet = makeReading({
+    pageUrl: "https://u.example.com/",
+    cookies: [{ name: "_uetsid", domain: ".u.example.com" }, { name: "_uetvid", domain: ".u.example.com" }],
+    requests: ["https://u.example.com/", "https://bat.bing.com/action/0?ti=1"],
+    dom: { tools: [], banner: null, scripts: [] },
+    at: AT,
+  });
+  assert.deepEqual(uet.vendors, ["Microsoft Advertising"]);
+  assert.equal(trackingCookieVendor({ name: "__gads", domain: ".a.dev" }), "Google AdSense");
+  for (const [name] of cases) {
+    const v = view(name);
+    assert.equal(twice(v.sentence), false, `${name}: ${v.sentence}`);
+    assert.equal(new Set(read(name).vendors).size, read(name).vendors?.length ?? 0, name);
+  }
+  assert.match(cookieCheckView(factsWith(uet)).sentence, /^On our visit on 25 Nov 2026 from the United States, Microsoft Advertising set tracking cookies/);
 });
 
 test("readings are kept by region: a new reading replaces its own, the others stay", () => {
@@ -345,14 +378,14 @@ test("display: the site's own tracking on arrival is one fix; with a first-party
   });
   assert.equal(
     v.sentence,
-    "On our visit on 25 Nov 2026 from the United States, Google Analytics and Hotjar set tracking cookies on the site's own domain as the page loaded, before anything was clicked. No cookie banner was found on the page."
+    "On our visit on 25 Nov 2026 from the United States, Google Analytics and Hotjar set tracking cookies on the site's own domain as the page loaded, before anything was clicked. No cookie banner offering a choice was found on the page."
   );
 });
 
 test("display: a beacon only is the same fix, 'Tracks visitors before asking permission', its recommendation fitting a pixel", () => {
   const v = view("no-consent-beacon-only");
   assert.deepEqual(shown(v), { level: "fix", title: "Tracks visitors before asking permission", recommendation: "Start Meta Pixel only after the visitor agrees." });
-  assert.equal(v.sentence, "On our visit on 25 Nov 2026 from the United States, Meta Pixel tracked the visit as the page loaded, before anything was clicked. No cookie banner was found on the page.");
+  assert.equal(v.sentence, "On our visit on 25 Nov 2026 from the United States, Meta Pixel tracked the visit as the page loaded, before anything was clicked. No cookie banner offering a choice was found on the page.");
 });
 
 test("display: with a strict banner shown it is the same fix, and only then does the sentence name the cookie banner", () => {

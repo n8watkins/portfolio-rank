@@ -31,11 +31,15 @@ const REVIEW_BANNERS = {
   "/r-aria": { level: "loose", html: bar(`<p>Cookies on this site</p><button aria-label="Accept cookies">✓</button> <button aria-label="Decline cookies">✕</button>`) },
   "/r-title": { level: "loose", html: bar(`<p>Cookies on this site.</p><button title="Allow">✓</button>`) },
   "/r-analytics": { level: "strict", html: bar(`<p>We use cookies for analytics and advertising.</p><button>Accept all</button> <button>Reject all</button>`) },
+  // Real banners inside landmarks (final review of #305): a decision control makes them count wherever they sit.
+  "/r-in-header": { level: "strict", html: `<header style="position:fixed;bottom:0;left:0;right:0;background:#222;color:#fff;padding:16px"><p>We use cookies to analyse traffic.</p><button>Accept</button> <button>Decline</button></header>` },
+  "/r-role-banner": { level: "strict", html: `<div role="banner" style="position:fixed;bottom:0;left:0;right:0;background:#222;color:#fff;padding:16px"><p>We use cookies to analyse traffic.</p><button>Accept</button> <button>Decline</button></div>` },
 };
 
-// The third review's adversarial pages: none is a cookie banner or notice. With the site's own GA each is the plain
-// fix with "No cookie banner was found on the page.", except the login dialog, which is quoted as what it says.
+// The third review's adversarial pages: none is a cookie banner offering a choice. With the site's own GA each is the
+// plain fix with "No cookie banner offering a choice was found on the page."; no page text is ever quoted.
 const ADVERSARIAL = {
+  "/a-nav-preferences": `<nav style="position:sticky;top:0;background:#fff">Projects · <a href="/cookie-stand">Cookie Stand app</a> · <button>Preferences</button></nav>`,
   "/a-terms": `<dialog open style="position:fixed;top:20%"><h2>Terms of use</h2><p>By continuing you consent to our terms of service.</p><button>Accept</button> <button>Decline</button></dialog>`,
   "/a-camera": `<div role="dialog" style="position:fixed;top:20%;left:20%;background:#fff;padding:16px"><p>Allow this site to use your camera?</p><button>Allow</button> <button>Deny</button></div>`,
   "/a-recipe": `<dialog open style="position:fixed;top:20%"><h2>Cookie recipe finder</h2><p>Search 500 chocolate chip cookie recipes by ingredient.</p><button>OK</button></dialog>`,
@@ -237,9 +241,10 @@ for (const [path, { level }] of Object.entries(REVIEW_BANNERS)) {
     assert.deepEqual([v.level, v.title], ["fix", "Sets tracking cookies before asking permission"]);
     if (level === "strict") assert.match(v.sentence, /A cookie banner was shown, but Google Analytics had already started\.$/);
     else {
-      assert.match(v.sentence, /A notice reading ".+" was on the page\.$/);
+      assert.match(v.sentence, /A message about cookies was on the page, but Google Analytics had already started\.$/);
       assert.doesNotMatch(v.sentence, /cookie banner/);
     }
+    assert.doesNotMatch(v.sentence, /"/, "no page text is quoted");
   });
 }
 
@@ -251,13 +256,14 @@ test("the first trial's banners are found at their level", async () => {
   }
 });
 
-test("a cookie notice with only an OK and the site's own tracking: the one fix, quoting the notice", async () => {
+test("a cookie notice with only an OK and the site's own tracking: the one fix; no choice offered; its words kept for the admin only", async () => {
   const consent = await consentOn("/ok-notice");
   assert.deepEqual([consent.banner, consent.loose?.decision], [null, false]);
   const { r, v } = await readingOf("/ok-notice");
   assert.equal(r.state, "with-notice");
+  assert.equal(r.banner_sample, "Cookie notice: see our cookie policy.", "the element's own words, without its button labels");
   assert.deepEqual([v.level, v.title], ["fix", "Sets tracking cookies before asking permission"]);
-  assert.match(v.sentence, /before anything was clicked\. A notice reading "Cookie notice: see our cookie policy\. OK" was on the page\.$/);
+  assert.match(v.sentence, /before anything was clicked\. No cookie banner offering a choice was found on the page\.$/);
 });
 
 for (const path of Object.keys(ADVERSARIAL)) {
@@ -269,9 +275,8 @@ for (const path of Object.keys(ADVERSARIAL)) {
     assert.deepEqual([plain.v.level, plain.v.title], ["pass", "No tracking cookies"], path);
     const ga = await readingOf(`${path}-ga`);
     assert.deepEqual([ga.v.level, ga.v.title], ["fix", "Sets tracking cookies before asking permission"], path);
-    assert.doesNotMatch(ga.v.sentence, /cookie banner was shown/, path);
-    if (path === "/a-login") assert.match(ga.v.sentence, /A notice reading "We use a cookie to keep you signed in\. Log in OK" was on the page\.$/);
-    else assert.match(ga.v.sentence, /No cookie banner was found on the page\.$/, path);
+    assert.doesNotMatch(ga.v.sentence, /cookie banner was shown|message about cookies|"/, path);
+    assert.match(ga.v.sentence, /No cookie banner offering a choice was found on the page\.$/, path);
   });
 }
 
