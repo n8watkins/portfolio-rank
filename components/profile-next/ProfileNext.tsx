@@ -50,7 +50,8 @@ const HERO_ID = "pn-hero";
 type Report = NonNullable<NextProfile["report"]>;
 type Card = Report["cards"][number];
 type BasicsItem = { id: string; icon: string; label: string; chip: string; value: string; st: string; explain: string };
-type Links = { ok: number; bad: number; headline: string; notes: string[]; rule: boolean; min: number };
+type LinkRow = { url: string; name: string; address: string; word: string; st: string };
+type Links = { ok: number; bad: number; headline: string; notes: string[]; rule: boolean; min: number; items: LinkRow[] | null };
 type Row = { key: string; label: string; def: string; value: number; st: string };
 
 const ST_CLASS: Record<string, string> = { yes: s.stYes, no: s.stNo, warn: s.stWarn, info: s.stInfo };
@@ -234,6 +235,21 @@ function ProjectsBody({ links, builtWith, notice }: { links: Links | null; built
             </p>
           )}
           {links.rule && <p className={s.note}>Read from the home page and its projects page. At least {links.min} project links that load is what counts.</p>}
+          {/* The links themselves, when the capture stored them: each opens in a new tab, and passes no ranking credit. */}
+          {links.items && (
+            <ul className={`${s.rows} ${s.linkRows}`}>
+              {links.items.map((l) => (
+                <li key={l.url} className={s.row}>
+                  <Status st={l.st} />
+                  <a className={`${s.rowK} ${s.rowLink}`} href={l.url} target="_blank" rel="noopener noreferrer nofollow ugc">
+                    {l.name}
+                  </a>
+                  <span className={s.rowV}>{l.word}</span>
+                  {l.name !== l.address && <span className={s.rowDef}>{l.address}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
       {builtWith && (
