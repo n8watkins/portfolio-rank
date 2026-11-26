@@ -9,7 +9,7 @@ import { chromium } from "playwright";
 import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
-const MESSAGE = "Re-checked. The speed numbers update within a day.";
+const MESSAGE = "Re-checked. Speed numbers and screenshots update within a day.";
 const PROFILE = `${BASE}/p/${encodeURIComponent(feed[300].url)}`;
 let browser;
 
@@ -45,7 +45,7 @@ async function ownerPage(viewport, { storage = true } = {}) {
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 
 for (const [name, viewport] of [["phone", { width: 390, height: 844 }], ["desktop", { width: 1366, height: 800 }]]) {
-  test(`${name}: the owner sees that the speed numbers update within a day, once, after the reload`, async () => {
+  test(`${name}: the owner sees that speed numbers and screenshots update within a day, once, after the reload`, async () => {
     const { page, context } = await ownerPage(viewport);
     const button = page.getByRole("button", { name: "Re-check my site" });
     await button.waitFor();

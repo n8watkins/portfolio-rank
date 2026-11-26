@@ -14,6 +14,7 @@ import { psiCacheKey, storeIfBetter } from "../lib/psi-store.mjs";
 import { LEASE_MS, releaseLease, takeLease } from "../lib/cache-lease.mjs";
 import { classifyRefusal, readPsi, runPsiCall } from "../lib/psi-core.mjs";
 import { quotaDay } from "../pipeline/quota-day.mjs";
+import { methodSentence } from "../lib/psi-runs.mjs";
 
 async function tempDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "psi-job-"));
@@ -227,4 +228,28 @@ test("the PageSpeed call: the four categories, the key, a daily refusal and a pe
   assert.equal(classifyRefusal(undefined), "rate_limited");
   assert.equal(classifyRefusal("daily limit"), "quota");
   assert.equal(readPsi({}, "mobile").ok, false);
+});
+
+test("the job's one-of-two result replaces an expired average (91 days) but not a fresh one (89 days); a visitor's single run replaces neither", async () => {
+  const db = await tempDb();
+  const k = psiCacheKey("mobile", URL_);
+  const now = Date.now();
+  const average = { ok: true, runs: 2, runsAttempted: 2, scores: { performance: 70 } };
+  const jobOne = { ok: true, runs: 1, runsAttempted: 2, scores: { performance: 40 } }; // the job tried two runs, one was good
+  const visitor = { ok: true, runs: 1, runsAttempted: 1, scores: { performance: 30 } };
+  const failure = { ok: false, error: "timeout", runsAttempted: 2 };
+  const seed = (days) => db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(average), now - days * DAY] });
+  await seed(89);
+  assert.equal(await storeIfBetter(db, k, jobOne, now), false, "89 days: still fresh");
+  assert.equal((await row(db, k)).v.runs, 2);
+  await seed(91);
+  assert.equal(await storeIfBetter(db, k, visitor, now), false, "a visitor's single run never replaces an average, however old");
+  assert.equal(await storeIfBetter(db, k, failure, now), false, "a failure never replaces a good row");
+  assert.equal((await row(db, k)).v.runs, 2);
+  assert.equal(await storeIfBetter(db, k, jobOne, now), true, "91 days: the job's one good run replaces it");
+  const stored = (await row(db, k)).v;
+  assert.equal(stored.runs, 1);
+  assert.equal(methodSentence({ ...stored, ranAt: "2026-11-25T10:00:00Z" }), "One Lighthouse run on 25 Nov 2026", "the row reads as one run");
+  // And a visitor's single run still replaces nothing better than itself: equal runs replace.
+  assert.equal(await storeIfBetter(db, k, visitor, now + 1), true);
 });

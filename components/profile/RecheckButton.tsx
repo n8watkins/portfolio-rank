@@ -13,7 +13,7 @@ import { btnSecondary } from "@/components/ui/styles";
  * the reload (sessionStorage, once) so the owner sees it on the new page.
  */
 const noticeKey = (url: string) => `recheck-notice:${url}`;
-const SPEED_NOTICE = "Re-checked. The speed numbers update within a day.";
+const SPEED_NOTICE = "Re-checked. Speed numbers and screenshots update within a day.";
 
 export function RecheckButton({ url }: { url: string }) {
   const [state, setState] = useState<{ owner: boolean; nextAt: string | null } | null>(null);

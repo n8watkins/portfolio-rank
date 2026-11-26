@@ -77,5 +77,5 @@ export async function POST(req: Request) {
   // Lighthouse (and the other checks that follow the same rule) is due again for the next daily run, first in its queue.
   await markForced(db(), url);
   revalidatePath(profilePath(url));
-  return NextResponse.json({ ok: true, nextAt: new Date(now + HOUR).toISOString(), message: "Re-checked. The speed numbers update within a day." }, { headers: PRIVATE });
+  return NextResponse.json({ ok: true, nextAt: new Date(now + HOUR).toISOString(), message: "Re-checked. Speed numbers and screenshots update within a day." }, { headers: PRIVATE });
 }

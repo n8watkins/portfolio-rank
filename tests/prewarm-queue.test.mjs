@@ -164,3 +164,32 @@ test("sites whose owner removed them, and hidden ones, are not measured; the lim
   await db.execute({ sql: "INSERT INTO portfolio_owner (url, removed_at, updated_at) VALUES (?, ?, ?)", args: [spelled.replace("https://", "https://www."), "2026-11-01T00:00:00Z", "2026-11-01T00:00:00Z"] });
   assert.ok(!urlsOf(await queue(db)).includes(spelled));
 });
+
+test("an expired average replaced by the job's one good run counts as measured, reads as one run, and is tried for a real average under the backoff, not every day", async () => {
+  const db = await tempDb();
+  const u = await site(db, { phone: GOOD, at: NOW - 91 * DAY });
+  // Both devices: one of the two runs fails, so each device has one good run.
+  const seen = {};
+  const run = async (target, strategy) => ((seen[strategy] = (seen[strategy] ?? 0) + 1) === 2 ? { ok: false, error: "timeout", strategy } : { ok: true, strategy, scores: { performance: 50 }, metrics: [], runs: 1, runsAttempted: 1, fetchedAt: `${strategy}1` });
+  assert.deepEqual(urlsOf(await queue(db)), [u], "due: past 90 days");
+  const r = await measureAndStore(db, u, { run, gapMs: 0, now: () => NOW });
+  assert.deepEqual(r, { ok: true, measured: true }, "stored: it replaced the expired average");
+  for (const key of [`psi:${u}`, `psi-desktop:${u}`]) {
+    const v = JSON.parse(String((await db.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [key] })).rows[0].v));
+    assert.equal(v.runs, 1);
+    assert.equal(v.runsAttempted, 2);
+  }
+  // It is not a full result: the next try for a real average waits out the backoff (1 day after the first), not every day.
+  assert.deepEqual(await queue(db), [], "the same day: nothing to do");
+  assert.deepEqual(urlsOf(await prewarmQueue(db, { active: ACTIVE, now: NOW + HOUR * 12, limit: 400 })), [], "half a day later: still waiting");
+  assert.deepEqual(urlsOf(await prewarmQueue(db, { active: ACTIVE, now: NOW + DAY + HOUR, limit: 400 })), [u], "after the first wait: tried for a real average");
+  // Another one-run result: the wait grows (3 days), so it does not come back the next day.
+  await measureAndStore(db, u, { run: async (t, s) => ((seen[s] = (seen[s] ?? 0) + 1) % 2 === 0 ? { ok: false, error: "timeout", strategy: s } : { ok: true, strategy: s, scores: { performance: 50 }, metrics: [], runs: 1, runsAttempted: 1, fetchedAt: `${s}${seen[s]}` }), gapMs: 0, now: () => NOW + DAY + HOUR });
+  assert.deepEqual(urlsOf(await prewarmQueue(db, { active: ACTIVE, now: NOW + 2 * DAY + HOUR, limit: 400 })), [], "a day after the second: waiting (3 days)");
+  assert.deepEqual(urlsOf(await prewarmQueue(db, { active: ACTIVE, now: NOW + 4 * DAY + 2 * HOUR, limit: 400 })), [u], "after 3 days: due");
+  // A full two-run result clears the count and ends the retries.
+  const full = async (t, s) => ({ ok: true, strategy: s, scores: { performance: 80 }, metrics: [], runs: 1, runsAttempted: 1, fetchedAt: `${s}${Math.random()}` });
+  assert.equal((await measureAndStore(db, u, { run: full, gapMs: 0, now: () => NOW + 5 * DAY })).ok, true);
+  assert.equal((await db.execute({ sql: "SELECT COUNT(*) AS n FROM psi_attempts WHERE url = ?", args: [u] })).rows[0].n, 0);
+  assert.deepEqual(urlsOf(await prewarmQueue(db, { active: ACTIVE, now: NOW + 6 * DAY, limit: 400 })), []);
+});

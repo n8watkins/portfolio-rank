@@ -43,9 +43,9 @@ export const PREWARM_PLAN = pacing({ sites: PREWARM_LIMIT, concurrency: PREWARM_
 /** After this many sites in a row refused for a per-minute limit (after their own retries) the job stops: something is wrong, and going on would only spend calls. */
 export const RATE_LIMITED_STREAK_STOP = 10;
 
-// A stored Lighthouse result is a good one (ok) of fewer than two runs attempted: stored before two runs a
-// device, or by a visitor's speed check. Written for a cache row aliased `x`.
-const SINGLE_RUN = (x) => `(json_valid(${x}.v) AND json_extract(${x}.v, '$.ok') = 1 AND COALESCE(json_extract(${x}.v, '$.runsAttempted'), 1) < 2)`;
+// A stored Lighthouse result is a good one (ok) that reads as one run: stored before two runs a device, by a
+// visitor's speed check, or by the job when only one of its runs was good. Written for a cache row aliased `x`.
+const SINGLE_RUN = (x) => `(json_valid(${x}.v) AND json_extract(${x}.v, '$.ok') = 1 AND COALESCE(json_extract(${x}.v, '$.runs'), 1) < 2)`;
 const GOOD = (x) => `COALESCE(json_valid(${x}.v) AND json_extract(${x}.v, '$.ok') = 1, 0)`;
 
 /**
