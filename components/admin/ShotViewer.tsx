@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, ExternalLink, X } from "lucide-react";
 import { btnGhost, btnIcon, btnSecondary } from "@/components/ui/styles";
-import { frameOf } from "@/lib/shot-url";
+import { frameOf, hasPhoneFrame } from "@/lib/shot-url";
 import { ConfirmButton } from "./ConfirmButton";
 
 // The large screenshot viewer of the owner's review queue
@@ -48,7 +48,7 @@ export function ShotViewer({
 }: {
   domain: string;
   url: string;
-  /** `${SHOTS_BASE_URL}/${shot_key}`, or null without a capture. */
+  /** `${SHOTS_BASE_URL}/${shot_key}`, or null without a capture; marked withoutPhone (lib/shot-url.ts) when the capture has no phone view. */
   base: string | null;
   frame: ViewerFrame;
   proposed: "relist" | "remove" | "review";
@@ -93,7 +93,9 @@ export function ShotViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const src = !base ? null : frameOf(base, frame === "phone" ? "mobile.jpg" : "hero.jpg");
+  // A capture whose phone view was missing (meta.phoneMissing) has no phone frame: the Phone tab says so.
+  const noPhone = base != null && frame === "phone" && !hasPhoneFrame(base);
+  const src = !base || noPhone ? null : frameOf(base, frame === "phone" ? "mobile.jpg" : "hero.jpg");
 
   function onTabKey(e: React.KeyboardEvent, i: number) {
     const last = TABS.length - 1;
@@ -191,7 +193,9 @@ export function ShotViewer({
               data-review-viewer-image={frame}
             />
           ) : (
-            <p className="grid h-full place-items-center p-6 text-sm text-mute">No capture to show.</p>
+            <p className="grid h-full place-items-center p-6 text-center text-sm text-mute" data-review-viewer-empty={noPhone ? "phone" : "capture"}>
+              {noPhone ? "No phone view: this capture could not take one, so only the desktop view is stored." : "No capture to show."}
+            </p>
           )}
         </div>
 

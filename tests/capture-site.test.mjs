@@ -53,7 +53,7 @@ const pages = {
   "/forced": `<!doctype html><title>Home</title><body><p>Hello there, welcome to my new website, coming along soon</p></body>`,
   // A refresh of a site that had a résumé link and a long text, now without either.
   "/refresh-worse": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
-  // A refresh whose phone view (the browser's second visit) meets a bot check: see the server below.
+  // A refresh of a site that answers a second visit with a bot check: see the server below.
   "/phone-bot": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
   // A new site with 5 of the 6 portfolio signals (name, projects, about, contact, resume): ranked from code as it is stored.
   "/ranked": `<!doctype html><title>Jane Doe</title><body>${SITE}<section id="about"><h2>About me</h2><p>Projects below.</p>
@@ -77,7 +77,7 @@ before(async () => {
   const visits = {};
   server = http.createServer((req, res) => {
     if (req.url === "/bot" || req.url === "/refresh-bot") return res.writeHead(403, { "content-type": "text/html" }).end(BOT);
-    // The browser's page loads only (the plain pre-check sends no sec-fetch-dest): the second is the phone view.
+    // The browser's page loads only (the plain pre-check sends no sec-fetch-dest): a second one meets the check.
     if (req.url === "/phone-bot" && req.headers["sec-fetch-dest"] === "document" && (visits[req.url] = (visits[req.url] ?? 0) + 1) >= 2) {
       return res.writeHead(403, { "content-type": "text/html" }).end(BOT);
     }
@@ -141,7 +141,8 @@ test("a site behind a mode picker is photographed behind it, on desktop and phon
   const meta = JSON.parse(String(row.meta));
   assert.equal(meta.mode.picked, "Recruiter");
   assert.equal(meta.mode.passed, true);
-  assert.equal(meta.mode.mobile, true, "the phone view passed it too");
+  // The phone view is the same page resized (pipeline/capture.mjs narrowView): the picker was passed already.
+  assert.equal(meta.mode.mobile, null, "no picker on the phone view");
   assert.equal(meta.action, 'picked "Recruiter"');
   assert.match(String(row.page_text), /Jane Doe/);
   assert.doesNotMatch(String(row.page_text), /How would you like/);
@@ -261,13 +262,14 @@ test("a refresh that meets a bot check puts the site on the owner's review list 
   assert.match(String(reviews[0].reason), /^A nightly re-capture of this listed site met a bot or security check/);
 });
 
-test("a bot check only on the phone view of a refresh is a refresh failure with that reason, not a review", async () => {
-  assert.match(results["/phone-bot"], /\(phone view\)\); the existing capture is kept$/);
+test("a refresh of a site that challenges a second visit is stored: the phone view makes none", async () => {
+  assert.match(results["/phone-bot"], /^live/, results["/phone-bot"]);
   const row = await rowOf("/phone-bot");
   assert.equal(Number(row.needs_review), 0);
-  assert.equal(row.shot_key, OLD.shot_key);
-  const failure = (await db.execute({ sql: "SELECT reason FROM refresh_failures WHERE url = ?", args: [url("/phone-bot")] })).rows[0];
-  assert.equal(failure.reason, `error: ${BLOCKED_PREFIX}${BOT_WALL} (phone view)`);
+  assert.notEqual(row.captured_at, OLD.captured_at, "the new capture is stored");
+  assert.equal(JSON.parse(String(row.meta)).phoneMissing, undefined, "the phone view was taken");
+  const failures = await db.execute({ sql: "SELECT COUNT(*) AS n FROM refresh_failures WHERE url = ?", args: [url("/phone-bot")] });
+  assert.equal(Number(failures.rows[0].n), 0);
   await ensureReviewSchema(db);
   const reviews = await db.execute({ sql: "SELECT COUNT(*) AS n FROM status_reviews WHERE url = ?", args: [url("/phone-bot")] });
   assert.equal(Number(reviews.rows[0].n), 0);

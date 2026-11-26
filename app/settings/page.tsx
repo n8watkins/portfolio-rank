@@ -5,15 +5,13 @@ import { ChevronDown } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useSignIn } from "@/components/SignInModal";
 import { SHELL_SIGN_IN } from "@/components/shell/AccountMenu";
-import { ThemeChooser } from "@/components/shell/ThemeChooser";
 import { useStoredFlag } from "@/lib/client-state";
 import { ROUTES } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
-import { setTheme } from "@/lib/theme";
 import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 import { useNewsletterOn } from "@/components/newsletter/useNewsletterOn";
 
-// Settings: the account, the theme and voting, then what this site keeps in
+// Settings: the account and voting, then what this site keeps in
 // your browser, in plain words. Nothing here tracks you, so there is no
 // cookie banner: every cookie is needed for something you asked for, and
 // the preferences below can be forgotten in one click.
@@ -29,7 +27,6 @@ const COOKIES = [
 
 /** Kept in this browser only (local storage), and never sent to us. */
 const LOCAL = [
-  { key: "pr-theme", what: "Theme", why: "Only when you pick Light or Dark." },
   { key: "pr_autoopen", what: "Auto-open both sites", why: "The switch above." },
   { key: "pr-show-scores", what: "Show scores in the face-off", why: "Your choice on the Play page." },
   { key: "pr_celebrated", what: "Celebrations seen", why: "So a report celebrates once." },
@@ -182,7 +179,6 @@ export default function SettingsPage() {
       for (const k of LOCAL_KEYS) localStorage.removeItem(k);
       document.cookie = "pr-faceoff-intro=; path=/; max-age=0; samesite=lax";
     } catch {}
-    setTheme("system");
     setAutoOpen(false);
     setForgot(true);
   };
@@ -235,11 +231,6 @@ export default function SettingsPage() {
           Preferences
         </h2>
         <div className={box}>
-          <Row id="theme" title="Theme" desc="Animations follow your device's reduce motion setting.">
-            <div className="w-full sm:w-64">
-              <ThemeChooser labelledBy="theme-label" describedBy="theme-desc" />
-            </div>
-          </Row>
           <Row id="autoopen" inline title="Auto-open both sites when voting" desc="Opens each pair's two sites in new tabs. You may need to allow pop-ups.">
             <button
               role="switch"

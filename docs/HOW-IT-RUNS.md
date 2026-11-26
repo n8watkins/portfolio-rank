@@ -176,6 +176,10 @@ Each chain is a list of steps in the order they happen.
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
    A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 4).
+   The phone view is the same page made 390 wide, not a second visit (`pipeline/capture.mjs` `narrowView`): many sites' protection answers a repeat visit seconds after the first with a bot check.
+   When the phone view still does not show the site (a page that reloads itself at the new width into a bot check or an error, or goes to another site), the desktop capture is stored without it and the reason is kept in the capture's `phoneMissing`.
+   No phone frame is stored then: the face-off and the other pages show the desktop frame on a phone, the admin review's Phone tab says "No phone view", and the "fits a phone" check counts only its console-errors half, so the site loses no points.
+   A page that is still about as wide as the desktop window at 390 (a canvas or layout sized once at load) is recorded as "fits a phone: unknown" (`overflowUnknown`), never as an overflow.
    When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link or of the home page's own address for a hash route ("/#/projects"), and reads it once its list has stopped changing, within the step's 25 seconds (`pipeline/capture-projects.mjs`).
    Up to 8 project links are checked: one link per repository (or per folder of one, linked by its tree), and at most 3 of one outside site before the others; the site's own project pages count only as real pages, on a host that answers every address by the text they do not share with a page that cannot exist (AUTOMATION.md, Rubric v2).
    On the projects page, a link to another page of the same site counts as a project page at any path only when it sits in the main content, not in a menu, a list of profiles, an aside or a section that is not projects, its whole label does not name a section of the site ("About", "Get in touch", "Next project") nor start with a call to action ("Download Resume", "Read my articles"; "View project" is fine), and at the top of the site its path is not a page that is never a project ("/resume", "/services", "/blog", "/about"); below the top of the site its path must not name one either ("/topics/react"), and the page's own menu, header or footer must not link it too ("/contact", "/blog").
@@ -200,7 +204,7 @@ Each chain is a list of steps in the order they happen.
       From the next release, a re-capture that meets a bot or security check, or a dialog still covering the page, also puts the site on your review list: a row on your review page ("Mark checked" records that you looked), and the stored capture and grade stay as they are.
       The row closes by itself once a later re-capture gets through.
       A gate, loader or mode picker still in the way, a page of only a canvas or video, or an error status does not go to your review list after a re-capture; it stays a refresh failure with its reason.
-      Neither does a bot check seen only on the phone-size visit, after the desktop view showed the site.
+      The phone view never fails a capture or a re-capture: only the desktop view decides.
    5. From the next release, a re-capture that lost a résumé, GitHub or contact link the old capture had, or most of its text, is recorded (`capture_changes`).
       A change that comes with new measuring code (a new `facts.v`) is recorded as the code's, not the site's.
    All of these are listed on the Capture problems page (see "Keeping watch").
