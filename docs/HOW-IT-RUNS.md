@@ -57,9 +57,13 @@ Times below are Pacific, with UTC in brackets, for winter.
    A page view or a visit to `/api/psi` only reads: it shows what is stored or "Not measured yet", never starts a measure and never waits.
    Like every job that runs the released code, it changes only when a release containing the change is deployed.
    Each site is measured with four PageSpeed runs, two on a phone and two on desktop, and each device's two are averaged; a result that holds one run, or has no desktop result, is measured again.
-   The job picks sites the admin asked to re-measure first, then never-measured ones, then the oldest, and only the devices that are due: a site whose phone result is fresh but whose desktop result is missing, one run, or a failure older than 20 hours costs two runs, not four.
-   A device that keeps failing is tried again at most once a day (two runs), so 100 such sites cost at most 400 runs a day.
-   A per-minute refusal from Google is waited out and tried again up to three times; only the day's quota stops the job (and ten sites in a row refused per minute, which means something is wrong).
+   The job picks sites whose re-measure was asked for (the admin's Re-measure, or an owner's Re-check) and not yet tried first, then sites never tried (never measured first, then the oldest), then sites it tried before, and only the devices that are due: a site whose phone result is fresh but whose desktop result is missing, one run, or a failure older than 20 hours costs two runs, not four.
+   A try that ends without a new stored result (a failed measure, or one run against a stored average) is noted per site and device; that device then waits 1 day, then 3, then 7, then 30 before the next try, so a failing site does not hold the front of the queue every day.
+   A re-measure asked for is tried once at once, then follows the same waiting; a new stored result clears the count.
+   Sites the owner removed, and sites that are not working, are not measured.
+   An owner's "Re-check my site" asks for a re-measure too: the owner's own single run is shown at once but never replaces a stored average of two runs, so the speed numbers update within a day, when the daily job measures the site first with two runs on each device.
+   A per-minute refusal from Google is waited out and tried again up to three times; the day's quota stops the job, and so do a key Google refuses (a 400 or 403 about the key: it is invalid, or restricted so GitHub runners are blocked) and ten sites in a row refused per minute (which means something is wrong).
+   The job is red when it could not do its work: no key, a key refused, the day's quota spent before anything was measured, every measure failing, the per-minute streak. It is not red because many sites fail; the counts are in the summary.
    Three sites go at a time, about 3 hours for 400 sites if a run takes 25 s (not measured yet), 1,600 of the day's 25,000 runs; the first full pass over 2,159 sites takes about 6 days.
    Running.
 6. **04:00 (12:00 UTC)**: the GitHub fallback for the nightly health check (`health.yml`).

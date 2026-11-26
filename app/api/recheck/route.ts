@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
+import { markForced } from "@/lib/freshness.mjs";
 import { db, ensureSchema } from "@/lib/db";
 import { PRIVATE, fail, keyed, readJsonBody, sameOrigin } from "@/lib/grader/server";
 import { controlProof } from "@/lib/games/claims.mjs";
@@ -14,7 +15,12 @@ import { profilePath } from "@/lib/profile";
 // "Re-check my site" on a portfolio's profile: the verified owner (signed in,
 // proven by POST /api/owner/verify, lib/games/claims.mjs) runs every check again, at most once an hour
 // per portfolio, within the tools' daily caps (lib/tools/caps.mjs). The
-// results replace the saved ones, so the profile's fix list updates.
+// results replace the saved ones, so the profile's fix list updates. The
+// owner's own Lighthouse run is a single run: it is shown at once and never
+// replaces a stored average of two runs (lib/psi-store.mjs). So the re-check
+// also asks for a re-measure (lib/freshness.mjs markForced, as the admin's
+// Re-measure does): the next daily prewarm measures the site first, with two
+// runs a device, and the speed numbers update within a day.
 //
 // GET  /api/recheck?url=<listed address>  { owner, nextAt }
 // POST /api/recheck { url }  200 { ok, nextAt } | 403 not_owner | 429 too_soon { nextAt } | daily_limit
@@ -68,6 +74,8 @@ export async function POST(req: Request) {
   const page = await reservePage(who);
   if (!page.ok) return fail("daily_limit", 429, { scope: page.scope, resetAt: page.resetAt, message: "Today's checks are used up. They reset at midnight Pacific time." });
   await runAllChecks({ url, siteKey: siteKeyOf(url) }, who);
+  // Lighthouse (and the other checks that follow the same rule) is due again for the next daily run, first in its queue.
+  await markForced(db(), url);
   revalidatePath(profilePath(url));
-  return NextResponse.json({ ok: true, nextAt: new Date(now + HOUR).toISOString() }, { headers: PRIVATE });
+  return NextResponse.json({ ok: true, nextAt: new Date(now + HOUR).toISOString(), message: "Re-checked. The speed numbers (Lighthouse, two runs on each device) update within a day." }, { headers: PRIVATE });
 }

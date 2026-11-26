@@ -31,7 +31,7 @@ test("every lookup failing exits 1 and names the most common error", async () =>
   const measure = async () => ({ ok: false, error: "timeout" });
   const r = await runPrewarm({ urls, base: "http://x", fetchFn, measure, pauseMs: 0, log: quiet });
   assert.equal(r.exitCode, 1);
-  assert.match(r.verdict, /8 of 8 lookups failed; most common error: (timeout|unreachable) \(4\)/);
+  assert.match(r.verdict, /^FAILED: every Lighthouse measure failed \(4 tried; most common error: timeout \(4\)\)\./);
   assert.deepEqual(r.stats.psi, { attempted: 4, ok: 0, failed: 4, errors: { timeout: 4 } });
   assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| timeout 4 \|/);
   assert.match(r.summary, /PageSpeed: 0 site\(s\) measured \(a new result stored\), 4 not measured \(timeout 4\)\./);
@@ -86,21 +86,46 @@ test("a measure that throws is a failure with its reason, not a crash", async ()
   assert.deepEqual(r.stats.psi.errors, { "database is locked": 1 });
 });
 
-test("more than half failing exits 1; half or fewer exits 0", async () => {
-  // psi all fail (4), inspect: 1 of 4 fails -> 5 of 8 failed.
+test("the share of failing sites does not decide: red only when the job could not do its work", async () => {
+  // Most sites fail (3 of 4 measures, 3 of 4 polish checks) but one is measured: green, with the counts in the summary.
   let n = 0;
-  const failing = async () => ({ ok: false, error: "timeout" });
-  const mostlyBad = async () => (n++ === 0 ? json(500, {}) : json(200, { ok: true }));
-  const bad = await runPrewarm({ urls, base: "http://x", fetchFn: mostlyBad, measure: failing, pauseMs: 0, log: quiet });
-  assert.equal(bad.exitCode, 1);
-  assert.match(bad.verdict, /5 of 8 lookups failed; most common error: timeout \(4\)/);
-  assert.deepEqual(bad.stats.inspect.errors, { http_500: 1 });
+  const someFail = async () => (n++ === 0 ? { ok: true, measured: true } : { ok: false, error: "timeout" });
+  let k = 0;
+  const inspectMostlyBad = async () => (k++ === 0 ? json(200, { ok: true }) : json(500, {}));
+  const green = await runPrewarm({ urls, base: "http://x", fetchFn: inspectMostlyBad, measure: someFail, pauseMs: 0, log: quiet });
+  assert.equal(green.exitCode, 0);
+  assert.match(green.verdict, /^OK: 2 of 8 lookups succeeded, 6 did not \(most common error: /);
+  assert.match(green.summary, /PageSpeed: 1 site\(s\) measured \(a new result stored\), 3 not measured \(timeout 3\)\./);
+  assert.deepEqual(green.stats.inspect.errors, { http_500: 3 });
 
-  // inspect all fail (4), psi all fine -> exactly half: not "more than half".
+  // Every polish check failing (the site is not answering) is red on its own.
   const inspectDown = async () => json(503, {});
-  const ok = await runPrewarm({ urls, base: "http://x", fetchFn: inspectDown, measure: measured, pauseMs: 0, log: quiet });
-  assert.equal(ok.exitCode, 0);
-  assert.equal(ok.stats.inspect.errors.http_503, 4);
+  const red = await runPrewarm({ urls, base: "http://x", fetchFn: inspectDown, measure: measured, pauseMs: 0, log: quiet });
+  assert.equal(red.exitCode, 1);
+  assert.match(red.verdict, /^FAILED: every polish check failed \(4 tried; most common error: http_503 \(4\)\)/);
+});
+
+test("the day's quota after something was measured is a green job that says it stopped", async () => {
+  let n = 0;
+  const measure = async () => (n++ < 2 ? { ok: true, measured: true } : { ok: false, error: "quota" });
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn: inspectOk, measure, pauseMs: 0, log: quiet });
+  assert.equal(r.exitCode, 0, "2 sites were measured before the quota ran out");
+  assert.match(r.verdict, /^STOPPED: PageSpeed refused the day's quota at site 3 of 4; 1 site\(s\) not tried; 2 measured\./);
+  assert.match(r.summary, /PageSpeed: 2 site\(s\) measured .*1 not tried/);
+});
+
+test("a key Google refuses stops the job at once, red, and names the secret", async () => {
+  const asked = [];
+  const measure = async ({ url }) => (asked.push(url), { ok: false, error: "api_key" });
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn: inspectOk, measure, pauseMs: 0, log: quiet });
+  assert.equal(r.exitCode, 1);
+  assert.match(r.verdict, /^STOPPED: PageSpeed refused the key at site 1 of 4: the PSI_API_KEY secret is invalid, or restricted so that GitHub runners are blocked/);
+  assert.match(r.verdict, /Replace the PSI_API_KEY Actions secret/);
+  assert.deepEqual(asked, [urls[0]]);
+  // Even after sites were measured: a refused key is red.
+  let n = 0;
+  const later = await runPrewarm({ urls, base: "http://x", fetchFn: inspectOk, measure: async () => (n++ < 2 ? { ok: true, measured: true } : { ok: false, error: "api_key" }), pauseMs: 0, log: quiet });
+  assert.equal(later.exitCode, 1);
 });
 
 test("every Lighthouse measure failing is a failed job even when the polish checks work", async () => {
@@ -114,7 +139,7 @@ test("network errors and timeouts are counted, not thrown", async () => {
     throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
   };
   const r = await runPrewarm({ urls: urls.slice(0, 1), base: "http://x", fetchFn, measure: measured, pauseMs: 0, log: quiet });
-  assert.equal(r.exitCode, 0, "one of two lookups failing is not more than half");
+  assert.equal(r.exitCode, 1, "every polish check failed (there was only one), so the job could not do its work");
   assert.deepEqual(r.stats.inspect.errors, { timeout: 1 });
 });
 
@@ -271,8 +296,9 @@ async function runScript({ google = googleOk, inspect = inspectHandler, limit = 
   const after = createClient({ url: `file:${dbFile}` });
   const rows = Object.fromEntries((await after.execute("SELECT k, v, at FROM cache")).rows.map((r) => [String(r.k), { v: JSON.parse(String(r.v) || "null"), at: Number(r.at) }]));
   const counted = Number((await after.execute({ sql: "SELECT COALESCE(SUM(n), 0) AS n FROM psi_calls WHERE day = ?", args: [quotaDay().day] })).rows[0].n);
+  const attempts = (await after.execute("SELECT url, device, fails FROM psi_attempts")).rows.map((r) => ({ url: String(r.url), device: String(r.device), fails: Number(r.fails) }));
   after.close();
-  return { code, summary, err, calls, rows, counted };
+  return { code, summary, err, calls, rows, counted, attempts };
 }
 
 const sitesCalled = (calls) => [...new Set(calls.map((c) => c.url))];
@@ -293,6 +319,24 @@ test("the script exits 1 and stops after the first site when PageSpeed refuses t
   assert.equal(sitesCalled(r.calls).length, 1, "no site after the refusal");
   assert.equal(r.calls.length, 2, "one call a device, none retried");
   assert.equal(r.counted, 2, "the admin counter counts the calls made");
+});
+
+test("an invalid or restricted key (400 or 403 about the key) stops the job at once, red, with no failure rows and no tries noted for the sites", async () => {
+  for (const [status, message] of [[400, "API key not valid. Please pass a valid API key."], [403, "Requests from this IP address are blocked. API_KEY_IP_ADDRESS_BLOCKED"]]) {
+    const r = await runScript({
+      google: (req, res) => {
+        res.statusCode = status;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ error: { code: status, message } }));
+      },
+    });
+    assert.equal(r.code, 1, `${status}: ${r.err}`);
+    assert.match(r.err, /::error::STOPPED: PageSpeed refused the key at site 1 of 4: the PSI_API_KEY secret is invalid/);
+    assert.equal(sitesCalled(r.calls).length, 1, "no site after the refusal");
+    assert.deepEqual(r.attempts, [], "no try is noted against a site");
+    for (const u of [...urls, tierC]) assert.equal(r.rows[`psi:${u}`], undefined, "no failure row is stored for a never-measured site");
+    assert.equal(r.rows[`psi:${forced}`].v.runs, 2, "the first site's stored average is untouched");
+  }
 });
 
 test("a per-minute refusal is waited out and retried; the job is not stopped", async () => {

@@ -124,7 +124,7 @@ test("a per-minute refusal is waited out and tried again; every attempt is count
   assert.deepEqual(r2, { ok: false, error: "rate_limited" });
   assert.equal(m, 8, "two runs, each tried once and retried three times");
   assert.equal(await counted(db2), 8);
-  assert.equal((await row(db2, psiCacheKey("mobile", URL_))).v.error, "rate_limited", "nothing good stored: the failure is stored so a page can say why");
+  assert.equal(await row(db2, psiCacheKey("mobile", URL_)), null, "a per-minute refusal says nothing about the site: no failure row is stored");
 
   // withBackoff on its own: any other answer comes back at once.
   let k = 0;
@@ -185,10 +185,22 @@ test("store-if-better, in one statement: a single run never replaces an average 
   // A row with no run count is one run (an old row): two runs replace it, one run replaces it too.
   await db.execute({ sql: "UPDATE cache SET v = ? WHERE k = ?", args: [JSON.stringify({ ok: true, scores: {} }), k] });
   assert.equal(await storeIfBetter(db, k, one, now + 7), true);
-  // A stored average past the age Lighthouse is measured again at (90 days) is replaced even by one run.
-  await db.execute({ sql: "UPDATE cache SET v = ?, at = ? WHERE k = ?", args: [JSON.stringify(two), now - 100 * DAY, k] });
-  assert.equal(await storeIfBetter(db, k, one, now + 8), true);
-  assert.equal((await row(db, k)).v.runs, 1);
+  // One rule: an average of two is never replaced by one run, however old it is (the daily job refreshes it with a new average).
+  await db.execute({ sql: "UPDATE cache SET v = ?, at = ? WHERE k = ?", args: [JSON.stringify(two), now - 400 * DAY, k] });
+  assert.equal(await storeIfBetter(db, k, one, now + 8), false);
+  assert.equal((await row(db, k)).v.runs, 2);
+  assert.equal(await storeIfBetter(db, k, two, now + 9), true, "a new average replaces the old one");
+});
+
+test("a 400 or 403 about the key is api_key; other 400s and 403s are about the site", async () => {
+  const answer = (status, error) => async () => new Response(JSON.stringify({ error }), { status });
+  const call = (status, error) => runPsiCall("https://a.example/", "mobile", { key: "K", base: "http://g/r", fetchFn: answer(status, error) });
+  assert.equal((await call(400, { message: "API key not valid. Please pass a valid API key." })).error, "api_key");
+  assert.equal((await call(400, { message: "Request contains an invalid argument.", details: [{ reason: "API_KEY_INVALID" }] })).error, "api_key");
+  assert.equal((await call(403, { message: "Requests from this IP address are blocked.", details: [{ reason: "API_KEY_IP_ADDRESS_BLOCKED" }] })).error, "api_key");
+  assert.equal((await call(403, { message: "The caller does not have permission" })).error, "api_key");
+  assert.equal((await call(403, { message: "Forbidden" })).error, "psi_403");
+  assert.equal((await call(400, { message: "Lighthouse returned error: FAILED_DOCUMENT_REQUEST. Lighthouse was unable to reliably load the page you requested." })).error, "unreachable");
 });
 
 test("the PageSpeed call: the four categories, the key, a daily refusal and a per-minute one told apart, errors never thrown", async () => {
