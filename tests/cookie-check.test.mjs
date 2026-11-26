@@ -258,6 +258,16 @@ test("the split: a served ad's cookies are an ad's; a tag the site installs (Goo
   assert.deepEqual([c.level, c.title], ["information", "Advertising cookies from a third party"]);
   assert.doesNotMatch(c.sentence, /an ad on the page/);
   // The site's own Google Ads conversion tag: its _gcl_au and its main-frame conversion beacons are the site's own.
+  // The Google tag's measurement pings on googlesyndication.com and ad.doubleclick.net are the site's own tag, not
+  // an ad (igorclauss.de, dinq.me); sent with storage denied they are consent-mode pings.
+  const pings = classifyRequests([
+    "https://pagead2.googlesyndication.com/ccm/collect?en=page_view&gcs=G100",
+    "https://ad.doubleclick.net/ccm/s/collect?en=page_view",
+    "https://ad.doubleclick.net/ddm/trackimp/N1.png",
+  ]);
+  assert.equal(pings.consentPings, 1);
+  assert.deepEqual(pings.beacons.map((b) => [b.host, b.vendor]), [["ad.doubleclick.net", "Google Ads conversion tracking"]]);
+  assert.deepEqual(pings.ads.map((a) => a.host), ["ad.doubleclick.net"], "an ad creative's impression pixel stays an ad's");
   const g = read("google-ads-conversion-tag");
   assert.deepEqual(g.vendors, ["Google Ads conversion tracking"]);
   assert.deepEqual(g.beacons.map((b) => b.host).sort(), ["googleads.g.doubleclick.net", "www.google.com"]);

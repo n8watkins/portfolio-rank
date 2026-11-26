@@ -166,6 +166,12 @@ export const TRACKERS = [
   { host: "googleadservices.com", vendor: "Google Ads conversion tracking", kind: "pixel", beacon: /^\/pagead\/conversion\// },
   { host: "google.com", vendor: "Google Ads conversion tracking", kind: "pixel", path: /^\/(pagead|ccm|rmkt)\//, beacon: /^\/(pagead\/(1p-user-list|1p-conversion|conversion|viewthroughconversion)|ccm\/collect|rmkt\/collect)\b/ },
   { host: "googleads.g.doubleclick.net", vendor: "Google Ads conversion tracking", kind: "pixel", path: /^\/pagead\/(viewthrough)?conversion\//, beacon: /^\/pagead\/(viewthrough)?conversion\// },
+  // The Google tag's conversion measurement ping (seen on igorclauss.de, 2026-11-26, behind a consent banner): the
+  // site's own tag, not an ad; sent with storage denied it is a consent-mode ping (deniedConsentPing).
+  { host: "googlesyndication.com", vendor: "Google Ads conversion tracking", kind: "pixel", path: /^\/ccm\/collect\b/, beacon: /^\/ccm\/collect\b/ },
+  // The same tag's measurement and Floodlight activity on ad.doubleclick.net (/ccm/s/collect seen on dinq.me): the
+  // site's own tag; the rest of ad.doubleclick.net (an ad creative's impression pixel) stays a served ad's.
+  { host: "ad.doubleclick.net", vendor: "Google Ads conversion tracking", kind: "pixel", path: /^\/(ccm\/|activity)/, beacon: /^\/(ccm\/|activity)/ },
   // verified: AdSense on elangodev.com (pagead2.googlesyndication.com/pagead/ping from the main frame, the ad in a doubleclick frame)
   { host: "doubleclick.net", vendor: "Google Ads", kind: "ads" },
   { host: "googlesyndication.com", vendor: "Google AdSense", kind: "ads" },
