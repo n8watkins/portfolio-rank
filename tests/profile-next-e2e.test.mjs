@@ -17,6 +17,9 @@ import { spawn } from "node:child_process";
 import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
 import { migrate } from "../lib/schema.mjs";
+import { makeReading, withReading } from "../pipeline/cookie-check.mjs";
+
+const cookieFixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "fixtures", "cookie-check", "readings.json"), "utf8"));
 
 const BASE = process.env.E2E_BASE_URL;
 const DB_URL = process.env.E2E_DB_URL;
@@ -45,6 +48,8 @@ async function seed(db, url) {
     builder: null,
     project_links: { checked: 4, ok: 1, broken: 2, blocked: 1 },
     measured_at: "2026-11-22T08:00:00Z",
+    // The cookie check's reading as the capture stores it: Google Analytics and Hotjar cookies on arrival, no banner.
+    privacy: withReading(null, makeReading({ ...cookieFixtures["no-consent-cookies"], at: new Date("2026-11-22T08:00:00Z") })),
   };
   await db.execute({
     sql: "INSERT INTO portfolios (url, status, facts) VALUES (?, 'live', ?) ON CONFLICT(url) DO UPDATE SET status = 'live', health = NULL, facts = excluded.facts",
@@ -104,6 +109,10 @@ test("with the switch on: the report from the saved checks, the actions, the cla
     "1 of 3 project links load",
     "1 behind a bot check.",
     "Run this test",
+    // The cookie check's reading, in Basics: the site's own tracking started before a choice.
+    "Tracks before asking",
+    "On our visit on 22 Nov 2026 from the United States,",
+    "No cookie banner offering a choice was found on the page.",
     "What we recommend changing",
     "Copy as a prompt",
     "Is this your portfolio? Claim it or share it",
@@ -113,14 +122,14 @@ test("with the switch on: the report from the saved checks, the actions, the cla
   ]) {
     assert.ok(html.includes(text), `shows "${text}"`);
   }
-  for (const r of ["Link your resume from the home page.", "Add a share image", "Fix or remove the 2 project links that do not load.", "Speed up the page on mobile: Lighthouse gives it 71 of 100."]) {
+  for (const r of ["Link your resume from the home page.", "Add a share image", "Fix or remove the 2 project links that do not load.", "Ask before tracking visitors: start ", "Speed up the page on mobile: Lighthouse gives it 71 of 100."]) {
     assert.ok(html.includes(r), `recommends "${r}"`);
   }
   assert.ok(html.includes(`href="https://pagespeed.web.dev/analysis?url=${encodeURIComponent(SITE.url)}&amp;form_factor=mobile"`), "the PageSpeed link");
   assert.ok(html.includes(`href="/claim?url=${encodeURIComponent(SITE.url)}"`), "the claim link");
   // No score, no points, no Gemini card, nothing unmeasured, and no promise about what a shared link shows.
   const main = mainOf(html);
-  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", ">Design<", ">Writing<", "Mobile only", "Tracking cookies", ">Desktop<", "What people see when the link is posted", "this card goes with the link"]) {
+  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", ">Design<", ">Writing<", "Mobile only", ">Desktop<", "What people see when the link is posted", "this card goes with the link"]) {
     assert.ok(!main.includes(gone), `does not show "${gone}"`);
   }
   const card = await fetch(`${BASE}${nextPath(SITE.url)}/card`);
