@@ -14,9 +14,12 @@
 // the same split. --skip-version V leaves out sites whose stored facts
 // already carry version V or newer (the `v` field of portfolios.facts) and,
 // when the code being run has pipeline/cookie-check.mjs, a done cookie check
-// reading (facts.privacy, hasCookieCheck), so a re-run after a failure only
-// does what is left, and the whole-list run fills in the cookie check where it
-// is missing. It imports nothing from pipeline/ but roster.mjs, which every
+// reading (facts.privacy, hasCookieCheck), and, when that code stores the list
+// of project links (its pipeline/facts.mjs declares LINK_ITEMS_MAX), a project
+// link check with its list (facts.project_links.items, hasLinkItems), so a
+// re-run after a failure only does what is left, and the whole-list run fills
+// in the cookie check and the list where they are missing. It imports nothing
+// from pipeline/ but roster.mjs, which every
 // release has (the workflow runs it from main against the released code). --limit caps the shard (a
 // small trial run); it keeps the first addresses in address order.
 import fs from "node:fs";
@@ -51,6 +54,37 @@ export function hasCookieCheck(facts, now = Date.now()) {
   }
 }
 
+/**
+ * Whether stored facts (an object or its JSON) have the list of project links
+ * (facts.project_links.items, pipeline/facts.mjs checkLinks) wherever they have
+ * a project link check: a check stored as counts alone has not, and the facts
+ * version does not tell (the list came without a new version). No check
+ * (project_links null or missing) has no list to fill in, so it is done.
+ */
+export function hasLinkItems(facts) {
+  try {
+    const f = typeof facts === "string" ? JSON.parse(facts) : facts;
+    const l = f?.project_links;
+    if (!l || typeof l !== "object") return true;
+    return Array.isArray(l.items);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the code tree at `root` stores the list of project links: its
+ * pipeline/facts.mjs declares LINK_ITEMS_MAX. Read as text, never imported:
+ * the workflow runs this script against a released code tree that may not have it.
+ */
+export function storesLinkItems(root) {
+  try {
+    return /^export const LINK_ITEMS_MAX\b/m.test(fs.readFileSync(path.join(root, "pipeline", "facts.mjs"), "utf8"));
+  } catch {
+    return false;
+  }
+}
+
 /** The shard (0-based) an address belongs to, out of `shards`. Stable: a hash of the address alone. */
 export function shardOf(url, shards) {
   return createHash("sha1").update(String(url)).digest().readUInt32BE(0) % shards;
@@ -74,17 +108,22 @@ export function factsVersion(facts) {
  * carrying `skipVersion`, in this shard only. `cookieCheck`: whether the code
  * being run measures the cookie check (it has pipeline/cookie-check.mjs); only
  * then is a row without a done reading (hasCookieCheck) still to do, or every
- * row would stay to do on a release without it.
+ * row would stay to do on a release without it. `linkItems`: likewise,
+ * whether the code being run stores the list of project links
+ * (storesLinkItems); only then is a row whose link check has no list
+ * (hasLinkItems) still to do.
  */
-export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 0, cookieCheck = false, now = Date.now() }) {
+export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 0, cookieCheck = false, linkItems = false, now = Date.now() }) {
   if (!Number.isInteger(shards) || shards < 1) throw new Error(`shards must be a whole number of 1 or more, got ${shards}`);
   if (!Number.isInteger(shard) || shard < 1 || shard > shards) throw new Error(`shard must be a whole number from 1 to ${shards}, got ${shard}`);
   const facts = new Map(rows.map((r) => [String(r.url), r.facts]));
   const urls = [...new Set(feed.map((p) => String(p.url)))].filter((u) => facts.has(u)).sort();
   const mine = urls.filter((u) => shardOf(u, shards) === shard - 1);
   // Still to do: facts older than skipVersion, or, when the code measures it, facts with no done cookie
-  // check reading (hasCookieCheck), so the whole-list run fills the readings in.
-  const done = (u) => factsVersion(facts.get(u)) >= skipVersion && (!cookieCheck || hasCookieCheck(facts.get(u), now));
+  // check reading (hasCookieCheck), or, when the code stores it, a link check without its list (hasLinkItems),
+  // so the whole-list run fills them in.
+  const done = (u) =>
+    factsVersion(facts.get(u)) >= skipVersion && (!cookieCheck || hasCookieCheck(facts.get(u), now)) && (!linkItems || hasLinkItems(facts.get(u)));
   const wanted = skipVersion > 0 ? mine.filter((u) => !done(u)) : mine;
   const capped = limit > 0 ? wanted.slice(0, limit) : wanted;
   return { urls: capped, listed: urls.length, inShard: mine.length, skipped: mine.length - wanted.length };
@@ -118,12 +157,15 @@ async function main() {
 
   // The code tree being run (the release's, or this branch's): whether it measures the cookie check.
   const cookieCheck = fs.existsSync(path.join(root, "pipeline", "cookie-check.mjs"));
-  const { urls, listed, inShard, skipped } = pickShard({ feed, rows, shard, shards, skipVersion, limit, cookieCheck });
+  // And whether it stores the list of project links.
+  const linkItems = storesLinkItems(root);
+  const { urls, listed, inShard, skipped } = pickShard({ feed, rows, shard, shards, skipVersion, limit, cookieCheck, linkItems });
   fs.writeFileSync(out, urls.map((u) => `${u}\n`).join(""));
   console.log(
     `shard ${shard} of ${shards}: ${urls.length} site(s) to re-capture ` +
       `(${inShard} of the ${listed} listed, live and captured sites belong to it; ` +
-      `${skipped} skipped for facts already at version ${skipVersion} or newer${cookieCheck ? ", with a cookie check" : ""}; limit ${limit || "none"})`
+      `${skipped} skipped for facts already at version ${skipVersion} or newer${cookieCheck ? ", with a cookie check" : ""}` +
+      `${linkItems ? ", with a list of project links" : ""}; limit ${limit || "none"})`
   );
 }
 

@@ -7,6 +7,7 @@ import { createClient } from "@libsql/client";
 import { nightsSince, pageEvidence, reportLines, sitesStillWaiting } from "../pipeline/evidence.mjs";
 import { ACTIVE, ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema, linksDue } from "../lib/freshness.mjs";
+import { hasLinkItems } from "../scripts/remeasure-shard.mjs";
 import { listen } from "./helpers/listen.mjs";
 
 const RENDERED_TEXT = "Ada Lovelace - engineer. Projects: Engine, Notes. About me. Contact. Resume. GitHub.";
@@ -107,9 +108,51 @@ for (const v of [3, 4]) test(`a link re-check of version ${v} facts tests again 
     assert.equal(facts.v, v, "the stored version stays");
     assert.deepEqual(facts.project_candidates, CHOSEN, "the capture's list is kept");
     // The host answers 404 for an address that cannot exist, so the own page counts by its status.
+    // The stored counts had no list of links, so the links' names are unknown: the counts are renewed and no list is
+    // stored, so the whole-list re-measure still takes the row.
     assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status" });
+    assert.equal(hasLinkItems(facts), false, "still to do for the whole-list re-measure");
     assert.notEqual(facts.measured_at, RENDERED_FACTS.measured_at);
     assert.equal(after.facts_at, facts.measured_at, "the link check due date moves on");
+  });
+});
+
+test("a link re-check renews the list of links with the names the capture listed them under", async () => {
+  const db = await setup();
+  await withSite(async (url) => {
+    const listed = [
+      { url: "https://ada.example/engine", name: "Engine", kind: "outbound", verdict: "ok" },
+      { url: "https://ada.example/gone", name: "Gone", kind: "outbound", verdict: "ok" },
+      { url: "https://ada.dev/projects/notes", name: null, kind: "own page", verdict: "ok" },
+    ];
+    const stored = { ...RENDERED_FACTS, v: 4, project_candidates: CHOSEN, project_links: { checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status", items: listed } };
+    await insert(db, { url, pageText: RENDERED_TEXT, facts: stored });
+    const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    await pageEvidence(db, row, { force: true, fetchImpl: fetchFor(url) });
+    const facts = JSON.parse(String((await db.execute({ sql: "SELECT facts FROM portfolios WHERE url = ?", args: [url] })).rows[0].facts));
+    assert.deepEqual(
+      facts.project_links.items.map((it) => [it.name, it.verdict]),
+      [["Engine", "ok"], ["Gone", "broken"], [null, "ok"]],
+      "the names kept, the verdicts renewed"
+    );
+    assert.deepEqual([facts.project_links.checked, facts.project_links.ok, facts.project_links.broken], [3, 2, 1]);
+    assert.equal(hasLinkItems(facts), true);
+    assert.deepEqual(facts.project_candidates, CHOSEN, "the stored candidates keep their shape");
+  });
+});
+
+test("a link re-check whose stored list misses one of the links stores the counts alone, never a partial list", async () => {
+  const db = await setup();
+  await withSite(async (url) => {
+    const partial = [{ url: "https://ada.example/engine", name: "Engine", kind: "outbound", verdict: "ok" }];
+    const stored = { ...RENDERED_FACTS, v: 4, project_candidates: CHOSEN, project_links: { checked: 1, ok: 1, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null, items: partial } };
+    await insert(db, { url, pageText: RENDERED_TEXT, facts: stored });
+    const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    await pageEvidence(db, row, { force: true, fetchImpl: fetchFor(url) });
+    const facts = JSON.parse(String((await db.execute({ sql: "SELECT facts FROM portfolios WHERE url = ?", args: [url] })).rows[0].facts));
+    assert.equal(facts.project_links.checked, 3, "the counts are renewed");
+    assert.equal(facts.project_links.items, undefined);
+    assert.equal(hasLinkItems(facts), false);
   });
 });
 
@@ -126,6 +169,8 @@ test("a link re-check of facts of version 1 and 2 picks the links on a plain fet
     assert.equal(facts.v, 1, "the old rule still reads it");
     assert.equal(facts.project_links.checked, 2);
     assert.equal(facts.project_links.broken, 1);
+    // The links are found on the page itself, so the list has their text.
+    assert.deepEqual(facts.project_links.items.map((it) => [it.name, it.verdict]), [["Engine", "ok"], ["Gone", "broken"]]);
     assert.equal(facts.project_candidates, undefined, "no list is made up from a plain fetch");
     assert.equal(after.facts_at, facts.measured_at);
   });
