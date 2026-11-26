@@ -4,6 +4,86 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.10.0",
+      "tag": "v0.10.0",
+      "date": "2026-11-25",
+      "time": "2026-11-26T03:42:14Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.10.0",
+      "previous": "v0.9.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "health",
+          "text": "Failing sites go to a temporary pool and an archive, not to review",
+          "breaking": false,
+          "pr": 292,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/292",
+          "commit": "408470b7dcf642fa3c2f7ddde16482facfb5904c",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/408470b7dcf642fa3c2f7ddde16482facfb5904c"
+        },
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "site",
+          "text": "PortfolioRank is now dark only: every visitor gets the dark look, whatever their device setting or earlier choice, and the theme switch is gone.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "0d081ec95014387d845cce6d0f7868d6d0ac2a0f",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/0d081ec95014387d845cce6d0f7868d6d0ac2a0f"
+        },
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "lighthouse",
+          "text": "Profiles now say \"Not measured yet\" for a Lighthouse result that has not been measured, instead of waiting for it to run.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "89d8da351718864917b19b34d484d2268353a9b5",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/89d8da351718864917b19b34d484d2268353a9b5"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "health",
+          "text": "Read the finished page, and know a page that is not the site",
+          "breaking": false,
+          "pr": 294,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/294",
+          "commit": "c121e57697bbcf15b948f7d1dca7ea1277424d7f",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/c121e57697bbcf15b948f7d1dca7ea1277424d7f"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "list",
+          "text": "A site the owner ruled off the list no longer comes back by itself",
+          "breaking": false,
+          "pr": 299,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/299",
+          "commit": "31ea5dda1bfc59feca359862a71954a1d386b5c7",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/31ea5dda1bfc59feca359862a71954a1d386b5c7"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "capture",
+          "text": "Sites that turned away our second visit with a bot check are captured again, with their phone view taken from the same visit.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "97e6d4cff5a46f0bb4dae8b1548b620936cbeeb3",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/97e6d4cff5a46f0bb4dae8b1548b620936cbeeb3"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.9.0",
       "tag": "v0.9.0",
       "date": "2026-11-23",

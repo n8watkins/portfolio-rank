@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.0 - 2026-11-25
+
+### New
+
+- Failing sites go to a temporary pool and an archive, not to review ([#292](https://github.com/n8watkins/portfolio-rank/pull/292))
+- PortfolioRank is now dark only: every visitor gets the dark look, whatever their device setting or earlier choice, and the theme switch is gone.
+- Profiles now say "Not measured yet" for a Lighthouse result that has not been measured, instead of waiting for it to run.
+
+### Fixed
+
+- Read the finished page, and know a page that is not the site ([#294](https://github.com/n8watkins/portfolio-rank/pull/294))
+- A site the owner ruled off the list no longer comes back by itself ([#299](https://github.com/n8watkins/portfolio-rank/pull/299))
+- Sites that turned away our second visit with a bot check are captured again, with their phone view taken from the same visit.
+
 ## 0.9.0 - 2026-11-23
 
 ### New
