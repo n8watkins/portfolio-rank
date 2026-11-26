@@ -18,20 +18,42 @@ const SITE = `<main><h1>Jane Doe</h1><p>${"I build payment systems and developer
 // The site's own Google Analytics, firing before any choice: a first-party _ga and a collect beacon.
 const GA = `<script>document.cookie="_ga=GA1.1.1.1; path=/"; fetch("https://www.google-analytics.com/g/collect?v=2&tid=G-T").catch(()=>{})</script>`;
 
-// The banners the confirmation review of #305 found missed, each on a page with the site's own GA: none may
-// read as "without asking". `level` is what the detector must find: "strict" (says it uses cookies), or
-// "loose" (cookie wording and a choice only).
+// The banners the second review of #305 found missed, each on a page with the site's own GA. `level` is what the
+// detector finds: "strict" (a consent banner about analytics, tracking or advertising with a decision) or
+// "loose" (cookie wording in a banner-like box with a choice). Either way the site's own tracking on arrival is
+// the one fix; the level only chooses what the sentence adds.
 const REVIEW_BANNERS = {
-  "/r-help-us": { level: "strict", html: bar(`<p>Cookies help us understand how the site is used.</p><button>Accept</button> <button>Decline</button>`) },
-  "/r-stores": { level: "strict", html: bar(`<p>This website stores cookies on your computer.</p><button>Accept</button> <button>Decline</button>`) },
-  "/r-storing": { level: "strict", html: bar(`<p>By clicking Accept, you agree to the storing of cookies on your device.</p><button>Accept</button>`) },
-  "/r-preferences": { level: "strict", html: bar(`<p>Choose your cookie preferences</p><button>Save</button> <button>Accept all</button>`) },
-  "/r-like-to-set": { level: "strict", html: bar(`<p>We'd like to set cookies to understand how you use the site.</p><button>Accept</button> <button>Reject</button>`) },
+  "/r-help-us": { level: "loose", html: bar(`<p>Cookies help us understand how the site is used.</p><button>Accept</button> <button>Decline</button>`) },
+  "/r-stores": { level: "loose", html: bar(`<p>This website stores cookies on your computer.</p><button>Accept</button> <button>Decline</button>`) },
+  "/r-storing": { level: "loose", html: bar(`<p>By clicking Accept, you agree to the storing of cookies on your device.</p><button>Accept</button>`) },
+  "/r-preferences": { level: "loose", html: bar(`<p>Choose your cookie preferences</p><button>Save</button> <button>Accept all</button>`) },
+  "/r-like-to-set": { level: "loose", html: bar(`<p>We'd like to set cookies to understand how you use the site.</p><button>Accept</button> <button>Reject</button>`) },
   "/r-aria": { level: "loose", html: bar(`<p>Cookies on this site</p><button aria-label="Accept cookies">✓</button> <button aria-label="Decline cookies">✕</button>`) },
   "/r-title": { level: "loose", html: bar(`<p>Cookies on this site.</p><button title="Allow">✓</button>`) },
+  "/r-analytics": { level: "strict", html: bar(`<p>We use cookies for analytics and advertising.</p><button>Accept all</button> <button>Reject all</button>`) },
 };
 
-// The first trial's banners (2026-11-25), as each site showed it: all strict.
+// The third review's adversarial pages: none is a cookie banner or notice. With the site's own GA each is the plain
+// fix with "No cookie banner was found on the page.", except the login dialog, which is quoted as what it says.
+const ADVERSARIAL = {
+  "/a-terms": `<dialog open style="position:fixed;top:20%"><h2>Terms of use</h2><p>By continuing you consent to our terms of service.</p><button>Accept</button> <button>Decline</button></dialog>`,
+  "/a-camera": `<div role="dialog" style="position:fixed;top:20%;left:20%;background:#fff;padding:16px"><p>Allow this site to use your camera?</p><button>Allow</button> <button>Deny</button></div>`,
+  "/a-recipe": `<dialog open style="position:fixed;top:20%"><h2>Cookie recipe finder</h2><p>Search 500 chocolate chip cookie recipes by ingredient.</p><button>OK</button></dialog>`,
+  "/a-chat": `<div style="position:fixed;right:16px;bottom:16px;background:#eee;padding:12px"><p>Chat with us! We usually reply in a few minutes.</p><button>Accept chat</button> <button>Close</button></div>`,
+  "/a-login": `<div role="dialog" style="position:fixed;top:20%;left:20%;background:#fff;padding:16px"><p>We use a cookie to keep you signed in.</p><button>Log in</button> <button>OK</button></div>`,
+  "/a-sticky-nav": `<nav style="position:sticky;top:0;background:#fff">Home · Projects · <a href="/cookies">Cookie policy</a> · We use cookies on this site <button>OK</button> <button>Settings</button></nav>`,
+};
+
+// The first trial's banners (2026-11-25), as each site showed it, with the level each is found at.
+const TRIAL_LEVEL = {
+  "/t-hiteshsahu": "strict",
+  "/t-gperrucci": "strict",
+  "/t-atanas": "strict",
+  "/t-elangodev": "strict",
+  "/t-silasrodrigues": "loose",
+  "/t-sskd": "loose",
+  "/t-valentinlefrancois": "strict",
+};
 const TRIAL_BANNERS = {
   "/t-hiteshsahu": bar(`<b>🍪 This website uses cookies</b><p>No personal data is stored on our servers however third party tools Google Analytics cookies to measure traffic and improve your website experience. <a href="/p">Learn more</a></p><button>ALLOW ALL</button> <button>REJECT ALL</button>`),
   "/t-gperrucci": bar(`<h3>We value your privacy</h3><p>We use cookies to enhance your browsing experience, personalize content, and analyze website traffic. You can choose your cookie preferences.</p><button>Preferences</button> <button>Reject all</button> <button>Accept all</button>`),
@@ -48,6 +70,8 @@ let embedBase;
 const pages = () => ({
   ...Object.fromEntries(Object.entries(REVIEW_BANNERS).map(([p, b]) => [p, `<!doctype html><body>${SITE}${b.html}${GA}</body>`])),
   ...Object.fromEntries(Object.entries(TRIAL_BANNERS).map(([p, html]) => [p, `<!doctype html><body>${SITE}${html}</body>`])),
+  ...Object.fromEntries(Object.entries(ADVERSARIAL).map(([p, html]) => [p, `<!doctype html><body>${SITE}${html}</body>`])),
+  ...Object.fromEntries(Object.entries(ADVERSARIAL).map(([p, html]) => [`${p}-ga`, `<!doctype html><body>${SITE}${html}${GA}</body>`])),
   // A notice with only an OK and cookie wording, and the site's own GA: information, never "without asking".
   "/ok-notice": `<!doctype html><body>${SITE}${bar(`<p>Cookie notice: see our cookie policy.</p><button>OK</button>`)}${GA}</body>`,
   // The footer false hit, with GA: neither level, so the site's own tracking is "without asking".
@@ -56,7 +80,7 @@ const pages = () => ({
   "/french": `<!doctype html><html lang="fr"><body>${SITE}${bar(`<p>Ce site utilise des cookies pour mesurer l'audience.</p><button>Tout refuser</button> <button>Personnaliser</button> <button>Tout accepter</button>`)}</body></html>`,
   // A notice in the corner (sskd.tech, 2026-11-25): it says what its cookies do, with an OK.
   "/notice": `<!doctype html><body>${SITE}<div style="position:fixed;right:16px;bottom:16px;border:1px solid">this site counts visits with <a href="/cookies">cookies</a> <button>ok</button></div></body>`,
-  "/german":`<!doctype html><html lang="de"><body>${SITE}${bar(`<p>Wir verwenden Cookies, um unsere Website zu verbessern.</p><button>Ablehnen</button> <button>Alle akzeptieren</button>`)}</body></html>`,
+  "/german":`<!doctype html><html lang="de"><body>${SITE}${bar(`<p>Wir verwenden Cookies für Statistik und Werbung.</p><button>Ablehnen</button> <button>Alle akzeptieren</button>`)}</body></html>`,
   // A footer that is about not tracking: no use of cookies, so not a banner, even with an OK.
   "/no-cookies-footer": `<!doctype html><body>${SITE}${bar(`<p>No cookies, no tracking. This site respects your privacy.</p><button>OK</button>`)}</body>`,
   "/cookiebot": `<!doctype html><body>${SITE}<div id="CybotCookiebotDialog" style="position:fixed;bottom:0;padding:20px;background:#fff">We use cookies <button>Allow all</button></div></body>`,
@@ -125,7 +149,8 @@ test("a fixed bar that says it uses cookies, with a choice button, is a banner",
 test("a French and a German banner are banners", async () => {
   assert.equal((await consentOn("/french")).banner, "generic");
   assert.equal((await consentOn("/german")).banner, "generic");
-  assert.equal((await consentOn("/notice")).banner, "generic", "a notice that says what its cookies do");
+  const notice = await consentOn("/notice");
+  assert.deepEqual([notice.banner, notice.loose?.decision], [null, false], "a notice with only an OK is loose, never praise");
 });
 
 test("false-positive guard: 'No cookies, no tracking. OK', a project card, a blog post, a footer link and a fixed nav are not banners", async () => {
@@ -203,29 +228,52 @@ async function readingOf(path) {
 }
 
 for (const [path, { level }] of Object.entries(REVIEW_BANNERS)) {
-  test(`review banner ${path} is found (${level}), and the site's own tracking before it is never "without asking"`, async () => {
+  test(`review banner ${path} is found (${level}); the site's own tracking before it is the one fix, and the sentence says what was seen`, async () => {
     const consent = await consentOn(path);
     if (level === "strict") assert.equal(consent.banner, "generic", JSON.stringify(consent));
-    else assert.ok(consent.banner === null && consent.loose?.decision === true, JSON.stringify(consent));
+    else assert.ok(consent.banner === null && consent.loose, JSON.stringify(consent));
     const { r, v } = await readingOf(path);
-    assert.equal(r.state, "with-banner", JSON.stringify(r));
-    assert.equal(v.title, "Tracks before you answer the banner");
-    assert.doesNotMatch(v.title, /without asking/);
+    assert.equal(r.state, level === "strict" ? "with-banner" : "with-notice", JSON.stringify(r));
+    assert.deepEqual([v.level, v.title], ["fix", "Sets tracking cookies before asking permission"]);
+    if (level === "strict") assert.match(v.sentence, /A cookie banner was shown, but Google Analytics had already started\.$/);
+    else {
+      assert.match(v.sentence, /A notice reading ".+" was on the page\.$/);
+      assert.doesNotMatch(v.sentence, /cookie banner/);
+    }
   });
 }
 
-test("the first trial's banners are strict banners", async () => {
-  for (const path of Object.keys(TRIAL_BANNERS)) assert.equal((await consentOn(path)).banner, "generic", path);
+test("the first trial's banners are found at their level", async () => {
+  for (const [path, level] of Object.entries(TRIAL_LEVEL)) {
+    const c = await consentOn(path);
+    if (level === "strict") assert.equal(c.banner, "generic", path);
+    else assert.ok(c.banner === null && c.loose, `${path}: ${JSON.stringify(c)}`);
+  }
 });
 
-test("a cookie notice with only an OK, and the site's own tracking: information, never 'without asking'", async () => {
+test("a cookie notice with only an OK and the site's own tracking: the one fix, quoting the notice", async () => {
   const consent = await consentOn("/ok-notice");
   assert.deepEqual([consent.banner, consent.loose?.decision], [null, false]);
   const { r, v } = await readingOf("/ok-notice");
   assert.equal(r.state, "with-notice");
-  assert.deepEqual([v.level, v.title], ["information", "Tracks, and shows a cookie notice"]);
-  assert.match(v.sentence, /a cookie notice \("Cookie notice: see our cookie policy\. OK"\) was shown without a choice/);
+  assert.deepEqual([v.level, v.title], ["fix", "Sets tracking cookies before asking permission"]);
+  assert.match(v.sentence, /before anything was clicked\. A notice reading "Cookie notice: see our cookie policy\. OK" was on the page\.$/);
 });
+
+for (const path of Object.keys(ADVERSARIAL)) {
+  test(`adversarial page ${path}: not a banner; no praise without tracking, and no false claim with the site's own GA`, async () => {
+    const c = await consentOn(path);
+    assert.equal(c.banner, null, `${path}: ${JSON.stringify(c)}`);
+    if (path !== "/a-login") assert.equal(c.loose, null, `${path}: ${JSON.stringify(c)}`);
+    const plain = await readingOf(path);
+    assert.deepEqual([plain.v.level, plain.v.title], ["pass", "No tracking cookies"], path);
+    const ga = await readingOf(`${path}-ga`);
+    assert.deepEqual([ga.v.level, ga.v.title], ["fix", "Sets tracking cookies before asking permission"], path);
+    assert.doesNotMatch(ga.v.sentence, /cookie banner was shown/, path);
+    if (path === "/a-login") assert.match(ga.v.sentence, /A notice reading "We use a cookie to keep you signed in\. Log in OK" was on the page\.$/);
+    else assert.match(ga.v.sentence, /No cookie banner was found on the page\.$/, path);
+  });
+}
 
 test("'No cookies, no tracking. OK' and a footer cookie-policy link count at neither level", async () => {
   for (const path of ["/no-cookies-footer", "/not-banners"]) {

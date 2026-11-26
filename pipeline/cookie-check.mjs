@@ -45,11 +45,13 @@
 // The state (makeReading), from the site's own tracking only:
 //   none           no own tracking (ads, embeds or widgets may still be recorded);
 //   after-consent  a strict banner is shown and no own tracking before a choice;
-//   with-banner    a banner with a choice is shown (strict, or loose with a decision
-//                  button) and own tracking started before any choice;
-//   with-notice    own tracking, and only a loose cookie notice (an OK, no decision);
-//   no-consent     own tracking and no banner or notice at either level (with or
-//                  without a consent tool);
+//   with-banner    own tracking on arrival, and a strict banner was shown;
+//   with-notice    own tracking on arrival, and only a loose cookie notice was on the page;
+//   no-consent     own tracking on arrival, and no banner or notice at either level
+//                  (with or without a consent tool).
+// Own tracking on arrival, before anything was clicked, started before asking
+// in all three: the display (lib/cookie-check.mjs) shows one fix, and the
+// level only chooses what its sentence adds.
 //   unknown        the capture could not tell, with the reason.
 //
 // Each reading records where it was made from: `region`, the capture
@@ -88,15 +90,15 @@ export const captureRegion = (env = process.env) => String(env.CAPTURE_REGION ??
  * tracking cookie when its name matches one of these, wherever it is set
  * (Google Analytics' _ga is a first-party cookie the site's own page writes).
  *
- * `kind` "ads" (the advertising list): cookies an ad network's script sets,
- * on the site's own domain too (AdSense's __gads, __gpi, __eoi; the Google
- * Ads and Microsoft Ads conversion cookies _gcl_*, _uet*; doubleclick's IDE,
- * DSID, test_cookie, APC). They come and go with the ad served, appearing on
- * some visits and not others, so they are filed under `ads` and never make a
- * fix. Every other entry is the analytics and session-recording list (Google
- * Analytics and its server-side FPID and FPLC, Hotjar, Clarity, Segment,
- * PostHog, Meta Pixel's _fbp, and the rest): the site's own measuring, which
- * can make a fix when it is first-party.
+ * `kind` "ads" (the served-ad list): cookies a served ad sets, on the site's
+ * own domain too (AdSense's __gads, __gpi, __eoi; doubleclick's IDE, DSID,
+ * test_cookie, APC). They come and go with the ad served, appearing on some
+ * visits and not others, so they are filed under `ads` and never make a fix.
+ * Every other entry is the site's own list: tags the site installs that fire
+ * on every visit (Google Analytics and its server-side FPID and FPLC, Hotjar,
+ * Clarity, Segment, PostHog, Meta Pixel's _fbp, the Google Ads conversion
+ * linker's _gcl_*, Microsoft UET's _uet*, and the rest), which can make a fix
+ * when first-party.
  */
 export const TRACKING_COOKIES = [
   [/^_ga(_[A-Z0-9]+)?$/, "Google Analytics"],
@@ -105,12 +107,12 @@ export const TRACKING_COOKIES = [
   [/^__utm[abcztv]$/, "Google Analytics"],
   // Server-side Google Tag Manager's first-party identifiers.
   [/^(FPID|FPLC)$/, "Google Analytics"],
-  [/^_gcl_/, "Google Ads", "ads"],
+  [/^_gcl_/, "Google Ads conversion tracking"],
   [/^(IDE|DSID|test_cookie|__gads|__gpi|__eoi|APC)$/, "Google Ads", "ads"],
   [/^_fb[pc]$/, "Meta Pixel"],
   [/^_hj/, "Hotjar"],
   [/^_cl(ck|sk)$/, "Microsoft Clarity"],
-  [/^_uet(sid|vid)$/, "Microsoft Advertising", "ads"],
+  [/^_uet(sid|vid)$/, "Microsoft Advertising (UET)"],
   [/^(li_fat_id|li_sugr|bcookie|lidc|UserMatchHistory|AnalyticsSyncHistory|ln_or|_li_ss)$/, "LinkedIn"],
   [/^(_ttp|_tt_enable_cookie|ttcsid(_.+)?)$/, "TikTok"],
   [/^(_pin_unauth|_pinterest_ct_ua|_epik)$/, "Pinterest"],
@@ -140,7 +142,7 @@ export const TRACKING_COOKIES = [
  * or X's tracking).
  */
 export const INFRA_COOKIES =
-  /^(__cf_bm|_cfuvid|cf_clearance|__cflb|cf_ob_info|cf_use_ob|__cfruid|__cfwaitingroom|AWSALB(CORS|TG|TGCORS)?|AWSELB(CORS)?|ARRAffinity(SameSite)?|__ddg\d*_?|incap_ses_.*|visid_incap_.*|nlbi_.*|_dd_s|datadome|JSESSIONID|li_gc|lang|lms_ads_consent|CookieConsent|OptanonConsent|OptanonAlertBoxClosed|cookieyes-consent|__Host-.*|__Secure-next-auth\..*|csrftoken|XSRF-TOKEN)$/i;
+  /^(__cf_bm|_cfuvid|cf_clearance|__cflb|cf_ob_info|cf_use_ob|__cfruid|__cfwaitingroom|AWSALB(CORS|TG|TGCORS)?|AWSELB(CORS)?|ARRAffinity(SameSite)?|__ddg\d*_?|incap_ses_.*|visid_incap_.*|nlbi_.*|datadome|JSESSIONID|li_gc|lang|lms_ads_consent|CookieConsent|OptanonConsent|OptanonAlertBoxClosed|cookieyes-consent|__Host-next-auth\.csrf-token|__Host-authjs\.csrf-token|__Secure-next-auth\.session-token|__Secure-next-auth\.callback-url|__Secure-authjs\.session-token|__Secure-authjs\.callback-url|csrftoken|XSRF-TOKEN)$/i;
 
 /**
  * Known trackers: { host, vendor, kind, beacon? }. `kind` is "analytics" or
@@ -160,8 +162,10 @@ export const TRACKERS = [
   { host: "stats.g.doubleclick.net", vendor: "Google Analytics", kind: "analytics", beacon: /^\/(g\/|j\/|r\/)?collect\b/ },
   // A tag manager only loads tags (gtm.js, gtag/js): never a beacon.
   { host: "googletagmanager.com", vendor: "Google Tag Manager", kind: "analytics", beacon: null },
-  { host: "googleadservices.com", vendor: "Google Ads", kind: "pixel", beacon: /^\/pagead\/conversion\// },
-  { host: "google.com", vendor: "Google Ads", kind: "pixel", path: /^\/(pagead|ccm|rmkt)\//, beacon: /^\/(pagead\/(1p-user-list|1p-conversion|conversion|viewthroughconversion)|ccm\/collect|rmkt\/collect)\b/ },
+  // Google Ads conversion tracking: a tag the site installs, firing on every visit, so the site's own (like Meta Pixel).
+  { host: "googleadservices.com", vendor: "Google Ads conversion tracking", kind: "pixel", beacon: /^\/pagead\/conversion\// },
+  { host: "google.com", vendor: "Google Ads conversion tracking", kind: "pixel", path: /^\/(pagead|ccm|rmkt)\//, beacon: /^\/(pagead\/(1p-user-list|1p-conversion|conversion|viewthroughconversion)|ccm\/collect|rmkt\/collect)\b/ },
+  { host: "googleads.g.doubleclick.net", vendor: "Google Ads conversion tracking", kind: "pixel", path: /^\/pagead\/(viewthrough)?conversion\//, beacon: /^\/pagead\/(viewthrough)?conversion\// },
   // verified: AdSense on elangodev.com (pagead2.googlesyndication.com/pagead/ping from the main frame, the ad in a doubleclick frame)
   { host: "doubleclick.net", vendor: "Google Ads", kind: "ads" },
   { host: "googlesyndication.com", vendor: "Google AdSense", kind: "ads" },
@@ -223,7 +227,6 @@ export const TRACKERS = [
   { host: "adnxs.com", vendor: "Xandr", kind: "ads" },
   { host: "taboola.com", vendor: "Taboola", kind: "ads" },
   { host: "outbrain.com", vendor: "Outbrain", kind: "ads" },
-  { host: "bing.com", vendor: "Microsoft Advertising", kind: "ads", path: /^\/c\.gif\b/ },
 ];
 
 /**
@@ -583,13 +586,16 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
   const thirdCookies = jar.filter((c) => c.tracking && c.party === "third" && !c.embed);
   const ads = [...req.ads, ...firstPartyAds.map(cookieRow), ...thirdCookies.filter((c) => c.ad).map(cookieRow), ...adsFromFrames].slice(0, MAX_LISTED);
   const widgets = thirdCookies.filter((c) => !c.ad && !vendors.includes(c.tracking)).map(cookieRow).slice(0, MAX_LISTED);
+  // Whether an ad was actually served: an ad network's frame on the page, or an ad-serving request from it.
+  const adServed = req.ads.length > 0 || req.embedHosts.some(adFrame);
   // A consent tool in the page's own code: its script host, a script address, or its element on the page.
   const scriptTool = CONSENT_TOOLS.find((t) => t.script && (dom?.scripts ?? []).some((s) => t.script.test(s)))?.name ?? null;
   const tool = dom?.tools?.find((t) => t.shown)?.name ?? dom?.tools?.[0]?.name ?? req.consentHosts[0] ?? scriptTool ?? null;
-  // The banner, at two levels (findConsent): `banner` the strict one, which alone earns "Asks before
-  // tracking"; `notice` the loose one, which keeps the site's own tracking from ever reading as "without
-  // asking": with a decision button (Accept, Decline) it is a banner the tracking ran before; with only an
-  // acknowledgement (OK, Got it) it is a cookie notice.
+  // The banner, at two levels (findConsent): `banner` the strict one (a consent banner about analytics,
+  // tracking or advertising with a decision, or a known tool's), which alone earns "Asks before tracking"
+  // and the words "a cookie banner was shown"; `notice` the loose one (cookie wording and a choice in a
+  // banner-like box), which only lets the sentence quote what was on the page. Either way, the site's own
+  // tracking on arrival, before anything was clicked, started before asking.
   const banner = dom ? Boolean(dom.banner) : null;
   const notice = dom?.loose ?? null;
   let state;
@@ -599,7 +605,6 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
     state = "unknown";
     reason = "the site's own tracking started, but the page could not be read to tell whether a consent banner was shown";
   } else if (banner) state = "with-banner";
-  else if (notice?.decision) state = "with-banner";
   else if (notice) state = "with-notice";
   else state = "no-consent";
   if (state === "no-consent" && tool) reason = `${tool} is in the page's code but showed no banner to this visit (from ${region})`;
@@ -608,7 +613,7 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
     state,
     reason,
     banner,
-    banner_how: dom?.banner ?? (notice ? (notice.decision ? "loose" : "notice") : null),
+    banner_how: dom?.banner ?? (notice ? "notice" : null),
     banner_sample: dom?.sample ?? notice?.sample ?? null,
     tool,
     vendors,
@@ -616,6 +621,7 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
     beacons: req.beacons,
     loaders: req.loaders,
     ads,
+    ad_served: adServed,
     widgets,
     embeds: [...embeds.values()].filter((e) => e.cookies.length || e.trackers.length),
     embed_hosts: req.embedHosts.slice(0, MAX_LISTED),
@@ -636,24 +642,30 @@ export function makeReading({ pageUrl = "", cookies = [], requests = [], dom = n
  * analytics and consent tools served from the site itself). Pure DOM
  * reading: nothing is clicked or changed.
  *
- * The generic banner, at two levels. Both need a visible element that is
- * fixed, sticky, a dialog, or named like a consent banner, under 1,500
- * characters, holding a short choice control (accept, reject, agree,
- * decline, allow, deny, manage, settings, OK in English, French, German,
- * Spanish, Italian, Portuguese, Dutch and Polish; read from its text, value,
- * aria-label or title).
- *   strict (`banner: "generic"`): its text says it uses cookies or tracking
- *     ("we use", "this site uses", "stores cookies", "cookie preferences",
- *     "cookies help us" and the same in those languages), or it is named like
- *     a consent tool's banner. Only this level earns "Asks before tracking".
- *   loose (`loose: { decision, sample }`): its text names cookies or consent
- *     at all. It never earns praise; it keeps the site's own tracking from
- *     reading as "without asking" (makeReading). `decision`: a control that
- *     decides (accept, decline...), not only acknowledges (OK, Got it).
- * The false-positive guard, for both: a footer that says "No cookies, no
- * tracking. OK", a footer link to a cookie policy (no choice control), a
- * blog post about cookies or a "Cookie Clicker" project card (not pinned,
- * not a dialog) is not a banner.
+ * The generic banner, at two levels. Both need a banner-like box: a visible
+ * element that is fixed, sticky, a dialog, or named like a consent banner,
+ * under 1,500 characters, and not a navigation bar, a page header or the
+ * main content (unless named like a consent banner). Controls are read from
+ * their text, value, aria-label or title, in English, French, German,
+ * Spanish, Italian, Portuguese, Dutch and Polish.
+ *   strict (`banner: "generic"`): a decision control (accept, reject, agree,
+ *     decline, allow, deny, refuse), and either consent-banner markers, or
+ *     cookie wording about the site's cookies together with what they are for
+ *     (analytics, statistics, tracking, measuring, advertising, marketing,
+ *     personalisation, third parties, "all cookies"). Only this level earns
+ *     "Asks before tracking" or the words "a cookie banner was shown". A
+ *     login dialog ("We use a cookie to keep you signed in. Log in / OK") is
+ *     not one.
+ *   loose (`loose: { decision, sample }`): cookie-family words in a site
+ *     context ("cookie" with use, site, browser, privacy, policy, accept...;
+ *     never "consent" alone) and a decision or an acknowledgement (OK, Got
+ *     it; never "settings", "preferences" or "manage" alone). It only lets the
+ *     sentence quote what was on the page (lib/cookie-check.mjs).
+ * The false-positive guard, for both: "No cookies, no tracking. OK", a footer
+ * link to a cookie policy (no choice control), a blog post about cookies, a
+ * "Cookie Clicker" project card or a "Cookie recipe finder" dialog (no site
+ * context), a terms or camera-permission dialog and a chat bar (no cookie
+ * words), and a sticky navigation bar (a landmark) are not banners.
  */
 export function findConsent([tools, frameHosts]) {
   const vw = window.innerWidth;
@@ -724,29 +736,23 @@ export function findConsent([tools, frameHosts]) {
     ].join("|"),
     "i"
   );
-  const ABOUT = /cookie|ciasteczk|traceur|tracker|tracking|t[ée]moin|galleta/i;
+  // Cookie-family words, and the site context that makes them about this site's cookies (not a recipe).
+  const COOKIE_FAMILY = /cookie|ciasteczk|traceur|t[ée]moin|galleta/i;
+  const COOKIE_CONTEXT =
+    /\b(use|uses|used|using|site|website|web app|page|browser|device|privacy|policy|accept|agree|consent|store|stored|experience|data|personal|necessary|essential)\b|utilis|utiliz|usamos|usiamo|verwend|nutz|gebruik|u[zż]yw|navigat|appareil|ger[aä]t|dispositiv|urz[aą]dzen|exp[ée]rien|esperienz|erfahrung|ervaring|privacidad|privacit|privacidade|datenschutz|confidentialit|prywatno|pol[ií]tica|politique|richtlinie|beleid|polityk|sitio|sito|seite|strona/i;
+  // What the cookies are for: what a consent banner asks about.
+  const PURPOSE =
+    /analy|statisti|track|measur|traffic|audience|advertis|marketing|\bads\b|personali[sz]|third[- ]part|partners|all cookies|optional cookies|non-essential|publicit|mesur|suivi|tous les cookies|messung|werbung|alle cookies|estad[ií]stic|seguimiento|medir|todas las cookies|tracciament|misura|tutti i cookie|estat[ií]stic|rastreamento|todos os cookies|statistiek|advertent|meten|statystyczn|reklam|[sś]ledz|wszystkie pliki/i;
   // A consent banner's or a consent tool's own markers in an element's id or class.
   const NAMED =
     /cookie[-_ ]?(banner|consent|notice|bar|popup|law|box|message|alert|disclaimer)|consent[-_ ]?(banner|bar|popup|box|notice|manager)|\bgdpr\b|\bcmp\b|cookiebot|onetrust|osano|cky-|klaro|cmplz|iubenda|termly|usercentrics|didomi|qc-cmp|truste|cookiefirst|cookiescript|borlabs|axeptio|ch2-|cmpbox|tarteaucitron|hs-eu-cookie|cc-window|cookieconsent/i;
-  // A short choice button: its label starts with one of these, in the same languages.
-  const CHOICE = new RegExp(
+  // An acknowledgement: OK, Got it (never "settings", "preferences" or "manage" alone).
+  const ACK = new RegExp(
     String.raw`^[^\p{L}]*(` +
-      [
-        "accept( all)?|i accept|agree|i agree|allow( all)?|reject( all)?|decline|deny|refuse|manage|settings|preferences|customi[sz]e|ok|okay|got it|understood|necessary only|only necessary|essential only",
-        "accepter|tout accepter|j'accepte|j’accepte|refuser|tout refuser|continuer sans accepter|autoriser|param[eè]tr|personnaliser|g[ée]rer|d'accord|d’accord|compris",
-        "akzeptieren|alle akzeptieren|annehmen|zustimmen|einverstanden|ablehnen|alle ablehnen|erlauben|zulassen|verweigern|einstellungen|anpassen|verwalten|verstanden|nur notwendige",
-        "aceptar|rechazar|permitir|denegar|configurar|configuraci[oó]n|gestionar|personalizar|de acuerdo|entendido",
-        "accetta|accetto|rifiuta|consenti|nega|impostazioni|gestisci|personalizza|ho capito",
-        "aceitar|aceito|rejeitar|recusar|negar|configura[cç][oõ]es|defini[cç][oõ]es|gerir|gerenciar|entendi",
-        "accepteren|alles accepteren|akkoord|weigeren|afwijzen|toestaan|instellingen|beheren|aanpassen|begrepen",
-        "akceptuj|akceptuj[eę]|zaakceptuj|zgadzam si[eę]|odrzu[cć]|odrzucam|zezw[oó]l|pozw[oó]l|odm[oó]w|ustawienia|zarz[aą]dzaj|dostosuj|rozumiem",
-      ].join("|") +
+      ["ok|okay|got it|understood|i understand", "d'accord|d’accord|compris", "verstanden", "de acuerdo|entendido", "ho capito", "entendi", "begrepen", "rozumiem"].join("|") +
       String.raw`)(?=$|[^\p{L}])`,
     "iu"
   );
-  // The loose level's wording: cookies or consent named at all, in the same languages.
-  const COOKIE_WORDS =
-    /cookie|ciasteczk|traceur|t[ée]moin|galleta|consent|zustimmung|einwilligung|consentement|consentimiento|consenso|consentimento|toestemming|zgod[aęy]|privacy (settings|preferences|choices)|datenschutzeinstellungen/i;
   // Says it does not use them: "No cookies, no tracking", "cookie-free". Never a banner at either level.
   const NONE_USED =
     /\b(no|zero|without)\s+(cookies|tracking|trackers)\b|cookie-?free|cookieless|sans (cookies|traceurs)|ohne cookies|sin cookies|senza cookie|sem cookies|zonder cookies|bez (plik[oó]w )?cookie/i;
@@ -788,6 +794,9 @@ export function findConsent([tools, frameHosts]) {
     const p = getComputedStyle(el).position;
     if (p === "fixed" || p === "sticky") candidates.add(el);
   }
+  // A navigation bar, a page header or the main content is never a banner (unless named like one).
+  const LANDMARK_IN = "nav, header, [role=navigation], [role=banner]";
+  const MAIN = "main, [role=main]";
   for (const el of banner ? [] : candidates) {
     if (!el.isConnected || !visible(el)) continue;
     const text = (el.innerText ?? "").trim();
@@ -795,22 +804,23 @@ export function findConsent([tools, frameHosts]) {
     const named = NAMED.test(nameOf(el));
     // Pinned on the screen (fixed, sticky), a dialog, or named as a banner: not a section of the page.
     if (!named && !pinned(el) && !el.matches(DIALOG)) continue;
-    const uses = USES.test(text) && ABOUT.test(text);
+    if (!named && (el.closest(LANDMARK_IN) || el.matches(MAIN))) continue;
+    const cookieText = COOKIE_FAMILY.test(text) && (COOKIE_CONTEXT.test(text) || USES.test(text));
     // "No cookies, no tracking. OK" is neither level, unless it also says it uses some.
-    if (NONE_USED.test(text) && !uses) continue;
-    if (!(named || COOKIE_WORDS.test(text))) continue;
+    if (NONE_USED.test(text) && !USES.test(text)) continue;
+    if (!(named || cookieText)) continue;
     const labels = [...el.querySelectorAll("button, a, [role=button], input[type=button], input[type=submit]")].filter(visible).flatMap(labelsOf);
-    const choice = labels.find((l) => CHOICE.test(l));
-    if (!choice) continue;
+    const decision = labels.some((l) => DECISION.test(l));
+    const ack = labels.some((l) => ACK.test(l));
+    if (!decision && !ack) continue;
     const words = text.replace(/\s+/g, " ").slice(0, 160);
-    // Strict: says it uses cookies or tracking, or is named as a consent banner. Earns "Asks before tracking".
-    if (named || uses) {
+    // Strict: a decision, and consent-banner markers or cookies with what they are for. Earns "Asks before tracking".
+    if (decision && (named || (cookieText && PURPOSE.test(text)))) {
       banner = "generic";
       sample = words;
       break;
     }
-    // Loose: cookie or consent wording and a choice. Never praise; it keeps tracking from reading as "without asking".
-    const decision = labels.some((l) => DECISION.test(l));
+    // Loose: cookie wording in a banner-like box with a choice. It only lets the sentence quote it.
     if (!loose || (decision && !loose.decision)) loose = { decision, sample: words };
   }
   const scripts = [...document.scripts].map((s) => s.src).filter(Boolean).slice(0, 200);

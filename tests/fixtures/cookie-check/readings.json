@@ -73,7 +73,7 @@
   },
   "with-banner-tracker-fires-anyway": {
     "expect": "with-banner",
-    "shown": "before-choice",
+    "shown": "sets-cookies",
     "pageUrl": "https://hs.example.com/",
     "cookies": [
       { "name": "_ga", "domain": ".hs.example.com", "value": "GA1.1.123.456" },
@@ -88,7 +88,7 @@
   },
   "with-banner-beacon-only": {
     "expect": "with-banner",
-    "shown": "before-choice",
+    "shown": "tracks",
     "pageUrl": "https://www.al.example.com/en",
     "cookies": [
       { "name": "MUID", "domain": ".clarity.ms", "value": "x" },
@@ -117,7 +117,7 @@
   },
   "no-consent-beacon-only": {
     "expect": "no-consent",
-    "shown": "tracks-without",
+    "shown": "tracks",
     "pageUrl": "https://ad.example.com/",
     "cookies": [],
     "requests": ["https://ad.example.com/", "https://connect.facebook.net/en_US/fbevents.js", "https://www.facebook.com/tr/?id=1&ev=PageView"],
@@ -205,8 +205,8 @@
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },
   "loose-banner-with-decision": {
-    "expect": "with-banner",
-    "shown": "before-choice",
+    "expect": "with-notice",
+    "shown": "sets-cookies",
     "pageUrl": "https://lb.example.com/",
     "cookies": [{ "name": "_ga", "domain": ".lb.example.com", "value": "GA1" }],
     "requests": ["https://lb.example.com/", "https://www.google-analytics.com/g/collect?v=2"],
@@ -214,7 +214,7 @@
   },
   "loose-notice-ok-only": {
     "expect": "with-notice",
-    "shown": "notice",
+    "shown": "sets-cookies",
     "pageUrl": "https://ln.example.com/",
     "cookies": [{ "name": "_ga", "domain": ".ln.example.com", "value": "GA1" }],
     "requests": ["https://ln.example.com/", "https://www.google-analytics.com/g/collect?v=2"],
@@ -235,14 +235,33 @@
     "cookies": [
       { "name": "__gads", "domain": ".as.example.com", "value": "ID=x" },
       { "name": "__gpi", "domain": ".as.example.com", "value": "UID=x" },
-      { "name": "__eoi", "domain": ".as.example.com", "value": "ID=x" },
-      { "name": "_gcl_au", "domain": ".as.example.com", "value": "1.1" }
+      { "name": "__eoi", "domain": ".as.example.com", "value": "ID=x" }
     ],
     "requests": [
       "https://as.example.com/",
       "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
-      "https://pagead2.googlesyndication.com/pagead/ping?e=1",
-      "https://www.googletagmanager.com/gtag/js?id=AW-1"
+      "https://pagead2.googlesyndication.com/pagead/ping?e=1"
+    ],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
+  "ad-cookies-no-ad-served": {
+    "expect": "none",
+    "shown": "ad-cookies",
+    "pageUrl": "https://ac.example.com/",
+    "cookies": [{ "name": "test_cookie", "domain": ".doubleclick.net", "value": "CheckForPermission" }],
+    "requests": ["https://ac.example.com/"],
+    "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
+  },
+  "google-ads-conversion-tag": {
+    "expect": "no-consent",
+    "shown": "sets-cookies",
+    "pageUrl": "https://gc.example.com/",
+    "cookies": [{ "name": "_gcl_au", "domain": ".gc.example.com", "value": "1.1" }],
+    "requests": [
+      "https://gc.example.com/",
+      "https://www.googletagmanager.com/gtag/js?id=AW-1",
+      "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123/?random=1",
+      "https://www.google.com/pagead/1p-user-list/123/?random=1"
     ],
     "dom": { "tools": [], "banner": null, "sample": null, "scripts": [] }
   },

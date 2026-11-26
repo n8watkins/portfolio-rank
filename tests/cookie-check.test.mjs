@@ -49,7 +49,7 @@ test("every state and every display kind is covered by a fixture", () => {
   const states = new Set(cases.map(([, fx]) => fx.expect));
   for (const s of ["none", "after-consent", "with-banner", "no-consent", "unknown"]) assert.ok(states.has(s), s);
   const kinds = new Set(cases.map(([, fx]) => fx.shown));
-  for (const k of ["none", "asks", "tool-no-banner", "sets-cookies", "tracks-without", "before-choice", "notice", "region-only", "embed", "widget", "ad", "not-measured"]) assert.ok(kinds.has(k), k);
+  for (const k of ["none", "asks", "tool-no-banner", "sets-cookies", "tracks", "region-only", "embed", "widget", "ad", "ad-cookies", "not-measured"]) assert.ok(kinds.has(k), k);
 });
 
 test("a script or a configuration fetch is never tracking: loaders are kept apart", () => {
@@ -209,7 +209,7 @@ test("a third-party cookie belongs to the embed on its site, or to the one embed
 });
 
 test("tracking cookies by name and by the network's own domain", () => {
-  assert.equal(trackingCookieVendor({ name: "_gcl_au", domain: ".a.dev" }), "Google Ads");
+  assert.equal(trackingCookieVendor({ name: "_gcl_au", domain: ".a.dev" }), "Google Ads conversion tracking");
   assert.equal(trackingCookieVendor({ name: "_fbp", domain: ".a.dev" }), "Meta Pixel");
   assert.equal(trackingCookieVendor({ name: "_clck", domain: ".a.dev" }), "Microsoft Clarity");
   assert.equal(trackingCookieVendor({ name: "li_sugr", domain: ".linkedin.com" }), "LinkedIn");
@@ -226,28 +226,42 @@ test("tracking cookies by name and by the network's own domain", () => {
   assert.equal(trackingCookieVendor({ name: "_hp5_meta.1", domain: ".a.dev" }), "Heap");
 });
 
-test("infrastructure cookies are never tracking, on any domain, a tracker's own included", () => {
+test("infrastructure cookies are never tracking, on any domain, a tracker's own included; Datadog RUM is left unclassified", () => {
   for (const domain of [".a.dev", ".linkedin.com", ".x.com", ".twitter.com", ".facebook.com", ".bing.com", ".clarity.ms", ".doubleclick.net"]) {
-    for (const name of ["__cf_bm", "_cfuvid", "cf_clearance", "__cflb", "AWSALB", "AWSALBCORS", "JSESSIONID", "li_gc", "lang"]) {
+    for (const name of ["__cf_bm", "_cfuvid", "cf_clearance", "__cflb", "AWSALB", "AWSALBCORS", "JSESSIONID", "li_gc", "lang", "__Host-next-auth.csrf-token"]) {
       assert.equal(trackingCookie({ name, domain }), null, `${name} on ${domain}`);
     }
   }
+  // No wildcard: a __Host- cookie that is not a named one is classified like any other (here, by a tracker's domain).
+  assert.equal(trackingCookieVendor({ name: "__Host-anything", domain: ".doubleclick.net" }), "Google Ads");
+  assert.equal(trackingCookieVendor({ name: "_dd_s", domain: ".a.dev" }), null, "Datadog RUM: not on any list");
 });
 
-test("the advertising list: an ad script's cookies are an ad's, on the site's own domain too; the analytics list stays the site's own", () => {
-  for (const name of ["__gads", "__gpi", "__eoi", "_gcl_au", "_gcl_aw", "_uetsid", "_uetvid", "IDE", "test_cookie"]) {
+test("the split: a served ad's cookies are an ad's; a tag the site installs (Google Ads conversion, Microsoft UET) is the site's own", () => {
+  for (const name of ["__gads", "__gpi", "__eoi", "IDE", "DSID", "test_cookie"]) {
     assert.equal(trackingCookie({ name, domain: ".a.dev" }).ads, true, name);
   }
   assert.equal(trackingCookie({ name: "MUID", domain: ".bing.com" }).ads, true);
-  for (const name of ["_ga", "_gid", "_hjSessionUser_1", "_clck", "ajs_anonymous_id", "_fbp", "ph_phc_x_posthog", "FPID"]) {
+  for (const name of ["_ga", "_gid", "_hjSessionUser_1", "_clck", "ajs_anonymous_id", "_fbp", "ph_phc_x_posthog", "FPID", "_gcl_au", "_gcl_aw", "_uetsid", "_uetvid"]) {
     assert.equal(trackingCookie({ name, domain: ".a.dev" }).ads, false, name);
   }
   const r = read("adsense-first-party-cookies");
   assert.equal(r.state, "none");
   assert.deepEqual(r.own_cookies, []);
-  assert.deepEqual(r.ads.filter((a) => a.cookie).map((a) => a.cookie).sort(), ["__eoi", "__gads", "__gpi", "_gcl_au"]);
+  assert.equal(r.ad_served, true);
+  assert.deepEqual(r.ads.filter((a) => a.cookie).map((a) => a.cookie).sort(), ["__eoi", "__gads", "__gpi"]);
   const v = view("adsense-first-party-cookies");
   assert.deepEqual([v.level, v.title], ["information", "Tracking seen from an ad on the page"]);
+  // Only an ad network's cookie, no ad served: never "an ad on the page".
+  const c = view("ad-cookies-no-ad-served");
+  assert.equal(read("ad-cookies-no-ad-served").ad_served, false);
+  assert.deepEqual([c.level, c.title], ["information", "Advertising cookies from a third party"]);
+  assert.doesNotMatch(c.sentence, /an ad on the page/);
+  // The site's own Google Ads conversion tag: its _gcl_au and its main-frame conversion beacons are the site's own.
+  const g = read("google-ads-conversion-tag");
+  assert.deepEqual(g.vendors, ["Google Ads conversion tracking"]);
+  assert.deepEqual(g.beacons.map((b) => b.host).sort(), ["googleads.g.doubleclick.net", "www.google.com"]);
+  assert.deepEqual(g.ads, []);
 });
 
 test("a LinkedIn badge's and an X timeline's tracking cookies are a widget's, and their bot-check cookies are not counted", () => {
@@ -262,10 +276,13 @@ test("a LinkedIn badge's and an X timeline's tracking cookies are a widget's, an
   assert.equal(view("x-timeline").title, "Tracking cookies from a third-party widget (X (Twitter))");
 });
 
-test("loose banner: a decision button keeps tracking from 'without asking'; an OK alone is a notice; neither earns praise", () => {
-  assert.equal(view("loose-banner-with-decision").title, "Tracks before you answer the banner");
-  assert.deepEqual([view("loose-notice-ok-only").level, view("loose-notice-ok-only").title], ["information", "Tracks, and shows a cookie notice"]);
-  assert.match(view("loose-notice-ok-only").sentence, /^On our visit on 25 Nov 2026 from the United States, Google Analytics tracked the visit, and a cookie notice \("Cookie notice: see our cookie policy\. OK"\) was shown without a choice to accept or decline\.$/);
+test("a loose hit only chooses the sentence: the fix is the same, and it quotes what was on the page", () => {
+  for (const name of ["loose-banner-with-decision", "loose-notice-ok-only"]) assert.equal(view(name).title, "Sets tracking cookies before asking permission", name);
+  assert.equal(
+    view("loose-notice-ok-only").sentence,
+    `On our visit on 25 Nov 2026 from the United States, Google Analytics set tracking cookies on the site's own domain as the page loaded, before anything was clicked. A notice reading "Cookie notice: see our cookie policy. OK" was on the page.`
+  );
+  assert.doesNotMatch(view("loose-notice-ok-only").sentence, /cookie banner/);
   assert.equal(view("loose-notice-nothing-tracked").title, "No tracking cookies", "a loose notice never earns 'Asks before tracking'");
 });
 
@@ -309,35 +326,37 @@ test("display: a consent tool, no banner, nothing tracked is information, never 
   assert.deepEqual(shown(view("tool-no-banner-nothing-tracked")), { level: "information", title: "Has a consent tool; banner not shown to a United States visitor", recommendation: null });
 });
 
-test("display: a first-party tracking cookie with no tool and no banner is a fix, 'Sets tracking cookies without asking'", () => {
+test("display: the site's own tracking on arrival is one fix; with a first-party tracking cookie, 'Sets tracking cookies before asking permission'", () => {
   const v = view("no-consent-cookies");
   assert.deepEqual(shown(v), {
     level: "fix",
-    title: "Sets tracking cookies without asking",
-    recommendation: "Ask visitors before loading Google Analytics and Hotjar, or count visits with analytics that set no cookies (such as Plausible or Cloudflare Web Analytics).",
+    title: "Sets tracking cookies before asking permission",
+    recommendation: "Start Google Analytics and Hotjar only after the visitor agrees, or use analytics that set no cookies (such as Plausible or Cloudflare Web Analytics).",
   });
   assert.equal(
     v.sentence,
-    "On our visit on 25 Nov 2026 from the United States, Google Analytics and Hotjar set tracking cookies on the site's own domain, and no cookie banner or consent tool was found."
+    "On our visit on 25 Nov 2026 from the United States, Google Analytics and Hotjar set tracking cookies on the site's own domain as the page loaded, before anything was clicked. No cookie banner was found on the page."
   );
 });
 
-test("display: a main-frame beacon without a tracking cookie is a fix, 'Tracks visitors without asking', its advice fitting a pixel", () => {
+test("display: a beacon only is the same fix, 'Tracks visitors before asking permission', its recommendation fitting a pixel", () => {
   const v = view("no-consent-beacon-only");
-  assert.deepEqual(shown(v), { level: "fix", title: "Tracks visitors without asking", recommendation: "Ask visitors before loading Meta Pixel." });
-  assert.match(v.sentence, /Meta Pixel tracked the visit from the page itself/);
+  assert.deepEqual(shown(v), { level: "fix", title: "Tracks visitors before asking permission", recommendation: "Start Meta Pixel only after the visitor agrees." });
+  assert.equal(v.sentence, "On our visit on 25 Nov 2026 from the United States, Meta Pixel tracked the visit as the page loaded, before anything was clicked. No cookie banner was found on the page.");
 });
 
-test("display: a banner shown and the site's own tracking before a choice is a fix, 'Tracks before you answer the banner'", () => {
-  for (const name of ["with-banner-tracker-fires-anyway", "with-banner-beacon-only"]) {
-    assert.equal(view(name).title, "Tracks before you answer the banner", name);
-    assert.equal(view(name).level, "fix", name);
-  }
-  assert.equal(view("with-banner-tracker-fires-anyway").recommendation, "Load Google Analytics only after the visitor accepts the cookie banner, not before they answer it.");
+test("display: with a strict banner shown it is the same fix, and only then does the sentence name the cookie banner", () => {
+  assert.deepEqual(shown(view("with-banner-tracker-fires-anyway")), {
+    level: "fix",
+    title: "Sets tracking cookies before asking permission",
+    recommendation: "Start Google Analytics only after the visitor agrees, or use analytics that set no cookies (such as Plausible or Cloudflare Web Analytics).",
+  });
   assert.equal(
     view("with-banner-tracker-fires-anyway").sentence,
-    "On our visit on 25 Nov 2026 from the United States, a cookie banner was shown, and Google Analytics started tracking before any choice was made."
+    "On our visit on 25 Nov 2026 from the United States, Google Analytics set tracking cookies on the site's own domain as the page loaded, before anything was clicked. A cookie banner was shown, but Google Analytics had already started."
   );
+  assert.equal(view("with-banner-beacon-only").title, "Tracks visitors before asking permission");
+  for (const [name] of cases) assert.ok(view(name).recommendation == null || !/banner/.test(view(name).recommendation), `${name}: no recommendation mentions a banner`);
 });
 
 test("display: a consent tool with no banner shown and tracking is information, 'Tracks without asking visitors from the United States'", () => {
