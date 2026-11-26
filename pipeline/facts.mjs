@@ -14,7 +14,9 @@
 // can list them. Counting the items by verdict gives the counts. The list is
 // not a new facts version (rules key on `v`): a row stored before it has
 // project_links without `items` until its next capture or the whole-list
-// re-measure (scripts/remeasure-shard.mjs hasLinkItems). It never goes into a
+// re-measure (scripts/remeasure-shard.mjs hasLinkItems); a list is stored only
+// when every link's name is known, so the nightly re-check of stored candidates
+// (pipeline/evidence.mjs) adds none to such a row. It never goes into a
 // prompt: the grade reads the counts (pipeline/rubric.mjs factLines).
 import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, removeElements, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";

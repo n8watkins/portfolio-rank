@@ -101,6 +101,7 @@ export async function measureQuick(
   const linksAt = reuse?.linksCheckedAt ? Date.parse(reuse.linksCheckedAt) : NaN;
   let linksCheckedAt = measuredAt;
   if (reuse?.fingerprint === fp.hash && reuse.facts?.project_links && now.getTime() - linksAt < LINKS_MAX_AGE_MS) {
+    // Reused whole, as it was stored: with its list of links (and their names) when it had one, never a list made up.
     facts.project_links = reuse.facts.project_links;
     linksCheckedAt = reuse.linksCheckedAt!;
   } else {
