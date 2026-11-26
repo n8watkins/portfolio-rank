@@ -1,6 +1,6 @@
 import type { Client } from "@libsql/client";
 import { safeFetch, readCapped } from "@/lib/safefetch";
-import { checkLinks, measureFacts, pageLinks, projectCandidates } from "@/pipeline/facts.mjs";
+import { LINK_CHECK_MAX, checkLinks, measureFacts, pageLinks, projectCandidates } from "@/pipeline/facts.mjs";
 import { scanPage } from "@/pipeline/page-controls.mjs";
 import { parkingPhrase, titleOf, visibleText } from "@/pipeline/gate.mjs";
 import { codeChecks } from "@/pipeline/rubric.mjs";
@@ -105,7 +105,8 @@ export async function measureQuick(
     linksCheckedAt = reuse.linksCheckedAt!;
   } else {
     // Candidates with their kind and the page's text, so the site's own pages count only as real pages (pipeline/facts.mjs checkLinks).
-    const candidates = projectCandidates(pageLinks(html, finalUrl, scan), finalUrl);
+    // With each link's text, for the list of links checked (project_links.items).
+    const candidates = projectCandidates(pageLinks(html, finalUrl, scan), finalUrl, LINK_CHECK_MAX, { names: true });
     facts.project_links = await checkLinks(candidates, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS, homeText: text });
   }
   // Client-rendered pages send little HTML: the capture measures them properly.

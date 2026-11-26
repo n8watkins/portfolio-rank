@@ -71,8 +71,14 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
   const relinkOnly = force && row.page_text != null && Boolean(stored);
   if (relinkOnly && newProjectRule(stored.v)) {
     // Version 3 and up: the links the capture chose, checked again; only which of them load is renewed.
+    // Each with the name the last check listed it under (project_links.items), so the renewed list keeps the links' text.
+    const storedItems = Array.isArray(stored.project_links?.items) ? stored.project_links.items : [];
+    const names = new Map(storedItems.filter((it) => typeof it?.url === "string" && typeof it.name === "string").map((it) => [it.url, it.name]));
     const chosen = Array.isArray(stored.project_candidates)
-      ? stored.project_candidates.map((c) => (typeof c === "string" ? { url: c, kind: "outbound" } : c)).filter((c) => typeof c?.url === "string")
+      ? stored.project_candidates
+          .map((c) => (typeof c === "string" ? { url: c, kind: "outbound" } : c))
+          .filter((c) => typeof c?.url === "string")
+          .map((c) => (names.has(c.url) ? { ...c, name: names.get(c.url) } : c))
       : [];
     const at = new Date().toISOString();
     // A list stored without tiers (version 3 facts measured before tiers, only if #278 shipped alone) cannot be

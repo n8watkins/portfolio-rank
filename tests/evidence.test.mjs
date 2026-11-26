@@ -107,9 +107,37 @@ for (const v of [3, 4]) test(`a link re-check of version ${v} facts tests again 
     assert.equal(facts.v, v, "the stored version stays");
     assert.deepEqual(facts.project_candidates, CHOSEN, "the capture's list is kept");
     // The host answers 404 for an address that cannot exist, so the own page counts by its status.
-    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status" });
+    // The stored counts had no list of links, so the renewed list has no names.
+    const items = [
+      { url: "https://ada.example/engine", name: null, kind: "outbound", verdict: "ok" },
+      { url: "https://ada.example/gone", name: null, kind: "outbound", verdict: "broken" },
+      { url: "https://ada.dev/projects/notes", name: null, kind: "own page", verdict: "ok" },
+    ];
+    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status", items });
     assert.notEqual(facts.measured_at, RENDERED_FACTS.measured_at);
     assert.equal(after.facts_at, facts.measured_at, "the link check due date moves on");
+  });
+});
+
+test("a link re-check renews the list of links with the names the capture listed them under", async () => {
+  const db = await setup();
+  await withSite(async (url) => {
+    const listed = [
+      { url: "https://ada.example/engine", name: "Engine", kind: "outbound", verdict: "ok" },
+      { url: "https://ada.example/gone", name: "Gone", kind: "outbound", verdict: "ok" },
+      { url: "https://ada.dev/projects/notes", name: null, kind: "own page", verdict: "ok" },
+    ];
+    const stored = { ...RENDERED_FACTS, v: 4, project_candidates: CHOSEN, project_links: { checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status", items: listed } };
+    await insert(db, { url, pageText: RENDERED_TEXT, facts: stored });
+    const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    await pageEvidence(db, row, { force: true, fetchImpl: fetchFor(url) });
+    const facts = JSON.parse(String((await db.execute({ sql: "SELECT facts FROM portfolios WHERE url = ?", args: [url] })).rows[0].facts));
+    assert.deepEqual(
+      facts.project_links.items.map((it) => [it.name, it.verdict]),
+      [["Engine", "ok"], ["Gone", "broken"], [null, "ok"]],
+      "the names kept, the verdicts renewed"
+    );
+    assert.deepEqual(facts.project_candidates, CHOSEN, "the stored candidates keep their shape");
   });
 });
 

@@ -6,6 +6,16 @@
 //
 // measureFacts is pure; checkLinks makes HTTP requests (HEAD, then GET when
 // HEAD is refused), capped in number and time, never to private addresses.
+//
+// facts.project_links holds the link check's counts (checked, ok, broken,
+// blocked, own_ok, own_unverified, own_check, not_counted when any) and,
+// since 2026-11-25, `items`: the links themselves, at most LINK_ITEMS_MAX,
+// each { url, name, kind, verdict } (checkLinks, LINK_VERDICTS), so a profile
+// can list them. Counting the items by verdict gives the counts. The list is
+// not a new facts version (rules key on `v`): a row stored before it has
+// project_links without `items` until its next capture or the whole-list
+// re-measure (scripts/remeasure-shard.mjs hasLinkItems). It never goes into a
+// prompt: the grade reads the counts (pipeline/rubric.mjs factLines).
 import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, removeElements, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
 import { parkingPhrase, visibleText } from "./gate.mjs";
@@ -662,9 +672,12 @@ function isNamedProjectPage(path) {
  * projects page itself are never candidates. `links` carry `from` ("home",
  * "phone" or "projects_page"; "home" when missing) and, for the projects
  * page, its address in `page`. Returns [{ url, from, kind, tier }], kind
- * "outbound" or "own page".
+ * "outbound" or "own page". With `names: true` each also has `name`, the
+ * link's text (linkName) for checkLinks' list of links: when one address is
+ * linked several times, the text of the link kept (the highest tier), or of a
+ * later one when the kept link has none.
  */
-export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
+export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX, { names = false } = {}) {
   const self = host(siteUrl);
   const homePath = (() => {
     try {
@@ -696,8 +709,15 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   }
   const place = (key, t, entry) => {
     const had = best.get(key);
-    if (had && had.t <= t) return;
-    if (had) tiers[had.t].splice(tiers[had.t].indexOf(had.entry), 1);
+    // The link kept names the address; a kept link with no text takes another link's text to the same address.
+    if (had && had.t <= t) {
+      had.entry.name ??= entry.name;
+      return;
+    }
+    if (had) {
+      tiers[had.t].splice(tiers[had.t].indexOf(had.entry), 1);
+      entry.name ??= had.entry.name;
+    }
     best.set(key, { t, entry });
     tiers[t].push(entry);
   };
@@ -732,7 +752,7 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       const furniture = onProjectsPage && !l.inProjects && homeLow.has(p.key) && (cardLinks.get(p.key) ?? 0) < 2;
       const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside && !furniture);
       if (!onProjectsPage && !inProjects) homeLow.add(p.key);
-      place(p.key, inProjects ? 0 : 2, { url: p.key, from, kind: "outbound" });
+      place(p.key, inProjects ? 0 : 2, { url: p.key, from, kind: "outbound", name: linkName(l) });
       continue;
     }
     const own = ownPageUrl(l, self);
@@ -755,7 +775,7 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       ok = Boolean(l.inProjects) && (isOwnProjectPath(rel) || isNamedProjectPage(rel));
     }
     if (!ok) continue;
-    place(own.key, 1, { url: own.key, from, kind: "own page" });
+    place(own.key, 1, { url: own.key, from, kind: "own page", name: linkName(l) });
   }
   // Every own project page goes ahead of the lowest tier, which only fills the slots left over (sujanbhatta.tech:
   // 6 case studies, then partner logos). stimmie.dev's own apps on its subdomains are in the first tier now, so
@@ -777,7 +797,17 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   const high = [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...tiers[1].map((c) => ({ ...c, tier: 2 }))].filter(oneEach);
   const low = tiers[2].map((c) => ({ ...c, tier: LOW_TIER })).filter(oneEach);
   const picked = spreadByHost(high, max);
-  return [...picked, ...spreadByHost(low, max - picked.length)];
+  const all = [...picked, ...spreadByHost(low, max - picked.length)];
+  return names ? all : all.map(({ url, from, kind, tier }) => ({ url, from, kind, tier }));
+}
+
+/** The most characters of a link's text kept as its name in the list of links checked (checkLinks `items`). */
+export const LINK_NAME_MAX = 80;
+/** A link's visible text as its name: spaces collapsed, at most LINK_NAME_MAX characters; null when it has none. */
+export function linkName(l) {
+  const t = String(l?.text ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  return t.length > LINK_NAME_MAX ? `${t.slice(0, LINK_NAME_MAX - 1).trimEnd()}…` : t;
 }
 
 /** The most links of one outside host taken before other hosts get a place (a repository counts once, oneEach). */
@@ -1035,9 +1065,19 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
  * serves), the host tells its pages apart itself: an own page loads when it
  * answers 2xx and does not say so, and is broken when it does.
  *
- * Returns { checked, ok, broken, blocked, own_ok, own_unverified, own_check }:
- * `own_ok` how many of the loading ones are own pages, `own_check` "status",
- * "text", "not_found_page" or null (no own pages).
+ * Returns { checked, ok, broken, blocked, own_ok, own_unverified, own_check,
+ * not_counted?, items }: `own_ok` how many of the loading ones are own pages,
+ * `own_check` "status", "text", "not_found_page" or null (no own pages).
+ * `items` lists every candidate given, in their order (the first
+ * LINK_ITEMS_MAX), as { url, name, kind, verdict }: `name` the link's text
+ * (projectCandidates with `names`, linkName; null when it has none or the
+ * candidate is a bare address) and `verdict` one of LINK_VERDICTS. The
+ * verdicts split the list as the counts do: the items of verdict "ok",
+ * "broken", "blocked" and "own_unverified" are each that count, together
+ * `checked`; "not_counted" ones are `not_counted`; "ok" own pages are
+ * `own_ok`. Every count is one per item: an own page whose text of its own
+ * repeats another's (counted once) is "own_unverified" itself, so nothing in
+ * the counts is shared between items.
  */
 export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "", lowLinks = LOW_LINKS, homeUrl = null } = {}) {
   const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
@@ -1084,9 +1124,10 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   // LOW_LINKS "never": the lowest tier is not requested at all, only named.
   const isLow = (c) => c.tier >= LOW_TIER;
   const skipped = lowLinks === "never" ? all.filter(isLow).length : 0;
-  const queue = skipped ? all.filter((c) => !isLow(c)) : all;
+  // Each with its place in `all`, so the list of links (`items`) keeps the candidates' order and one verdict each.
+  const queue = all.map((c, i) => ({ c, i })).filter(({ c }) => !(skipped && isLow(c)));
   // Once per check: does the host answer an address that cannot exist?
-  const firstOwn = queue.find((c) => c.kind === "own page");
+  const firstOwn = queue.find(({ c }) => c.kind === "own page")?.c;
   let byText = null;
   let notFoundPage = false;
   if (firstOwn) {
@@ -1124,7 +1165,7 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   await Promise.all(
     Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
       while (queue.length) {
-        const c = queue.shift();
+        const { c, i } = queue.shift();
         let verdict;
         try {
           if (c.kind === "own page" && notFoundPage && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByNotFound(c.url);
@@ -1133,7 +1174,7 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
         } catch {
           verdict = null;
         }
-        if (verdict) done.push({ c, verdict });
+        if (verdict) done.push({ c, i, verdict });
       }
     })
   );
@@ -1153,8 +1194,33 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     res[verdict]++;
     if (verdict === "ok" && c.kind === "own page") res.own_ok++;
   }
-  return res;
+  // The list of links, one verdict each (LINK_VERDICTS): what was counted by its result; the lowest tier left out
+  // (not requested, or requested and then not counted) "not_counted"; an address never checked (a private host,
+  // one that cannot be read) "not_checked", in no count.
+  const verdicts = new Map(counted.map(({ i, verdict }) => [i, verdict]));
+  if (counted !== done) for (const { i } of low) verdicts.set(i, "not_counted");
+  const items = all.slice(0, LINK_ITEMS_MAX).map((c, i) => ({
+    url: String(c.url),
+    name: typeof c.name === "string" && c.name ? c.name : null,
+    kind: c.kind === "own page" ? "own page" : "outbound",
+    verdict: verdicts.get(i) ?? (skipped && isLow(c) ? "not_counted" : "not_checked"),
+  }));
+  return { ...res, items };
 }
+
+/**
+ * The verdicts of checkLinks' list of links (`items`), one per link: "ok" loads, "broken" does not, "blocked"
+ * behind a bot check, "own_unverified" an own page that answered but could not be told from a page that answers
+ * every address (all four counted in `checked`); "not_counted" a link of the lowest tier left out (`not_counted`);
+ * "not_checked" an address never checked (a private host), in no count.
+ */
+export const LINK_VERDICTS = ["ok", "broken", "blocked", "own_unverified", "not_counted", "not_checked"];
+/**
+ * The most links in checkLinks' list (`items`): the candidates are LINK_CHECK_MAX at most (projectCandidates),
+ * the lowest tier's left-out ones among them, so a stored list never grows past this; a caller passing more
+ * addresses gets the first ones listed.
+ */
+export const LINK_ITEMS_MAX = LINK_CHECK_MAX;
 
 /** The most of an own page's body read to verify it by its text. */
 export const OWN_PAGE_MAX_BYTES = 300_000;
@@ -1349,14 +1415,15 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
   }
   // A listed address on a code host (github.com/ana, gitlab.com/ana) is not a portfolio site: the host's own menu
   // (docs.github.com, github.blog) is no project, and its repositories are on the same host. None found.
-  const candidates = isCodeHostAddress(desktopInput.url) || isCodeHostAddress(facts.final_url) ? [] : projectCandidates(links, facts.final_url);
+  // With each link's text, for the list of links checked (project_links.items).
+  const candidates = isCodeHostAddress(desktopInput.url) || isCodeHostAddress(facts.final_url) ? [] : projectCandidates(links, facts.final_url, LINK_CHECK_MAX, { names: true });
   // With their kind, and the home page's text: the site's own pages must be real pages (checkLinks). The
   // capture passes the page text it stores (`input.homeText`, portfolios.page_text), so the nightly re-check,
   // which reads that stored text, compares own pages against exactly the same words.
   const homeText = storedText ?? (desktopInput.text || visibleText(desktopInput.html));
   facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText, lowLinks, homeUrl: facts.final_url });
   // The links checked, with where each came from and their tier: the nightly re-check (pipeline/evidence.mjs)
-  // tests these again, by the same rule for the lowest tier.
+  // tests these again, by the same rule for the lowest tier. Their names are in project_links.items, not here.
   facts.project_candidates = candidates.map(({ url, from, kind, tier }) => ({ url, from, kind, tier }));
   facts.project_links_from = sourcesOf(candidates, projectsPageUrl);
   facts.views = views;
