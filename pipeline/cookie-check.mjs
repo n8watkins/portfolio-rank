@@ -718,7 +718,7 @@ export function findConsent([tools, frameHosts]) {
       String.raw`wir (verwenden|nutzen|setzen)|diese (web)?seite (verwendet|nutzt|setzt)|(verwendet|nutzt|setzt) cookies|wir und unsere partner`,
       String.raw`(utilizamos|usamos)\s+(cookies|galletas)|este (sitio( web)?|portal) (utiliza|usa)|nosotros y nuestros socios`,
       String.raw`(utilizziamo|usiamo)\s+(i\s+)?cookie|questo sito (web )?(utilizza|usa)|noi e i nostri partner`,
-      String.raw`(utilizamos|usamos)\s+cookies|este (site|website) (utiliza|usa)|n[oó]s e os nossos parceiros`,
+      String.raw`(utilizamos|usamos)\s+cookies|(este|esse|nosso) (site|website) (utiliza|usa)|n[oó]s e os nossos parceiros`,
       String.raw`(wij|we) gebruiken|deze (web)?site gebruikt|maakt gebruik van cookies`,
       String.raw`u[zż]ywamy|wykorzystujemy|ta strona (u[zż]ywa|wykorzystuje|korzysta)|strona korzysta z`,
     ].join("|"),

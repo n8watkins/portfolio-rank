@@ -37,7 +37,9 @@ const TRIAL_BANNERS = {
   "/t-gperrucci": bar(`<h3>We value your privacy</h3><p>We use cookies to enhance your browsing experience, personalize content, and analyze website traffic. You can choose your cookie preferences.</p><button>Preferences</button> <button>Reject all</button> <button>Accept all</button>`),
   "/t-atanas": bar(`<p>This web app uses cookies from third party providers to enhance user experience.</p><button>ACCEPT</button> <button>DECLINE</button>`),
   "/t-elangodev": bar(`<p>We use essential cookies to keep the site working, and optional cookies for analytics if you accept. Read our <a href="/privacy">Privacy Policy</a>, <a href="/cookies">Cookie Policy</a>.</p><button>Reject optional</button> <button>Accept all</button>`),
-  "/t-sskd": `<div style="position:fixed;right:16px;bottom:16px;border:1px solid">this site counts visits with <a href="/cookies">cookies</a> <button>ok</button></div>`,
+  // Missed by the strict wording in the second trial (read as "Sets tracking cookies without asking"); a real banner.
+  "/t-silasrodrigues": `<div style="position:fixed;bottom:20px;left:30%;border:1px solid;padding:16px"><p>Esse site utiliza cookies para garantir que você obtenha melhor experiência</p><a href="/privacidade">Privacidade</a> <button>Aceitar</button></div>`,
+  "/t-sskd":`<div style="position:fixed;right:16px;bottom:16px;border:1px solid">this site counts visits with <a href="/cookies">cookies</a> <button>ok</button></div>`,
   "/t-valentinlefrancois": bar(`<p>Ce site utilise des cookies analytiques pour mesurer l'audience et améliorer l'expérience. Aucun cookie n'est déposé sans votre consentement. <a href="/c">En savoir plus</a></p><button>Tout refuser</button> <button>Tout accepter</button>`),
 };
 
