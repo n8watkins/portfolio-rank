@@ -18,6 +18,11 @@ import { profileOrigin } from "../lib/profile-next/origin.mjs";
 import { profileNextEnabled } from "../lib/profile-next/flag.ts";
 import { projectLinksText } from "../pipeline/facts.mjs";
 import { STALE_FOOTER_YEARS } from "../pipeline/rubric.mjs";
+import { makeReading, withReading } from "../pipeline/cookie-check.mjs";
+
+const cookieFixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "fixtures", "cookie-check", "readings.json"), "utf8"));
+/** The stored cookie reading of one fixture case (tests/fixtures/cookie-check/readings.json), as facts.privacy. */
+const privacy = (name) => withReading(null, makeReading({ ...cookieFixtures[name], at: new Date("2026-11-25T12:00:00Z") }));
 
 const NOW = new Date("2026-11-25T12:00:00Z");
 const URL_ = "https://jane.dev/";
@@ -261,6 +266,35 @@ test("the hourly check of a site that stops working: the current profile decides
   assert.match(worker, /log: \(line\) => console\.log\(JSON\.stringify\(line\)\)/);
   const route = fs.readFileSync(path.join(import.meta.dirname, "..", "app", "api", "internal", "revalidate-profiles", "route.ts"), "utf8");
   assert.match(route, /revalidatePath\("\/p\/\[slug\]\/next", "page"\)/);
+});
+
+test("tracking in Basics: none is a yes, asking first is a yes, tracking before asking is the one fix, the rest is information", () => {
+  const of = (name) => run({ inspect: inspect(), facts: facts({ privacy: privacy(name) }) });
+  const row = (name) => item(of(name), "tracking");
+  // No reading (a capture from before the cookie check): no row, never a placeholder.
+  assert.equal(item(run({ inspect: inspect(), facts: facts() }), "tracking"), undefined);
+
+  // The owner's rule: tracking is not a fault, and a site that tracks nothing has nothing to fix.
+  assert.deepEqual([row("none-plain").chip, row("none-plain").st, card(of("none-plain"), "basics").fixes], ["No tracking", "yes", 0]);
+  assert.deepEqual([row("after-consent-tool").chip, row("after-consent-tool").st, card(of("after-consent-tool"), "basics").fixes], ["Asks before tracking", "yes", 0]);
+
+  // The site's own tracking started before a choice: one fix, with the cookie check's own sentences.
+  for (const name of ["no-consent-cookies", "no-consent-beacon-only", "with-banner-tracker-fires-anyway"]) {
+    const r = of(name);
+    assert.deepEqual([row(name).chip, row(name).st, card(r, "basics").fixes], ["Tracks before asking", "no", 1], name);
+    assert.equal(r.recommendations.length, 1);
+    assert.match(r.recommendations[0], /^Ask before tracking visitors: start .+ only after the visitor agrees/);
+    assert.match(r.prompt, /On our visit on 25 Nov 2026 from the United States, .+ Done when no tracker runs and no tracking cookie is set until the visitor has agreed\./);
+    assert.doesNotMatch(`${row(name).explain} ${r.prompt}`, /law|illegal|GDPR|complian/i, "an observation, never a legal claim");
+  }
+  assert.match(row("no-consent-cookies").explain, /No cookie banner offering a choice was found on the page\./);
+  assert.match(row("with-banner-tracker-fires-anyway").explain, /A cookie banner was shown, but .+ had already started\./);
+
+  // Never blamed on the site: an embed's cookies, and a consent tool that showed our visit no banner.
+  for (const name of ["youtube-embed", "region-only-tool-tracks", "tool-no-banner-nothing-tracked"]) {
+    assert.deepEqual([row(name).st, card(of(name), "basics").fixes], ["info", 0], name);
+  }
+  assert.equal(row("youtube-embed").chip, "Cookies from an embed");
 });
 
 test("helpers: days in UTC, Lighthouse states, the PageSpeed link", () => {
