@@ -4,6 +4,7 @@ import { StatusReviewQueue, type Review } from "@/components/admin/StatusReviewQ
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { listReviews } from "@/lib/reviews/store.mjs";
+import { phoneMissingKeys } from "@/lib/shots";
 import { reviewAutoApplyEnabled } from "@/lib/reviews/flag";
 import { ProblemReports, type ReportedSite } from "@/components/admin/ProblemReports";
 import { listReports } from "@/lib/problem-reports/store.mjs";
@@ -27,7 +28,11 @@ export default async function AdminReviewPage() {
   const who = await requireAdmin();
   if ("error" in who) notFound();
   await ensureSchema();
-  const { pending, autoApplied, decided } = (await listReviews(db())) as { pending: Review[]; autoApplied: Review[]; decided: Review[] };
+  const lists = (await listReviews(db())) as { pending: Review[]; autoApplied: Review[]; decided: Review[] };
+  // Captures with no phone view: the queue says so instead of showing a phone frame (lib/shot-url.ts withoutPhone).
+  const noPhone = await phoneMissingKeys([...lists.pending, ...lists.autoApplied, ...lists.decided].map((r) => r.shotKey ?? "")).catch(() => new Set<string>());
+  const mark = (rows: Review[]) => rows.map((r) => (r.shotKey && noPhone.has(r.shotKey) ? { ...r, phoneMissing: true } : r));
+  const [pending, autoApplied, decided] = [mark(lists.pending), mark(lists.autoApplied), mark(lists.decided)];
   // Visitors' "Report a problem" notes, grouped by site (lib/problem-reports/store.mjs).
   const reports = (await listReports(db())) as { open: ReportedSite[]; handled: ReportedSite[] };
   const auto = reviewAutoApplyEnabled(process.env);

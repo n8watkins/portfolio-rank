@@ -322,8 +322,8 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A re-capture that meets a bot or security check, or a dialog still on top after the capture tried to close it, writes a pending row in its own group, `recapture_blocked` ("Re-capture blocked"), on `/admin/review` (`lib/reviews/door.mjs` `blockedRefreshReview`, the same "Mark checked" decision as a first capture's bot wall), and the good stored capture and grade stay as they are.
   One row per episode: none while the site has another open case, none again after he decided one since the stored capture was made, and the row closes by itself once a later re-capture gets through.
   This is narrower than a first capture: a gate, loader or mode picker still in the way, a page of only a canvas, video or image, and an error status on a page that shows a site stay refresh failures in group A, with their reason.
-  A bot check seen only on the phone-size visit, after the desktop view of the same capture showed the site, does not go to review either: it stays a refresh failure in group A with that reason.
-  Why: that day 28 of 33 bot checks were phone-view only, on sites whose stored capture is good, so they may be the site's protection answering our own second visit rather than a wall a visitor meets.
+  Why the phone view was left out: that day 28 of 33 bot checks were phone-view only, on sites whose stored capture is good, so they may be the site's protection answering our own second visit rather than a wall a visitor meets.
+  Since #300 the capture makes no second visit: the phone view is the same page made 390 wide, and a phone view that still does not show the site never fails a capture or a re-capture (it is recorded as `phoneMissing`), so no phone-view reason reaches group A or this review any more.
 
 ## Ranking
 

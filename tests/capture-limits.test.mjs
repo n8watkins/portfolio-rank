@@ -76,7 +76,7 @@ const killPage = (point) =>
       settle: `<script>addEventListener("load",()=>fetch("/beacon"))</script>`,
       polls: `<script>setTimeout(()=>fetch("/beacon"),6000)</script>`,
       scroll: `<div style="height:6000px"></div><img loading=lazy src="/beacon.png" width=40 height=40>`,
-      phone: `<script>document.cookie="seen=1; path=/"</script>`,
+      phone: `<script>addEventListener("resize",()=>{if(innerWidth<500)fetch("/beacon")})</script>`,
     }[point] + "</body>"
   );
 
@@ -95,10 +95,6 @@ before(async () => {
       if (m[1] === "goto") {
         kill();
         return setTimeout(() => res.writeHead(200, html).end(killPage("goto")), 3000);
-      }
-      if (m[1] === "phone" && /seen=1/.test(req.headers.cookie ?? "")) {
-        kill();
-        return setTimeout(() => res.writeHead(200, html).end(killPage("phone")), 3000);
       }
     }
     if (m) return res.writeHead(200, html).end(killPage(m[1]));
@@ -182,7 +178,7 @@ test("a capture that throws before its own handling leaves no timer running", as
 // the same step every run: while the page loads (its document request), in
 // the settle wait (a beacon on load), in the screenshot polls (a beacon six
 // seconds in), in the scroll-through (a lazy image far down), and while the
-// phone view loads (its document request, which carries the desktop's cookie).
+// page is resized for the phone view (a beacon on a narrow resize).
 // "gate": during the plain pre-check, which then fails: still the browser's death, not the site's failure.
 const KILL_POINTS = ["gate", "goto", "settle", "polls", "scroll", "phone"];
 

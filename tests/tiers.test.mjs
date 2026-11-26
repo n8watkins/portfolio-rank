@@ -47,7 +47,7 @@ import { CHECKS_WHEN_UNKNOWN, gradeKey, gradeScore, standing } from "../lib/grad
 import { placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { readSiteRow, readTierMeta } from "../lib/tiers-db.mjs";
 import { drawCandidates } from "../lib/play/draw.mjs";
-import { CHECK_POINTS, checkPoints, checkShares, libraryMedians, pointFixes, unpackCheck } from "../lib/check-points.mjs";
+import { CHECK_POINTS, checkPoints, checkShares, libraryMedians, phoneShare, pointFixes, unpackCheck } from "../lib/check-points.mjs";
 import { compareSeed, seedRating } from "../lib/tiers.mjs";
 
 test("points from automated checks: 100 in all, measured from saved data, the median where nothing was measured", () => {
@@ -94,6 +94,24 @@ test("points from automated checks: 100 in all, measured from saved data, the me
   const rows = noImage.items.map((i) => [i.id, i.points, i.measured ? 1 : 0]);
   assert.equal(unpackCheck(rows).total, noImage.total);
   assert.deepEqual(pointFixes(unpackCheck(rows)), pointFixes(noImage));
+});
+
+test("the phone item: a capture that could not tell whether the page fits a phone costs nothing", () => {
+  assert.equal(phoneShare({ overflow390: false, consoleErrors: 0 }), 1);
+  assert.equal(phoneShare({ overflow390: true, consoleErrors: 0 }), 0.5);
+  assert.equal(phoneShare({ overflow390: true, consoleErrors: 3 }), 0);
+  // No phone view (meta.phoneMissing) or a width set once at load: overflow390 null, the console half alone.
+  assert.equal(phoneShare({ overflow390: null, consoleErrors: 0, phoneMissing: "a bot or security check stood in for the site" }), 1);
+  assert.equal(phoneShare({ overflow390: null, consoleErrors: 2 }), 0);
+  assert.equal(phoneShare({ consoleErrors: 0 }), 1);
+  assert.equal(phoneShare({ overflow390: false }), 1);
+  assert.equal(phoneShare({}), null);
+  assert.equal(phoneShare(null), null);
+  // In points: the same as a site that fits, never less.
+  const fits = checkShares({ meta: { overflow390: false, consoleErrors: 0 } });
+  const unknown = checkShares({ meta: { overflow390: null, consoleErrors: 0, phoneMissing: "HTTP 503" } });
+  const medians = libraryMedians([fits]);
+  assert.equal(checkPoints(unknown, medians).total, checkPoints(fits, medians).total);
 });
 
 test("starting ranks: by points, then the date first measured, then the address (never Gemini), evenly from the best to the last, held loosely", () => {
