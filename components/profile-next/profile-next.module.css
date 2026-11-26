@@ -1157,6 +1157,44 @@
   font-size: 12px;
   color: var(--color-mute);
 }
+/* The checked project links: each row's name is a link that opens the project. */
+.linkRows {
+  margin-top: 10px;
+}
+.rowLink {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--color-edge);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.rowLink:hover,
+.rowLink:focus-visible {
+  text-decoration-color: currentColor;
+}
+.linkRows .rowDef {
+  overflow-wrap: anywhere;
+}
+.linkRows .rowV {
+  font-weight: 550;
+  font-size: 13px;
+  color: var(--color-mute);
+}
+/* On a phone the verdict goes under the name and its address, so a long name or a bare address keeps the full width. */
+@media (max-width: 480px) {
+  .linkRows .row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .linkRows .rowV {
+    grid-column: 2;
+    grid-row: 3;
+    padding-left: 0;
+    text-align: left;
+  }
+  .linkRows .rowDef {
+    grid-row: 2;
+  }
+}
 
 /* Lighthouse: the speed ring centred at the head of its column, the scores under it. */
 .pt {
