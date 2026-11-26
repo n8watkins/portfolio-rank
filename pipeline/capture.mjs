@@ -97,6 +97,7 @@ import { FRAMES, captureViewAsSeen, fullPageStorable, nextFullPage, settleFirstS
 import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 import { rankFromCode } from "../lib/tiers-store.mjs";
+import { readCookieCheck, watchRequests, withReading } from "./cookie-check.mjs";
 
 /** Now as SQLite's datetime('now') writes it ("YYYY-MM-DD HH:MM:SS", UTC), like portfolios.captured_at. */
 const sqliteNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -140,6 +141,15 @@ async function storedCapture(db, url) {
     return { ...was, fullPage: JSON.parse(String(row?.meta ?? "null"))?.fullPage ?? null };
   } catch {
     return { ...was, fullPage: null };
+  }
+}
+
+/** The stored facts' cookie check readings (facts.privacy), or null. */
+function storedPrivacy(facts) {
+  try {
+    return JSON.parse(String(facts ?? "null"))?.privacy ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -552,6 +562,8 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     if (!run.aborted && !keepsGood() && !run.watch.now()) await record(...a);
   };
   const TIMED_OUT = Symbol("timed out");
+  // When the limit passes: the cookie check keeps clear of it (./cookie-check.mjs readCookieCheck).
+  run.deadline = Date.now() + limitMs;
   let timer;
   const work = captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLimitMs }, run);
   work.then(run.watch.stop, run.watch.stop);
@@ -642,6 +654,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
   const page = await ctx.newPage();
   run.watch.page = page;
   const doc = trackDocument(page);
+  // Every request from the first one, for the cookie check (./cookie-check.mjs) read on arrival.
+  const cookieWatch = watchRequests(page);
+  let cookieReading = null;
 
   const consoleErrors = [];
   let bytes = 0,
@@ -670,6 +685,12 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
       // Let SPAs/preloaders settle: idle network if it comes, then a beat.
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(1500);
+      // The cookie check, on the settled page before anything below clicks or
+      // dismisses: tracking cookies, tracker requests and a consent banner
+      // (./cookie-check.mjs). After a challenge that reloads into the site, the
+      // site's own arrival is the one kept. Bounded, and clear of the capture's
+      // own time limit; it never throws.
+      cookieReading = await readCookieCheck(page, cookieWatch, { deadline: run.deadline });
       // A splash gate ("CLICK TO CONTINUE", "Press any key", a loader at
       // 100%) is clicked through first, at most twice (./splash.mjs), so the
       // capture and the grade see the portfolio, not the gate.
@@ -703,6 +724,8 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
       const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: first.text, title: first.title, shown: { ...first, splash, modal, mode } });
       if (verdict) return reject(verdict);
     }
+    // The cookie check has its last reading (a challenge's reload included): its listener stops.
+    cookieWatch.stop();
     if (rendered.text.trim().length < 30 && !rendered.media) return reject({ status: "dead", reason: "renders blank" });
 
     // Wait out slow preloaders and intro animations: poll until both the
@@ -829,6 +852,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     const projectsPage = projectsUrl && pageOnSite ? await readProjectsPage(page, projectsUrl).catch(() => null) : null;
     // homeText: the page text as stored, which the nightly link re-check compares own project pages against too.
     const facts = await measurePage({ ...home, name, motion, source: "rendered", projectsPage, homeText: pageText }, { userAgent: UA }).catch(() => null);
+    // The cookie check read on arrival, stored with the facts under its region, beside the readings
+    // other regions made (./cookie-check.mjs withReading). Facts from before it have no `privacy`: not measured.
+    if (facts && cookieReading) facts.privacy = withReading(storedPrivacy(stored.facts), cookieReading);
 
     // A browser that died while the views were taken leaves them half made (their own errors are caught): not stored.
     if (await run.watch.lost()) return BROWSER_GONE;

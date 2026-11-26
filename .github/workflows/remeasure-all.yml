@@ -14,7 +14,9 @@ name: Re-capture and re-measure the whole list
 # existing capture and never marks it failed.
 #
 # A re-run after a failure does only what is left: `skip_version` leaves out the
-# sites whose stored facts already carry that facts version (portfolios.facts.v).
+# sites whose stored facts already carry that facts version (portfolios.facts.v)
+# and a cookie check reading at its current version (facts.privacy.v), so a run
+# also fills in the cookie check where it is missing.
 # To re-run one shard, give `only_shard`; the split is the same every time.
 #
 # It refuses to start from 14:00 to 21:59 Pacific (the `plan` job), so no shard

@@ -82,6 +82,11 @@ const CACHEABLE_PATTERNS: [RegExp, number][] = [
  */
 const PROFILE = /^\/p\/(.+?)(?:\/(?:opengraph|twitter)-image)?$/;
 const PROFILE_IMAGE = /^\/og\/p\/(.+)$/;
+/**
+ * The redesigned profile behind PROFILE_NEXT (app/p/[slug]/next) and its share card, under the
+ * encoded address only (one segment), so they carry their site's tag and its purge reaches them.
+ */
+const PROFILE_NEXT = /^\/p\/([^/]+)\/next(?:\/card)?$/;
 const BLOG = /^\/blog(?:\/rss\.xml|\/tag\/[^/]+|\/(?!media$|tag$)[^/]+(?:\/(?:opengraph|twitter)-image)?)?$/;
 
 /** The tags every profile and every blog page carry, for the bulk purges. */
@@ -89,7 +94,7 @@ export const PROFILES_TAG = "profiles";
 export const BLOG_TAG = "blog";
 
 /** A profile page or its share image: the profile part of the path, or null. */
-const profileSlug = (pathname: string) => (pathname.match(PROFILE) ?? pathname.match(PROFILE_IMAGE))?.[1] ?? null;
+const profileSlug = (pathname: string) => (pathname.match(PROFILE_NEXT) ?? pathname.match(PROFILE) ?? pathname.match(PROFILE_IMAGE))?.[1] ?? null;
 
 /** Profiles and the blog: long-lived, tagged, their query string left out of the key. */
 const longLived = (pathname: string) => profileSlug(pathname) !== null || BLOG.test(pathname);
