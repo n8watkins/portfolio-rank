@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { PRIVACY_VERSION, UNKNOWN_RETRY_MS, factsVersion, hasCookieCheck, pickShard, shardOf } from "../scripts/remeasure-shard.mjs";
+import { PRIVACY_VERSION, UNKNOWN_RETRY_MS, factsVersion, hasCookieCheck, hasLinkItems, pickShard, shardOf, storesLinkItems } from "../scripts/remeasure-shard.mjs";
 import { PRIVACY_VERSION as MEASURED_VERSION } from "../pipeline/cookie-check.mjs";
 
 const urls = Array.from({ length: 500 }, (_, i) => `https://site-${i}.example/`);
@@ -120,6 +120,32 @@ test("an unknown reading is not done, except within a bound, so a site that can 
   assert.equal(hasCookieCheck(unknownAt(60 * 60 * 1000), now), true, "a fresh one (this run's) is not redone by a re-run");
   assert.equal(hasCookieCheck(JSON.stringify({ v: 4, privacy: { v: PRIVACY_VERSION, readings: { US: { state: "none", at: "2020-01-01T00:00:00Z" } } } }), now), true);
   assert.equal(hasCookieCheck("not json", now), false);
+});
+
+test("a row whose project link check has no list of links is still to do; one without a check, or with its list, is done", () => {
+  const counts = { checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
+  const some = [
+    { url: "https://listed.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, project_links: { ...counts, items: [] } }) },
+    { url: "https://counts-only.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, project_links: counts }) },
+    { url: "https://no-check.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, project_links: null }) },
+    { url: "https://no-key.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED }) },
+  ];
+  const got = pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true, linkItems: true });
+  assert.deepEqual(got.urls, ["https://counts-only.example/"]);
+  assert.equal(got.skipped, 3);
+  // Both rules at once: a row missing either is to do.
+  const noPrivacy = [{ url: "https://p.example/", facts: JSON.stringify({ v: 4, project_links: { ...counts, items: [] } }) }];
+  assert.deepEqual(pickShard({ feed: noPrivacy, rows: noPrivacy, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true, linkItems: true }).urls, ["https://p.example/"]);
+  // On a released code tree that does not store the list, the rule is off.
+  assert.deepEqual(pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true, linkItems: false }).urls, []);
+  assert.equal(hasLinkItems("not json"), false);
+  assert.equal(hasLinkItems(null), true);
+});
+
+test("the shard script tells whether a code tree stores the list of links by reading its facts.mjs, not importing it", () => {
+  assert.equal(storesLinkItems(path.join(import.meta.dirname, "..")), true, "this tree stores it");
+  assert.equal(storesLinkItems(path.join(import.meta.dirname, "no-such-tree")), false, "a tree without the file");
+  assert.equal(storesLinkItems(path.join(import.meta.dirname, "fixtures")), false);
 });
 
 test("the shard script's privacy version is the measuring code's, and it imports nothing from pipeline/ but roster.mjs", () => {

@@ -172,6 +172,33 @@ test("the prompt is deterministic: the same findings give the same text, numbere
   assert.equal(fixPrompt({ url: "https://a.dev", checkedOn: null, items: [] }), "My portfolio at https://a.dev was checked. Please make the changes below in its code. Each says what was found and what done looks like. Do not change anything else, and tell me which files you changed.\n\nNothing was found to fix.");
 });
 
+test("projects: the checked links are listed when the capture stored them, each a link that opens, with its verdict", () => {
+  const rowsOf = (items) => card(run({ facts: facts({ project_links: { checked: 4, ok: 1, broken: 1, blocked: 1, own_unverified: 1, not_counted: 1, ...(items ? { items } : {}) } }) }), "projects").data.links.items;
+  // A row measured before the list was stored: the counts alone, never an empty list.
+  assert.equal(rowsOf(null), null);
+  assert.equal(rowsOf([]), null);
+  const rows = rowsOf([
+    { url: "https://www.demo.dev/app/", name: "  Chess engine  ", kind: "outbound", verdict: "ok" },
+    { url: "https://github.com/jane/gone", name: null, kind: "outbound", verdict: "broken" },
+    { url: "https://shop.example/x", name: "Shop", kind: "outbound", verdict: "blocked" },
+    { url: "https://jane.dev/projects/thin", name: "Thin", kind: "own page", verdict: "own_unverified" },
+    { url: "https://docs.example/", name: "Docs", kind: "outbound", verdict: "not_counted" },
+    // In no count and never requested: not listed. Nor is anything that is not a web address, or a verdict we do not know.
+    { url: "http://192.168.0.4/", name: "Local", kind: "outbound", verdict: "not_checked" },
+    { url: "javascript:alert(1)", name: "Bad", kind: "outbound", verdict: "ok" },
+    { url: "not an address", name: "Worse", kind: "outbound", verdict: "ok" },
+    { url: "https://x.example/", name: "New", kind: "outbound", verdict: "something_new" },
+  ]);
+  assert.deepEqual(rows, [
+    { url: "https://www.demo.dev/app/", name: "Chess engine", address: "demo.dev/app", word: "Loads", st: "yes" },
+    // No text on the page: the address is the name.
+    { url: "https://github.com/jane/gone", name: "github.com/jane/gone", address: "github.com/jane/gone", word: "Does not load", st: "no" },
+    { url: "https://shop.example/x", name: "Shop", address: "shop.example/x", word: "Behind a bot check", st: "info" },
+    { url: "https://jane.dev/projects/thin", name: "Thin", address: "jane.dev/projects/thin", word: "Could not be verified", st: "warn" },
+    { url: "https://docs.example/", name: "Docs", address: "docs.example", word: "Not counted", st: "info" },
+  ]);
+});
+
 test("projects: the product's words and counting, so this page and today's profile never disagree", () => {
   const cases = [
     { checked: 5, ok: 5, broken: 0, blocked: 0 },

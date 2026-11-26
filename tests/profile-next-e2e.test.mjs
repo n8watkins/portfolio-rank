@@ -46,7 +46,19 @@ async function seed(db, url) {
     contact: true,
     footer_year: 2026,
     builder: null,
-    project_links: { checked: 4, ok: 1, broken: 2, blocked: 1 },
+    project_links: {
+      checked: 4,
+      ok: 1,
+      broken: 2,
+      blocked: 1,
+      // The links themselves, as the capture stores them (pipeline/facts.mjs checkLinks).
+      items: [
+        { url: "https://chess.example.dev/", name: "Chess engine", kind: "outbound", verdict: "ok" },
+        { url: "https://github.com/someone/gone", name: null, kind: "outbound", verdict: "broken" },
+        { url: "https://old.example.dev/demo", name: "Old demo", kind: "outbound", verdict: "broken" },
+        { url: "https://shop.example.dev/", name: "Shop", kind: "outbound", verdict: "blocked" },
+      ],
+    },
     measured_at: "2026-11-22T08:00:00Z",
     // The cookie check's reading as the capture stores it: Google Analytics and Hotjar cookies on arrival, no banner.
     privacy: withReading(null, makeReading({ ...cookieFixtures["no-consent-cookies"], at: new Date("2026-11-22T08:00:00Z") })),
@@ -108,6 +120,11 @@ test("with the switch on: the report from the saved checks, the actions, the cla
     // The product's words (pipeline/facts.mjs projectLinksText): the link behind a bot check is out of the total.
     "1 of 3 project links load",
     "1 behind a bot check.",
+    // The checked links themselves, each a link that opens in a new tab and passes no ranking credit.
+    'href="https://chess.example.dev/" target="_blank" rel="noopener noreferrer nofollow ugc">Chess engine</a>',
+    'href="https://github.com/someone/gone" target="_blank" rel="noopener noreferrer nofollow ugc">github.com/someone/gone</a>',
+    "Does not load",
+    "Behind a bot check",
     "Run this test",
     // The cookie check's reading, in Basics: the site's own tracking started before a choice.
     "Tracks before asking",

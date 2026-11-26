@@ -71,9 +71,24 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
   const relinkOnly = force && row.page_text != null && Boolean(stored);
   if (relinkOnly && newProjectRule(stored.v)) {
     // Version 3 and up: the links the capture chose, checked again; only which of them load is renewed.
+    // The stored candidates carry no link text: each takes the name the last check listed it under
+    // (project_links.items; a null name there means the link has no text).
+    const storedItems = Array.isArray(stored.project_links?.items) ? stored.project_links.items : null;
+    const names = new Map((storedItems ?? []).filter((it) => typeof it?.url === "string").map((it) => [it.url, typeof it.name === "string" ? it.name : null]));
     const chosen = Array.isArray(stored.project_candidates)
-      ? stored.project_candidates.map((c) => (typeof c === "string" ? { url: c, kind: "outbound" } : c)).filter((c) => typeof c?.url === "string")
+      ? stored.project_candidates
+          .map((c) => (typeof c === "string" ? { url: c, kind: "outbound" } : c))
+          .filter((c) => typeof c?.url === "string")
+          .map((c) => (names.has(c.url) ? { ...c, name: names.get(c.url) } : c))
       : [];
+    // A list is stored only when every link's name is known: with no stored list (a row measured before the list)
+    // or a link missing from it, the renewed check keeps its counts alone, so the row stays to do for the whole-list
+    // re-measure (scripts/remeasure-shard.mjs hasLinkItems) instead of looking done with names it never had.
+    const namesKnown = storedItems != null && chosen.every((c) => names.has(c.url));
+    const recheck = async () => {
+      const { items, ...counts } = await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? ""), homeUrl: stored.final_url ?? url });
+      return namesKnown ? { ...counts, items } : counts;
+    };
     const at = new Date().toISOString();
     // A list stored without tiers (version 3 facts measured before tiers, only if #278 shipped alone) cannot be
     // judged by the rule for links outside the projects: its check is unknown until the site's next capture,
@@ -82,7 +97,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
     const facts = untiered
       ? { ...stored, project_links: null, project_links_note: "measured before tiers: needs a new capture", measured_at: at }
       : chosen.length || stored.project_candidates
-        ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? ""), homeUrl: stored.final_url ?? url }), measured_at: at }
+        ? { ...stored, project_links: await recheck(), measured_at: at }
         : stored;
     try {
       await db.execute({ sql: "UPDATE portfolios SET facts = ?, facts_at = ? WHERE url = ?", args: [JSON.stringify(facts), at, url] });
@@ -116,7 +131,8 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
   );
   if (relinkOnly) {
     // The plain fetch only finds the links to check. Its text and signals are
-    // thinner than the capture's rendered ones, so they are not stored.
+    // thinner than the capture's rendered ones, so they are not stored. The links
+    // are found on the page itself, so the list (project_links.items) has their text.
     const facts = { ...stored, project_links: measuredFacts.project_links, measured_at: measuredFacts.measured_at };
     try {
       await db.execute({

@@ -128,7 +128,8 @@ test("own project pages count fully, but only as real pages: a catch-all host's 
   // Every address answers 200 with the same app shell: the three own pages cannot be told from a page that does not exist.
   const shell = host({}, [200, SHELL]);
   const r = await checkLinks(own(["/work/a", "/work/b", "/work/c"]), { fetchImpl: shell, homeText: HOME });
-  assert.deepEqual(r, { checked: 3, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 3, own_check: "text" });
+  const items = ["/work/a", "/work/b", "/work/c"].map((p) => ({ url: `https://ana.dev${p}`, name: null, kind: "own page", verdict: "own_unverified" }));
+  assert.deepEqual(r, { checked: 3, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 3, own_check: "text", items });
   assert.equal(projectLinksPass(r, 3), false);
   assert.equal(projectLinksText(r, 3), "0 of 3 project links load; 3 of the site's own project pages could not be told apart from an empty page, so they were not counted");
 });
@@ -145,7 +146,8 @@ test("own pages are compared with the page text as stored, the same words the ni
 test("a host with real case-study pages and a 404 for nonsense passes on its own pages alone", async () => {
   const real = host({ "/work/a": [200, caseStudy("Alpha")], "/work/b": [200, caseStudy("Beta")], "/work/c": [200, caseStudy("Gamma")] }, [404, "<h1>Not found</h1>"]);
   const r = await checkLinks(own(["/work/a", "/work/b", "/work/c"]), { fetchImpl: real, homeText: HOME });
-  assert.deepEqual(r, { checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 3, own_unverified: 0, own_check: "status" });
+  const items = ["/work/a", "/work/b", "/work/c"].map((p) => ({ url: `https://ana.dev${p}`, name: null, kind: "own page", verdict: "ok" }));
+  assert.deepEqual(r, { checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 3, own_unverified: 0, own_check: "status", items });
   assert.equal(projectLinksPass(r, 3), true, "own pages count fully");
   // The address that cannot exist is asked for once per check, not once per link.
   assert.equal(real.asked.filter((a) => a.includes("/work/no-such-page-")).length, 1);
@@ -310,7 +312,18 @@ test("krishnananda.netlify.app: the projects in the desktop's inactive tab are f
   assert.deepEqual(desktopOnly.views, ["desktop"]);
   const both = await measurePage({ html: desktop, text: "", url, finalUrl: `${url}/`, phone: { html: phone, text: "", finalUrl: `${url}/` } }, { fetchImpl });
   assert.deepEqual(both.views, ["desktop", "phone"]);
-  assert.deepEqual(both.project_links, { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null });
+  const repos = [
+    ["Advice-generator-app", "Advice-generator-app CSS"],
+    ["apple-website-clone", "apple-website-clone JavaScript"],
+    ["Authentication-with-encryption-program", "Authentication-with-encryption-program Python"],
+    ["blind-75", "blind-75 Python"],
+    ["capstone", "capstone"],
+    ["cocomo-calculator-website", "cocomo-calculator-website HTML"],
+    ["cocomo-model-calculator", "cocomo-model-calculator Python"],
+    ["college-covid-status-system-php-", "college-covid-status-system-php- PHP"],
+  ];
+  const items = repos.map(([repo, name]) => ({ url: `https://github.com/krishnanand654/${repo}`, name, kind: "outbound", verdict: "ok" }));
+  assert.deepEqual(both.project_links, { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null, items });
   assert.equal(codeChecks(both).project_links, true);
   assert.equal(both.v, FACTS_VERSION);
 });
