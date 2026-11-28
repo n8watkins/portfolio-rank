@@ -20,14 +20,20 @@ import {
   wayOnScreen,
   withFirstFive,
 } from "../pipeline/first-five.mjs";
+import { checksScore, codeChecks, factLines } from "../pipeline/rubric.mjs";
+import { checkShares } from "../lib/check-points.mjs";
+import { checksReading } from "../lib/fresh-facts.mjs";
 
 const PROSE = `<p>${"I build payment systems and developer tools that stay up at three in the morning. ".repeat(3)}</p>`;
 const SITE = `<header style="display:flex;gap:16px;font-size:14px"><a href="/">JD</a><a href="#projects">Projects</a><a href="#about">About</a></header>
 <h1 style="font-size:56px;margin:24px 0 8px">Jane Doe</h1><h2 style="font-size:22px">Backend engineer</h2>${PROSE}`;
 
 const pages = {
-  // The name in a big heading, a contact link below the fold only.
-  "/named": `<!doctype html><title>Jane Doe</title><body style="font:16px system-ui;margin:0;padding:16px">${SITE}
+  // The name in a big heading, a contact link below the fold only; a "visually hidden" skip link in a bigger font,
+  // and a slide outside its carousel's frame, neither of which a visitor sees.
+  "/named": `<!doctype html><title>Jane Doe</title><body style="font:16px system-ui;margin:0;padding:16px">
+    <a href="#main" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;font-size:72px">Skip to main content</a>
+    <div style="position:absolute;right:0;top:300px;width:300px;height:100px;overflow:hidden"><div style="transform:translateX(320px);font-size:80px">Contact me</div></div>${SITE}
     <div style="height:3000px"></div><a href="mailto:jane@mail.invalid">Email me</a></body>`,
   // An intro that holds the screen for 8 seconds, then the site.
   "/intro8": `<!doctype html><title>Jane Doe</title><body style="font:16px system-ui;margin:0;padding:16px"><div id=intro style="font-size:40px">Loading 0%</div><div id=site hidden>${SITE}</div><script>
@@ -194,6 +200,21 @@ test("a new capture's reading replaces a stored one; a view it could not measure
   assert.deepEqual(withFirstFive(null, { v: FIRST_FIVE_VERSION, mobile: failed, desktop: failed }).mobile, failed);
   // A stored reading of another version is not kept.
   assert.deepEqual(withFirstFive({ v: 99, mobile: measured(1) }, { mobile: failed, desktop: failed }).mobile, failed);
+});
+
+test("the reading moves nothing that grades or ranks: the code checks, the prompt's fact lines and the points are the same with it", () => {
+  const now = new Date("2026-11-27T00:00:00Z");
+  const base = { v: 4, resume: true, github: false, contact: true, own_domain: true, footer_year: 2026, template: false, motion: false, internal_pages: 3, sections: 2, signals: { score: 5 }, project_links: { checked: 4, ok: 3, broken: 1, blocked: 0 } };
+  const intro = { state: "measured", at: now.toISOString(), applied: "x", at5: { biggest: null, nameHit: null, way: null, words: 0 }, later: null, intro: true };
+  const withIt = { ...base, first_five: { v: FIRST_FIVE_VERSION, mobile: intro, desktop: intro } };
+  assert.deepEqual(codeChecks(withIt, now), codeChecks(base, now));
+  assert.equal(checksScore(codeChecks(withIt, now)), checksScore(codeChecks(base, now)));
+  assert.deepEqual(factLines(withIt, now), factLines(base, now));
+  const grade = (facts) => ({ facts, checks: codeChecks(facts, now) });
+  assert.deepEqual(checkShares({ grade: grade(withIt), year: 2026 }), checkShares({ grade: grade(base), year: 2026 }));
+  const a = checksReading(null, JSON.stringify(withIt), { now });
+  const b = checksReading(null, JSON.stringify(base), { now });
+  assert.deepEqual([a.checks, a.checks_score], [b.checks, b.checks_score]);
 });
 
 test("a desktop reading made while a bot check or an error page showed is not measured", () => {

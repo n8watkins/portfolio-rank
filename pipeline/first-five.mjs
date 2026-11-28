@@ -95,6 +95,26 @@ export function readFirstScreen() {
     return true;
   };
   const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+  // The box each ancestor clips its content to (overflow other than visible, a clip or a clip-path), or null.
+  const clipBoxes = new Map();
+  const clipBoxOf = (el) => {
+    if (clipBoxes.has(el)) return clipBoxes.get(el);
+    const st = getComputedStyle(el);
+    const clips = (st.overflowX !== "visible" || st.overflowY !== "visible" || (st.clip && st.clip !== "auto") || (st.clipPath && st.clipPath !== "none")) && el !== document.documentElement && el !== document.body;
+    const box = clips ? el.getBoundingClientRect() : null;
+    clipBoxes.set(el, box);
+    return box;
+  };
+  // Whether a text rect is seen: inside the window and inside every box an ancestor clips it to (a
+  // "visually hidden" skip link of 1 x 1 px, a slide of a carousel outside its frame, are not).
+  const seen = (r, el) => {
+    let [l, t, rt, b] = [Math.max(0, r.left), Math.max(0, r.top), Math.min(W, r.right), Math.min(H, r.bottom)];
+    for (let a = el; a && rt - l > 1 && b - t > 1; a = a.parentElement) {
+      const box = clipBoxOf(a);
+      if (box) [l, t, rt, b] = [Math.max(l, box.left), Math.max(t, box.top), Math.min(rt, box.right), Math.min(b, box.bottom)];
+    }
+    return rt - l > 1 && b - t > 1;
+  };
   const words = [];
   let biggest = null;
   let biggestPx = 0;
@@ -120,7 +140,7 @@ export function readFirstScreen() {
     range.selectNodeContents(node);
     const rects = [...range.getClientRects()];
     if (!rects.some(onScreen)) continue;
-    if (!drawn(el)) continue;
+    if (!drawn(el) || !rects.some((r) => seen(r, el))) continue;
     words.push(t);
     const px = parseFloat(getComputedStyle(el).fontSize) || 0;
     if (px > biggestPx + 0.5) {
@@ -134,7 +154,7 @@ export function readFirstScreen() {
   for (const el of document.querySelectorAll("a[href], button, [role=button], [role=link]")) {
     if (controls.length >= 60) break;
     const r = el.getBoundingClientRect();
-    if (!onScreen(r) || !drawn(el)) continue;
+    if (!onScreen(r) || !drawn(el) || !seen(r, el)) continue;
     const label = clean(el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || el.querySelector("img[alt]")?.getAttribute("alt") || "");
     controls.push({ text: label.slice(0, 120), href: el.href ? String(el.href) : el.getAttribute?.("href") ?? "" });
   }
