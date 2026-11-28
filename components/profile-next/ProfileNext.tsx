@@ -241,11 +241,21 @@ function ProjectsBody({ links, builtWith, notice }: { links: Links | null; built
               {links.items.map((l) => (
                 <li key={l.url} className={s.row}>
                   <Status st={l.st} />
-                  <a className={`${s.rowK} ${s.rowLink}`} href={l.url} target="_blank" rel="noopener noreferrer nofollow ugc">
+                  <a
+                    className={`${s.rowK} ${s.rowLink}${l.name === l.address ? ` ${s.rowLinkAddr}` : ""}`}
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow ugc"
+                    title={l.name === l.address ? l.address : undefined}
+                  >
                     {l.name}
                   </a>
                   <span className={s.rowV}>{l.word}</span>
-                  {l.name !== l.address && <span className={s.rowDef}>{l.address}</span>}
+                  {l.name !== l.address && (
+                    <span className={s.rowDef} title={l.address}>
+                      {l.address}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

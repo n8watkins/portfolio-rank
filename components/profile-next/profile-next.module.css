@@ -1172,8 +1172,21 @@
 .rowLink:focus-visible {
   text-decoration-color: currentColor;
 }
+/* The address under a name stays on one line, cut with an ellipsis (its full text is the title). */
 .linkRows .rowDef {
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* A name that is the address wraps at most two lines. */
+.rowLinkAddr {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
 }
 .linkRows .rowV {
   font-weight: 550;
