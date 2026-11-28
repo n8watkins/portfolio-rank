@@ -695,14 +695,15 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`recheck.yml`** | started by the Worker's hourly cron at :15 when a site is due; fallback schedule hourly at :40 (skips when Cloudflare started a run in the last hour) + manual | The not-working pool's re-checks that are due (`pipeline/recheck-run.mjs`); an hour with none due is one query and no install. No Gemini, no email | TURSO |
 | **`judge-vote.yml`** | manual only | Fallback: the ranking v2 comparisons and recompute, within the accountant's share, only when the repository variable `RANKING_V2` is `true` (it is not set, so a run does nothing) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
-| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for every listed portfolio graded or measured by the capture (not "not a portfolio"), so every tiers member has its own, without a fresh PSI result (never measured first, then oldest), up to 400 a day, by hitting the prod API | TURSO |
+| **`prewarm.yml`** | started by the Worker's hourly cron at about 09:15 UTC; fallback schedule 09:00 UTC (skips when a dispatched run started that UTC day) + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for every listed portfolio graded or measured by the capture (not "not a portfolio"), so every tiers member has its own, without a fresh PSI result (never measured first, then oldest), up to 400 a day, by hitting the prod API | TURSO |
 | **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 
 The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check, whose fallback runs daily at 12:00 UTC, 7.5 hours after Cloudflare's start), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
 Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without claiming it and this fallback does the night's work.
 `judge-vote.yml` lost its schedule on 2026-11-10: AI comparisons run in the end-of-day run.
 Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were removed on 2026-11-22 (owner, 2026-11-21).
-`backup` and `prewarm` call no Gemini and nothing depends on their exact time, so they keep their GitHub schedules.
+`backup` calls no Gemini and nothing depends on its exact time, so it keeps its GitHub schedule.
+The `prewarm.yml` fallback (09:00 UTC) skips when a dispatched run already started that UTC day, so the 1,600 PageSpeed calls of a full run are never spent twice.
 `sync-upstream` and `judge-vote` share the `gemini` concurrency group, so a manual fallback run and the nightly checks never overlap on the runner.
 
 ## Budget model

@@ -20,7 +20,9 @@ on:
         required: false
         default: "400"
   schedule:
-    - cron: "0 9 * * *" # daily 09:00 UTC - clear of sync (06:00) and vote (13:00)
+    # The fallback (see fallback-guard). The Worker starts the job at about
+    # 09:15 UTC; GitHub then starts this whenever it gets to it, and it skips.
+    - cron: "0 9 * * *"
 
 concurrency:
   group: prewarm
@@ -31,7 +33,49 @@ permissions:
   issues: write
 
 jobs:
+  # The GitHub schedule is only the fallback: GitHub starts it 7 to 12 hours late,
+  # so the Worker's hourly cron starts this workflow with a workflow_dispatch at
+  # about 09:15 UTC (worker/prewarm-start.ts, no inputs: the defaults below apply).
+  # A scheduled run skips when a dispatched run already started this UTC day
+  # (one that succeeded or is still going), so a full run's 1,600 PageSpeed calls
+  # are never spent twice; it only does the work when Cloudflare could not (no
+  # GITHUB_DISPATCH_TOKEN, a refused dispatch, or the Worker is down).
+  fallback-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.guard.outputs.run }}
+    steps:
+      - id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WORKFLOW: prewarm.yml
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          since=$(date -u +%Y-%m-%dT00:00:00Z)
+          # Only a run that succeeded or is still going counts: a run that
+          # failed, was cancelled or timed out did not do the day's work.
+          # A list GitHub will not give counts as none: the fallback then runs,
+          # which is the safe side when Cloudflare may be down.
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since&per_page=100" \
+            --jq '[.workflow_runs[] | select(.status != "completed" or .conclusion == "success")] | length') || n=0
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "::notice::A dispatched run of $WORKFLOW already started today (UTC); the GitHub schedule (fallback) skips."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No run of $WORKFLOW was started from Cloudflare today (UTC); the GitHub schedule runs it."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   prewarm:
+    needs: fallback-guard
+    if: needs.fallback-guard.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
