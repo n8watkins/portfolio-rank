@@ -98,6 +98,7 @@ import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } 
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 import { rankFromCode } from "../lib/tiers-store.mjs";
 import { readCookieCheck, watchRequests, withReading } from "./cookie-check.mjs";
+import { MOBILE_MIN_LEFT_MS, firstFiveOf, readAtFive, readMobileFirstFive, readNow, withFirstFive } from "./first-five.mjs";
 
 /** Now as SQLite's datetime('now') writes it ("YYYY-MM-DD HH:MM:SS", UTC), like portfolios.captured_at. */
 const sqliteNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -152,6 +153,18 @@ function storedPrivacy(facts) {
     return null;
   }
 }
+
+/** The stored facts' first five seconds (facts.first_five), or null. */
+function storedFirstFive(facts) {
+  try {
+    return JSON.parse(String(facts ?? "null"))?.first_five ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The desktop visit's window. */
+const DESKTOP_VIEWPORT = { width: 1440, height: 900 };
 
 export const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 16);
 
@@ -498,7 +511,7 @@ export async function narrowView(page, doc) {
   const startUrl = page.url();
   const navigated = () => doc.navigations > before;
   let passes = { splash: null, modal: null, mode: null };
-  const done = (fields) => ({ crop: null, seen: null, overflow390: null, widthNote: null, passes, note: null, missing: null, navigated: navigated(), endUrl: page.url(), ...fields });
+  const done = (fields) => ({ crop: null, seen: null, overflow390: null, widthNote: null, passes, note: null, missing: null, firstScreen: null, navigated: navigated(), endUrl: page.url(), ...fields });
   const missing = (reason) => done({ view: { ok: false, meta: { missing: reason } }, missing: reason });
   try {
     await page.setViewportSize(NARROW);
@@ -553,6 +566,8 @@ export async function narrowView(page, doc) {
   const keptWide = typeof width === "number" && width >= WIDE_KEPT_PX;
   const overflow390 = typeof width !== "number" || keptWide ? null : width > NARROW.width + 5;
   const widthNote = keptWide ? `${width}px wide at 390: a width set once at load, so whether it fits a phone is unknown` : null;
+  // The settled phone screen, before the scroll-through: what the mobile five-second reading is compared with.
+  const firstScreen = await readNow(page, Date.now()).then((r) => r.raw ?? null);
   const view = await captureViewAsSeen(page, "phone");
   const judged = await judgeNarrow(page, doc, passes);
   if (judged.missing) return missing(judged.missing);
@@ -561,7 +576,7 @@ export async function narrowView(page, doc) {
   // A narrow view that is blocked (the note) or cannot be read adds nothing to the facts.
   const read = judged.note ? null : await page.evaluate(readRenderedPage).catch(() => null);
   const seen = read ? { html: read.html, text: read.text, finalUrl: page.url() } : null;
-  return done({ view, crop, seen, overflow390, widthNote, note: judged.note });
+  return done({ view, crop, seen, overflow390, widthNote, note: judged.note, firstScreen: judged.note ? null : firstScreen });
 }
 
 /** A page this wide at 390 kept the desktop window's width (1440): an element sized once at load, not a phone layout. */
@@ -659,7 +674,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
   }
 
   const ctx = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: DESKTOP_VIEWPORT,
     userAgent: UA,
     ignoreHTTPSErrors: true,
   });
@@ -719,6 +734,10 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
 
   // The image version this capture uploaded, if any (removed again when the capture is not stored).
   let uploadedV = null;
+  // The desktop's first five seconds (./first-five.mjs): the screen read five seconds after the
+  // navigation starts, on this visit; nothing is pressed or closed before it (arrive waits for it).
+  const startedAt = Date.now();
+  const desktopAt5 = readAtFive(page, startedAt).then((r) => ({ ...r, status: doc.status, cfMitigated: doc.cfMitigated }));
   try {
     await page.goto(url, { waitUntil: "load", timeout: 30000 });
     /** The settle, the passes and the wait for content, on the page as it now is. */
@@ -726,6 +745,8 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
       // Let SPAs/preloaders settle: idle network if it comes, then a beat.
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(1500);
+      // The five-second reading is of the page as it came, before the capture presses anything.
+      await desktopAt5;
       // The cookie check, on the settled page before anything below clicks or
       // dismisses: tracking cookies, tracker requests and a consent banner
       // (./cookie-check.mjs). After a challenge that reloads into the site, the
@@ -835,6 +856,8 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     };
     // The page before the scroll-through, in case it cannot be read after it.
     const settled = await page.evaluate(readRenderedPage).catch(() => rendered);
+    // The settled first screen, which the five-second reading is compared with (./first-five.mjs introAt5).
+    const desktopLater = await readNow(page, startedAt);
 
     // The tall desktop image: scroll through once, back to the top, stitch
     // (pipeline/fullpage.mjs). Its first screenful is the grade's hero.jpg;
@@ -900,6 +923,20 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // A browser that died while the views were taken leaves them half made (their own errors are caught): not stored.
     if (await run.watch.lost()) return BROWSER_GONE;
     await closeOwn();
+    if (run.aborted) return "aborted";
+    // The first five seconds (./first-five.mjs): the desktop's from this visit, the phone's from a
+    // throttled visit of its own, made now that this one is over, so a site that challenges a repeat
+    // visit loses only this reading. Bounded, and skipped near the time limit; it never throws.
+    if (facts) {
+      const mobile =
+        run.deadline - Date.now() < MOBILE_MIN_LEFT_MS
+          ? { error: "too little of the capture's time was left" }
+          : await readMobileFirstFive(browser, url, { name, userAgent: UA });
+      facts.first_five = withFirstFive(
+        storedFirstFive(stored.facts),
+        firstFiveOf({ desktopAt5: await desktopAt5, desktopLater, phoneLater: narrow.firstScreen, mobile, name, viewport: DESKTOP_VIEWPORT })
+      );
+    }
     if (run.aborted) return "aborted";
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "hero.jpg"), heroJpg);
