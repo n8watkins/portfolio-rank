@@ -39,6 +39,7 @@ import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../li
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { recheckStartTick } from "./recheck-start";
+import { prewarmStartTick } from "./prewarm-start";
 import { runEach } from "../pipeline/hourly.mjs";
 import { reviewAutoApplyEnabled, reviewAutoApplyTick } from "./review";
 
@@ -212,6 +213,8 @@ const worker = {
           // Starts the not-working pool's hourly re-check on GitHub Actions when a site is due (./recheck-start.ts).
           // First, because it is the task with a time to keep: a slow task ahead of it must not delay it.
           ["recheck start", () => recheckStartTick(env as NightEnv, at, { db: database() })],
+          // Starts the daily Lighthouse job on GitHub Actions in the 09 UTC hour (./prewarm-start.ts), second for the same reason.
+          ["prewarm start", () => prewarmStartTick(env as NightEnv, at)],
           // Owners' removals held a day take effect (./owner-removals.ts).
           ["owner removals", () => applyRemovalsTick(at)],
           // Every removal still held alerts the owner, as a task of its own so a failure is reported (./owner-removals.ts).

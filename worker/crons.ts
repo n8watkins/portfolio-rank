@@ -18,6 +18,7 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
   nightly: ["night start"],
   hourly: [
     "recheck start",
+    "prewarm start",
     "owner removals",
     "removal alerts",
     "edge purge",

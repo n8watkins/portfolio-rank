@@ -49,7 +49,9 @@ Times below are Pacific, with UTC in brackets, for winter.
    Running.
 4. **Every hour at :40**: the GitHub fallback for the re-check of failing sites (`recheck.yml`).
    It skips when Cloudflare started a run in the last hour.
-5. **01:00 (09:00 UTC)**: warm the speed and polish scores of listed sites, up to 400 a day (`prewarm.yml`).
+5. **01:00 (09:15 UTC)**: warm the speed and polish scores of listed sites, up to 400 a day (`prewarm.yml`).
+   The Worker's hourly task starts it in the 09 UTC hour (`worker/prewarm-start.ts`), because GitHub's own schedule ran it 7 to 12 hours late.
+   The GitHub schedule stays as the fallback and skips when a run was already started that UTC day, so the day's PageSpeed calls are never spent twice.
    Every site Gemini graded "a portfolio" or the capture measured is included, so sites ranked from the code checks get their own Lighthouse.
    This job is the only thing that measures the stored Lighthouse results, and it measures directly: it calls Google PageSpeed from the GitHub runner and writes the results to the database with the Turso credentials it already has.
    It needs one secret, the repository Actions secret `PSI_API_KEY` (a Google PageSpeed key), given to the prewarm step only; without it the job stops with an error that says so.
@@ -101,6 +103,8 @@ Each task runs on its own, so one that fails is reported to Sentry and the rest 
 
 1. **Start the re-check of failing sites** (`recheck start`, `worker/recheck-start.ts`): counts the sites due and starts `recheck.yml` only when at least one is due.
    It goes first because it is the one with a time to keep.
+   Right after it, `prewarm start` (`worker/prewarm-start.ts`) starts `prewarm.yml` once a day, in the 09 UTC hour (09:15), and does nothing in the other 23 hours.
+   A refused start is tried once more, then reported; the GitHub fallback schedule then runs the job.
    Running.
 2. **Apply owners' removals** (`owner removals`, `worker/owner-removals.ts`): a removal an owner asked for 24 hours ago takes effect.
    Running.
@@ -574,7 +578,7 @@ Each one watches the jobs above.
 | `discover.yml` (Discover portfolios) | daily 22:00 UTC, gated; manual | finds new sites | Off |
 | `backup.yml` (Backup DB to R2) | daily 05:00 UTC; manual | database snapshot | Running |
 | `limits.yml` (Free limits snapshot) | daily 13:30 UTC; manual | free-limit numbers, backup freshness | Running |
-| `prewarm.yml` (Prewarm metrics) | daily 09:00 UTC; manual | warms speed and polish scores | Running |
+| `prewarm.yml` (Prewarm metrics) | started by the Worker at about 09:15 UTC; fallback schedule 09:00 UTC (skips when a run started that UTC day); manual | warms speed and polish scores | Running |
 | `security.yml` (Security scan) | Monday 15:00 UTC; lock-file pull requests; manual | scans dependencies | Running |
 | `deploy.yml` (Deploy) | release tag; a push to main under `data/`; manual | deploys production | Running |
 | `release.yml` (Release) | a `vX.Y.Z` tag; manual | publishes a release | Running |
@@ -600,6 +604,7 @@ Dependabot (`.github/dependabot.yml`) opens pull requests daily for release-kit 
 | --- | --- | --- |
 | `night start` | starts the end-of-day Workflow | Running |
 | `recheck start` | starts `recheck.yml` when due | Running |
+| `prewarm start` | starts `prewarm.yml` in the 09 UTC hour | Running |
 | `owner removals` | applies removals held 24 hours | Running |
 | `removal alerts` | alerts for held removals | Running |
 | `edge purge` | clears cached pages | Running |
