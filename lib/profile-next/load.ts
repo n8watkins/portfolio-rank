@@ -70,7 +70,9 @@ export const loadNextProfile = cache(async (url: string): Promise<NextProfile | 
   const client = db();
   const [row, rows, bases, full] = await Promise.all([
     client.execute({ sql: "SELECT ai_rubric, facts FROM portfolios WHERE url = ?", args: [url] }).then((r) => r.rows[0]),
-    client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?)", args: [`inspect:${url}`, psiKey("mobile", url)] }).then((r) => r.rows),
+    client
+      .execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?)", args: [`inspect:${url}`, psiKey("mobile", url), psiKey("desktop", url)] })
+      .then((r) => r.rows),
     shotBases([url]),
     fullPagePreview(url).catch(() => null),
   ]);
@@ -86,7 +88,12 @@ export const loadNextProfile = cache(async (url: string): Promise<NextProfile | 
   const facts = freshFactsFor(grade, row?.facts) ?? parse(grade?.facts) ?? parse(row?.facts) ?? (p.saved.quick?.ok ? parse(p.saved.quick.facts) : null);
   const inspect = saved(`inspect:${url}`);
   const psi = saved(psiKey("mobile", url));
-  const report = p.hideGrade ? null : profileReport({ url, inspect: inspect.v, facts, psi: psi.v, inspectAt: inspect.at, psiAt: psi.at });
+  const psiDesktop = saved(psiKey("desktop", url));
+  // The first five seconds come from the newest capture's own facts (a grade's copy of the facts may predate them).
+  const firstFive = parse(row?.facts)?.first_five ?? null;
+  const report = p.hideGrade
+    ? null
+    : profileReport({ url, inspect: inspect.v, facts, psi: psi.v, psiDesktop: psiDesktop.v, firstFive, inspectAt: inspect.at, psiAt: psi.at });
 
   const base = bases.get(url);
   const desktop: ShotView = full

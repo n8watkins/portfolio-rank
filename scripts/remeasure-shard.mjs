@@ -16,9 +16,11 @@
 // when the code being run has pipeline/cookie-check.mjs, a done cookie check
 // reading (facts.privacy, hasCookieCheck), and, when that code stores the list
 // of project links (its pipeline/facts.mjs declares LINK_ITEMS_MAX), a project
-// link check with its list (facts.project_links.items, hasLinkItems), so a
+// link check with its list (facts.project_links.items, hasLinkItems), and,
+// when that code has pipeline/first-five.mjs declaring FIRST_FIVE_VERSION, a
+// done first five seconds reading (facts.first_five, hasFirstFive), so a
 // re-run after a failure only does what is left, and the whole-list run fills
-// in the cookie check and the list where they are missing. It imports nothing
+// in the cookie check, the list and the reading where they are missing. It imports nothing
 // from pipeline/ but roster.mjs, which every
 // release has (the workflow runs it from main against the released code). --limit caps the shard (a
 // small trial run); it keeps the first addresses in address order.
@@ -85,6 +87,44 @@ export function storesLinkItems(root) {
   }
 }
 
+/**
+ * The first five seconds' reading version this script fills in (pipeline/first-five.mjs
+ * FIRST_FIVE_VERSION; tests/remeasure-shard.test.mjs keeps the two equal). Written out
+ * here, not imported, for the same reason as PRIVACY_VERSION.
+ */
+export const FIRST_FIVE_VERSION = 1;
+
+/**
+ * Whether stored facts (an object or its JSON) carry a done first five seconds
+ * reading (facts.first_five): at FIRST_FIVE_VERSION, and each view (mobile,
+ * desktop) measured, or not measured but tried within UNKNOWN_RETRY_MS of
+ * `now` (a site whose phone visit always meets a bot check is tried once per
+ * run of the whole list, not again on its re-runs).
+ */
+export function hasFirstFive(facts, now = Date.now()) {
+  try {
+    const f = typeof facts === "string" ? JSON.parse(facts) : facts;
+    const ff = f?.first_five;
+    if (!ff || Number(ff.v) !== FIRST_FIVE_VERSION) return false;
+    const done = (view) => view && (view.state === "measured" || now - Date.parse(view.at) < UNKNOWN_RETRY_MS);
+    return Boolean(done(ff.mobile) && done(ff.desktop));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the code tree at `root` measures the first five seconds: it has
+ * pipeline/first-five.mjs declaring FIRST_FIVE_VERSION. Read as text, never imported.
+ */
+export function measuresFirstFive(root) {
+  try {
+    return /^export const FIRST_FIVE_VERSION\b/m.test(fs.readFileSync(path.join(root, "pipeline", "first-five.mjs"), "utf8"));
+  } catch {
+    return false;
+  }
+}
+
 /** The shard (0-based) an address belongs to, out of `shards`. Stable: a hash of the address alone. */
 export function shardOf(url, shards) {
   return createHash("sha1").update(String(url)).digest().readUInt32BE(0) % shards;
@@ -111,9 +151,11 @@ export function factsVersion(facts) {
  * row would stay to do on a release without it. `linkItems`: likewise,
  * whether the code being run stores the list of project links
  * (storesLinkItems); only then is a row whose link check has no list
- * (hasLinkItems) still to do.
+ * (hasLinkItems) still to do. `firstFive`: likewise, whether the code being
+ * run measures the first five seconds (measuresFirstFive); only then is a row
+ * without a done reading (hasFirstFive) still to do.
  */
-export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 0, cookieCheck = false, linkItems = false, now = Date.now() }) {
+export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 0, cookieCheck = false, linkItems = false, firstFive = false, now = Date.now() }) {
   if (!Number.isInteger(shards) || shards < 1) throw new Error(`shards must be a whole number of 1 or more, got ${shards}`);
   if (!Number.isInteger(shard) || shard < 1 || shard > shards) throw new Error(`shard must be a whole number from 1 to ${shards}, got ${shard}`);
   const facts = new Map(rows.map((r) => [String(r.url), r.facts]));
@@ -121,9 +163,12 @@ export function pickShard({ feed, rows, shard, shards, skipVersion = 0, limit = 
   const mine = urls.filter((u) => shardOf(u, shards) === shard - 1);
   // Still to do: facts older than skipVersion, or, when the code measures it, facts with no done cookie
   // check reading (hasCookieCheck), or, when the code stores it, a link check without its list (hasLinkItems),
-  // so the whole-list run fills them in.
+  // or, when the code measures it, no done first five seconds reading (hasFirstFive), so the whole-list run fills them in.
   const done = (u) =>
-    factsVersion(facts.get(u)) >= skipVersion && (!cookieCheck || hasCookieCheck(facts.get(u), now)) && (!linkItems || hasLinkItems(facts.get(u)));
+    factsVersion(facts.get(u)) >= skipVersion &&
+    (!cookieCheck || hasCookieCheck(facts.get(u), now)) &&
+    (!linkItems || hasLinkItems(facts.get(u))) &&
+    (!firstFive || hasFirstFive(facts.get(u), now));
   const wanted = skipVersion > 0 ? mine.filter((u) => !done(u)) : mine;
   const capped = limit > 0 ? wanted.slice(0, limit) : wanted;
   return { urls: capped, listed: urls.length, inShard: mine.length, skipped: mine.length - wanted.length };
@@ -159,13 +204,15 @@ async function main() {
   const cookieCheck = fs.existsSync(path.join(root, "pipeline", "cookie-check.mjs"));
   // And whether it stores the list of project links.
   const linkItems = storesLinkItems(root);
-  const { urls, listed, inShard, skipped } = pickShard({ feed, rows, shard, shards, skipVersion, limit, cookieCheck, linkItems });
+  // And whether it measures the first five seconds.
+  const firstFive = measuresFirstFive(root);
+  const { urls, listed, inShard, skipped } = pickShard({ feed, rows, shard, shards, skipVersion, limit, cookieCheck, linkItems, firstFive });
   fs.writeFileSync(out, urls.map((u) => `${u}\n`).join(""));
   console.log(
     `shard ${shard} of ${shards}: ${urls.length} site(s) to re-capture ` +
       `(${inShard} of the ${listed} listed, live and captured sites belong to it; ` +
       `${skipped} skipped for facts already at version ${skipVersion} or newer${cookieCheck ? ", with a cookie check" : ""}` +
-      `${linkItems ? ", with a list of project links" : ""}; limit ${limit || "none"})`
+      `${linkItems ? ", with a list of project links" : ""}${firstFive ? ", with a first five seconds reading" : ""}; limit ${limit || "none"})`
   );
 }
 

@@ -4,7 +4,9 @@
 // checks, stored exactly as production stores them (the cache value without a
 // time, the time in the row's `at`), says noindex in its metadata and its
 // X-Robots-Tag header, is in no sitemap and linked from nowhere (the current
-// profile is unchanged), and has its card. Two more servers on the same build:
+// profile is unchanged), and has its card. The first five seconds card shows
+// from the seeded facts.first_five, first and full width, with no sideways
+// scroll on a phone or a desktop (PN_SHOTS_DIR saves screenshots of it). Two more servers on the same build:
 // production's switches (TOOLS_ENABLED, GAMES_V2 and RANKING_V2 off) with the
 // page on, where it says only what is true there; and the page off, where it
 // and its card answer 404.
@@ -18,6 +20,7 @@ import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
 import { migrate } from "../lib/schema.mjs";
 import { makeReading, withReading } from "../pipeline/cookie-check.mjs";
+import { chromium } from "playwright";
 
 const cookieFixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "fixtures", "cookie-check", "readings.json"), "utf8"));
 
@@ -36,7 +39,10 @@ const nextPath = (url) => `/p/${encodeURIComponent(url)}/next`;
 const INSPECT_AT = Date.parse("2026-11-20T10:00:00Z");
 const PSI_AT = Date.parse("2026-11-23T09:30:00Z");
 
-async function seed(db, url) {
+/** One view of the first five seconds as the capture stores it (pipeline/first-five.mjs). */
+const ffView = (at5, intro, applied) => ({ state: "measured", at: "2026-11-22T08:00:00.000Z", applied, at5: { atMs: 5003, ...at5 }, later: null, intro });
+
+async function seed(db, url, { firstFive = false } = {}) {
   const facts = {
     v: 4,
     final_url: url,
@@ -66,6 +72,16 @@ async function seed(db, url) {
     measured_at: "2026-11-22T08:00:00Z",
     // The cookie check's reading as the capture stores it: Google Analytics and Hotjar cookies on arrival, no banner.
     privacy: withReading(null, makeReading({ ...cookieFixtures["no-consent-cookies"], at: new Date("2026-11-22T08:00:00Z") })),
+    // The first five seconds: on the phone still a loader at five seconds (no name, no way), on the desktop the site.
+    ...(firstFive
+      ? {
+          first_five: {
+            v: 1,
+            mobile: ffView({ biggest: "Loading the portfolio 87%", nameHit: null, way: null, wayKind: null, words: 4 }, true, "412x823 at 1.75x; 562.5 ms latency, 1474.56 Kbps down, 675 Kbps up; CPU 4x slower"),
+            desktop: ffView({ biggest: "Hi, I build calm interfaces for busy people and their very long headlines", nameHit: "someone", way: "Get in touch", wayKind: "contact", words: 64 }, false, "1440x900 at 1x; no throttling"),
+          },
+        }
+      : {}),
   };
   await db.execute({
     sql: "INSERT INTO portfolios (url, status, facts) VALUES (?, 'live', ?) ON CONFLICT(url) DO UPDATE SET status = 'live', health = NULL, facts = excluded.facts",
@@ -73,8 +89,11 @@ async function seed(db, url) {
   });
   // The values as the polish check and Lighthouse save them: no time inside.
   const inspect = { ok: true, finalUrl: url, https: true, customDomain: true, description: "A developer.", ogImage: null, ogImageLoads: false, githubUrl: "https://github.com/someone", hasResume: false, hasContact: true, copyrightYear: 2026 };
-  const psi = { ok: true, strategy: "mobile", scores: { performance: 71, accessibility: 92, seo: 100, "best-practices": 96 } };
-  for (const [k, v, at] of [[`inspect:${url}`, inspect, INSPECT_AT], [`psi:${url}`, psi, PSI_AT]]) {
+  // Lighthouse with its Largest Contentful Paint: one run on the phone, the average of two on the desktop.
+  const lcp = (ms) => [{ id: "largest-contentful-paint", label: "Largest Contentful Paint", value: `${(ms / 1000).toFixed(1)} s`, score: 0.5, numeric: ms }];
+  const psi = { ok: true, strategy: "mobile", scores: { performance: 71, accessibility: 92, seo: 100, "best-practices": 96 }, metrics: lcp(3400) };
+  const psiDesktop = { ok: true, strategy: "desktop", scores: { performance: 98, accessibility: 92, seo: 100, "best-practices": 96 }, metrics: lcp(1100), runs: 2, runsAttempted: 2 };
+  for (const [k, v, at] of [[`inspect:${url}`, inspect, INSPECT_AT], [`psi:${url}`, psi, PSI_AT], [`psi-desktop:${url}`, psiDesktop, PSI_AT]]) {
     await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(v), at] });
   }
 }
@@ -83,7 +102,7 @@ before(async () => {
   if (skip) return;
   const db = createClient({ url: DB_URL, timeout: 10000 });
   await migrate(db);
-  await seed(db, SITE.url);
+  await seed(db, SITE.url, { firstFive: true });
   await seed(db, PROD_SITE.url);
   // A site added through "Add your portfolio" (TOOLS_ENABLED, on in this run): known by its grade job, not listed.
   const now = new Date().toISOString();
@@ -152,13 +171,80 @@ test("with the switch on: the report from the saved checks, the actions, the cla
   assert.ok(html.includes(`href="/claim?url=${encodeURIComponent(SITE.url)}"`), "the claim link");
   // No score, no points, no Gemini card, nothing unmeasured, and no promise about what a shared link shows.
   const main = mainOf(html);
-  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", "First five seconds", ">Design<", ">Writing<", "Mobile only", ">Desktop<", "What people see when the link is posted", "this card goes with the link"]) {
+  for (const gone of ["of 100 points", "Code checks score", "Gemini", "Other portfolios in this tier", ">Design<", ">Writing<", "Mobile only", "What people see when the link is posted", "this card goes with the link"]) {
     assert.ok(!main.includes(gone), `does not show "${gone}"`);
   }
+  // The first five seconds, from the capture's facts.first_five and the stored Lighthouse results: the first card.
+  assert.ok(main.indexOf(">First five seconds</h3>") > 0 && main.indexOf(">First five seconds</h3>") < main.indexOf(">Basics</h3>"), "the first card");
+  for (const text of [
+    "The first screen only, with no scrolling, read by code five seconds after the page starts loading. Mobile on a typical mobile connection, Desktop on a fast one.",
+    ">Mobile</span>",
+    ">Desktop</span>",
+    "The first screen says<small>The biggest text on screen at that moment, quoted.</small>",
+    "“Loading the portfolio 87%”",
+    "“Hi, I build calm interfaces for busy people and their very long headlines”",
+    "Your name is visible",
+    "A way to reach you or see your work is visible",
+    "Still on an intro or loading",
+    "Main content appears after<small>From Google Lighthouse (Mobile: one run; Desktop: the average of two runs). Under 2.5 seconds is good.</small>",
+    "3.4 s",
+    "1.1 s",
+    "Show your name on the first screen on mobile.",
+    "Shorten or remove the intro: on mobile the first screen is still loading after five seconds.",
+  ]) {
+    assert.ok(main.includes(text), `the first five seconds shows "${text}"`);
+  }
+  // Shown, never counted: its tile carries no verdict.
+  const tile = main.slice(main.indexOf('href="#pn-card-first5"'), main.indexOf("</a>", main.indexOf('href="#pn-card-first5"')));
+  assert.ok(tile.includes("First five seconds") && !/to fix/.test(tile), `the tile says nothing: ${tile}`);
   const card = await fetch(`${BASE}${nextPath(SITE.url)}/card`);
   assert.equal(card.status, 200);
   assert.equal(card.headers.get("content-type"), "image/png");
   assert.ok((await card.arrayBuffer()).byteLength > 5000);
+});
+
+test("the first five seconds card on a phone and a desktop: no sideways scroll, every row in its place", { skip }, async () => {
+  const browser = await chromium.launch({ args: ["--mute-audio"] });
+  try {
+    for (const width of [390, 1280]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+      const p = await ctx.newPage();
+      await p.goto(BASE + nextPath(SITE.url), { waitUntil: "load" });
+      const card = p.locator("#pn-card-first5");
+      await card.scrollIntoViewIfNeeded();
+      assert.equal(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, `no sideways scroll at ${width}`);
+      // The card fits its column: no cell sticks out of it.
+      const over = await card.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return [...el.querySelectorAll("th, td, p")].filter((c) => c.getBoundingClientRect().right > r.right + 0.5).length;
+      });
+      assert.equal(over, 0, `nothing sticks out of the card at ${width}`);
+      assert.deepEqual(await card.locator("tbody th").evaluateAll((ths) => ths.map((t) => t.firstChild.textContent)), [
+        "The first screen says",
+        "Your name is visible",
+        "A way to reach you or see your work is visible",
+        "Still on an intro or loading",
+        "Main content appears after",
+      ]);
+      // On a wide screen the card runs the full width of the report, above the two columns.
+      if (width >= 760) {
+        const [cw, rw] = await p.evaluate(() => [document.getElementById("pn-card-first5").getBoundingClientRect().width, document.getElementById("pn-card-basics").parentElement.parentElement.getBoundingClientRect().width]);
+        assert.ok(Math.abs(cw - rw) < 1, `full width: ${cw} of ${rw}`);
+      }
+      // Screenshots for a person to look at, when asked for (PN_SHOTS_DIR).
+      if (process.env.PN_SHOTS_DIR) {
+        fs.mkdirSync(process.env.PN_SHOTS_DIR, { recursive: true });
+        // A tall window with the card well below the header, so neither fixed bar covers it.
+        await p.setViewportSize({ width, height: 2400 });
+        await p.evaluate(() => window.scrollTo(0, document.getElementById("pn-card-first5").getBoundingClientRect().top + window.scrollY - 300));
+        await card.screenshot({ path: path.join(process.env.PN_SHOTS_DIR, `first5-card-${width}.png`) });
+        await p.screenshot({ path: path.join(process.env.PN_SHOTS_DIR, `first5-page-${width}.png`), fullPage: true });
+      }
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+  }
 });
 
 test("in no sitemap and linked from nowhere: the current profile is unchanged", { skip }, async () => {
@@ -233,7 +319,8 @@ test("production's switches with the page on: the claim card offers the older fl
   ]) {
     assert.ok(main.includes(text), `shows "${text}"`);
   }
-  for (const gone of ["re-check", "small file", "GitHub Pages", "press Verify", "re-grade", "verified at once", "1,200", "Not placed in a tier", 'aria-label="Tier', ">Tier<", "Play the screenshots"]) {
+  // A site whose facts have no first five seconds reading has no such card (never a placeholder).
+  for (const gone of ["re-check", "small file", "GitHub Pages", "press Verify", "re-grade", "verified at once", "1,200", "Not placed in a tier", 'aria-label="Tier', ">Tier<", "Play the screenshots", "First five seconds"]) {
     assert.ok(!main.includes(gone), `does not show "${gone}"`);
   }
 });

@@ -5,8 +5,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { PRIVACY_VERSION, UNKNOWN_RETRY_MS, factsVersion, hasCookieCheck, hasLinkItems, pickShard, shardOf, storesLinkItems } from "../scripts/remeasure-shard.mjs";
+import {
+  FIRST_FIVE_VERSION,
+  PRIVACY_VERSION,
+  UNKNOWN_RETRY_MS,
+  factsVersion,
+  hasCookieCheck,
+  hasFirstFive,
+  hasLinkItems,
+  measuresFirstFive,
+  pickShard,
+  shardOf,
+  storesLinkItems,
+} from "../scripts/remeasure-shard.mjs";
 import { PRIVACY_VERSION as MEASURED_VERSION } from "../pipeline/cookie-check.mjs";
+import { FIRST_FIVE_VERSION as MEASURED_FIRST_FIVE } from "../pipeline/first-five.mjs";
 
 const urls = Array.from({ length: 500 }, (_, i) => `https://site-${i}.example/`);
 const feed = urls.map((url) => ({ url, name: url }));
@@ -148,8 +161,29 @@ test("the shard script tells whether a code tree stores the list of links by rea
   assert.equal(storesLinkItems(path.join(import.meta.dirname, "fixtures")), false);
 });
 
+test("a row without a done first five seconds reading is still to do, when the code measures it", () => {
+  const now = Date.parse("2026-11-27T12:00:00Z");
+  const view = (state, msAgo = 0) => ({ state, at: new Date(now - msAgo).toISOString() });
+  const ff = (mobile, desktop) => ({ v: FIRST_FIVE_VERSION, mobile, desktop });
+  const some = [
+    { url: "https://done.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, first_five: ff(view("measured", 9e9), view("measured", 9e9)) }) },
+    { url: "https://none.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED }) },
+    { url: "https://fresh-fail.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, first_five: ff(view("not-measured", 60000), view("measured")) }) },
+    { url: "https://old-fail.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, first_five: ff(view("not-measured", UNKNOWN_RETRY_MS + 60000), view("measured")) }) },
+    { url: "https://other-v.example/", facts: JSON.stringify({ v: 4, privacy: CHECKED, first_five: { ...ff(view("measured"), view("measured")), v: 99 } }) },
+  ];
+  const got = pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true, firstFive: true, now });
+  assert.deepEqual(got.urls, ["https://none.example/", "https://old-fail.example/", "https://other-v.example/"]);
+  // On a released code tree that does not measure it, the rule is off.
+  assert.deepEqual(pickShard({ feed: some, rows: some, shard: 1, shards: 1, skipVersion: 4, cookieCheck: true, firstFive: false, now }).urls, []);
+  assert.equal(hasFirstFive("not json", now), false);
+  assert.equal(measuresFirstFive(path.join(import.meta.dirname, "..")), true, "this tree measures it");
+  assert.equal(measuresFirstFive(path.join(import.meta.dirname, "no-such-tree")), false);
+});
+
 test("the shard script's privacy version is the measuring code's, and it imports nothing from pipeline/ but roster.mjs", () => {
   assert.equal(PRIVACY_VERSION, MEASURED_VERSION);
+  assert.equal(FIRST_FIVE_VERSION, MEASURED_FIRST_FIVE);
   const src = fs.readFileSync(path.join(import.meta.dirname, "..", "scripts", "remeasure-shard.mjs"), "utf8");
   const pipelineImports = [...src.matchAll(/(?:from|import\()\s*["']\.\.\/pipeline\/([^"']+)["']/g)].map((m) => m[1]);
   assert.deepEqual(pipelineImports, ["roster.mjs"]);

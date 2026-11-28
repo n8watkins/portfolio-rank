@@ -14,11 +14,13 @@ import {
   List,
   Lock,
   Mail,
+  Monitor,
   Search,
   Share2,
   ShieldCheck,
   Smartphone,
   SquareArrowOutUpRight,
+  Timer,
   TriangleAlert,
   WandSparkles,
   X,
@@ -53,6 +55,8 @@ type BasicsItem = { id: string; icon: string; label: string; chip: string; value
 type LinkRow = { url: string; name: string; address: string; word: string; st: string };
 type Links = { ok: number; bad: number; headline: string; notes: string[]; rule: boolean; min: number; items: LinkRow[] | null };
 type Row = { key: string; label: string; def: string; value: number; st: string };
+type PairCell = { v: string; st: string; quote?: boolean };
+type PairRow = { id: string; label: string; def?: string; m: PairCell; d: PairCell };
 
 const ST_CLASS: Record<string, string> = { yes: s.stYes, no: s.stNo, warn: s.stWarn, info: s.stInfo };
 const ST_WORD: Record<string, string> = { yes: "Yes", no: "No", warn: "Needs work", info: "For information" };
@@ -66,7 +70,7 @@ function Status({ st }: { st: string }) {
   );
 }
 
-const CARD_ICON: Record<string, typeof ClipboardCheck> = { basics: ClipboardCheck, projects: FolderCode, mobile: Smartphone };
+const CARD_ICON: Record<string, typeof ClipboardCheck> = { first5: Timer, basics: ClipboardCheck, projects: FolderCode, mobile: Smartphone };
 const BASICS_ICON: Record<string, typeof Mail> = { resume: FileText, mail: Mail, image: ImageIcon, search: Search, lock: Lock, calendar: Calendar, cookie: Cookie };
 
 const tint = (id: string) => s[`t-${id}`] ?? "";
@@ -338,9 +342,67 @@ function LighthouseBody({ speed, rows, measuredOn, testUrl }: { speed: number; r
   );
 }
 
+/** One answer of a Mobile and Desktop pair: a quote has no mark, the others their state's mark. */
+function PairTd({ c }: { c: PairCell }) {
+  return (
+    <td className={c.quote ? s.ptQuote : undefined}>
+      {!c.quote && <Status st={c.st} />}
+      <span>{c.v}</span>
+    </td>
+  );
+}
+
+/** The first five seconds: the caption, then each question with its Mobile and Desktop answers (lib/profile-next/report.mjs firstFiveCard). */
+function FirstFiveBody({ caption, rows, notes }: { caption: string; rows: PairRow[]; notes: string[] }) {
+  return (
+    <>
+      <p className={s.subcap}>{caption}</p>
+      <table className={`${s.pt} ${s.ptPairs}`}>
+        <thead>
+          <tr>
+            <th scope="col">
+              <span className={s.vh}>Question</span>
+            </th>
+            <th scope="col">
+              <span className={s.ptH}>
+                <Smartphone className={s.icS} aria-hidden />
+                Mobile
+              </span>
+            </th>
+            <th scope="col">
+              <span className={s.ptH}>
+                <Monitor className={s.icS} aria-hidden />
+                Desktop
+              </span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} data-fact={r.id}>
+              <th scope="row">
+                {r.label}
+                {r.def && <small>{r.def}</small>}
+              </th>
+              <PairTd c={r.m} />
+              <PairTd c={r.d} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {notes.map((n) => (
+        <p key={n} className={s.note}>
+          {n}
+        </p>
+      ))}
+    </>
+  );
+}
+
 /** The body for each kind of card (lib/profile-next/report.mjs CARD_BUILDERS). A new card adds its kind here. */
 function CardBody({ card }: { card: Card }) {
   const data = card.data as Record<string, unknown>;
+  if (card.kind === "first5") return <FirstFiveBody caption={data.caption as string} rows={data.rows as PairRow[]} notes={(data.notes as string[]) ?? []} />;
   if (card.kind === "basics") return <BasicsBody items={data.items as BasicsItem[]} />;
   if (card.kind === "projects") return <ProjectsBody links={data.links as Links | null} builtWith={data.builtWith as string | null} notice={card.notice ?? null} />;
   if (card.kind === "lighthouse") return <LighthouseBody speed={data.speed as number} rows={data.rows as Row[]} measuredOn={data.measuredOn as string | null} testUrl={data.testUrl as string} />;
@@ -349,12 +411,33 @@ function CardBody({ card }: { card: Card }) {
 
 function ReportSection({ report, prompt }: { report: Report; prompt: string }) {
   const { cards, recommendations, checkedOn } = report;
-  // Wide screens: two columns that end level, the Lighthouse card on its own beside the others (on
-  // phones the columns drop away and the cards keep the tiles' order).
-  const side = cards.filter((c) => c.kind === "lighthouse");
-  const main = cards.filter((c) => c.kind !== "lighthouse");
+  // A wide card (the first five seconds) runs the full width above the others. Wide screens: two
+  // columns that end level, the Lighthouse card on its own beside the others (on phones the columns
+  // drop away and the cards keep the tiles' order).
+  const wide = cards.filter((c) => c.wide);
+  const rest = cards.filter((c) => !c.wide);
+  const side = rest.filter((c) => c.kind === "lighthouse");
+  const main = rest.filter((c) => c.kind !== "lighthouse");
   const columns =
-    cards.length < 2 ? [cards] : side.length && main.length ? [main, side] : [cards.filter((_, i) => i % 2 === 0), cards.filter((_, i) => i % 2 === 1)];
+    rest.length < 2 ? [rest] : side.length && main.length ? [main, side] : [rest.filter((_, i) => i % 2 === 0), rest.filter((_, i) => i % 2 === 1)];
+  const cardOf = (c: Card) => {
+    const Icon = CARD_ICON[c.id] ?? ClipboardCheck;
+    return (
+      <article key={c.id} id={`pn-card-${c.id}`} className={s.card} aria-labelledby={`pn-card-${c.id}-h`}>
+        <div className={`${s.th} ${tint(c.id)}`}>
+          <span className={s.thIc}>
+            <Icon aria-hidden />
+          </span>
+          <h3 className={s.thN} id={`pn-card-${c.id}-h`}>
+            {c.name}
+          </h3>
+        </div>
+        <div className={s.cardB}>
+          <CardBody card={c} />
+        </div>
+      </article>
+    );
+  };
   return (
 
     <section className={s.reportSec} aria-labelledby="pn-report">
@@ -382,36 +465,25 @@ function ReportSection({ report, prompt }: { report: Report; prompt: string }) {
                 <Icon aria-hidden />
               </span>
               <span className={s.tileN}>{c.name}</span>
-              {/* "Nothing to fix" only when nothing is noted either: a note that is not a fix reads neutral. */}
-              <span className={`${s.vd} ${c.fixes ? s.vdWarn : c.notice ? s.vdInfo : s.vdYes}`}>{c.fixes || !c.notice ? fixesWord(c.fixes) : c.notice}</span>
+              {/* "Nothing to fix" only when nothing is noted either: a note that is not a fix reads neutral.
+                  A card that is shown, never counted (tally: false), says nothing here. */}
+              {c.tally !== false && (
+                <span className={`${s.vd} ${c.fixes ? s.vdWarn : c.notice ? s.vdInfo : s.vdYes}`}>{c.fixes || !c.notice ? fixesWord(c.fixes) : c.notice}</span>
+              )}
             </TileLink>
           );
         })}
       </nav>
-      <div className={s.cards} data-cols={columns.length}>
-        {columns.map((col, i) => (
-          <div key={i} className={s.col}>
-            {col.map((c) => {
-              const Icon = CARD_ICON[c.id] ?? ClipboardCheck;
-              return (
-                <article key={c.id} id={`pn-card-${c.id}`} className={s.card} aria-labelledby={`pn-card-${c.id}-h`}>
-                  <div className={`${s.th} ${tint(c.id)}`}>
-                    <span className={s.thIc}>
-                      <Icon aria-hidden />
-                    </span>
-                    <h3 className={s.thN} id={`pn-card-${c.id}-h`}>
-                      {c.name}
-                    </h3>
-                  </div>
-                  <div className={s.cardB}>
-                    <CardBody card={c} />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      {wide.length > 0 && <div className={s.wideCards}>{wide.map(cardOf)}</div>}
+      {rest.length > 0 && (
+        <div className={s.cards} data-cols={columns.length}>
+          {columns.map((col, i) => (
+            <div key={i} className={s.col}>
+              {col.map(cardOf)}
+            </div>
+          ))}
+        </div>
+      )}
       {recommendations.length > 0 && (
         <section className={s.recs} aria-labelledby="pn-recs">
           <div className={s.th}>

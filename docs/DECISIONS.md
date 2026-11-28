@@ -297,6 +297,17 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   The capture does not click Accept or Reject: whether the capture may click such things is the owner's open "guard the clicks" decision.
   The facts version stays 4: the cookie check has its own version (`facts.privacy.v`), and a row without `privacy` reads as not measured, never as no tracking, so nothing else about the facts changes and the Capture problems page does not treat every next re-capture as new measuring code.
 
+### The first five seconds (2026-11-27)
+
+- **What the first screen shows five seconds after the page starts loading, on a phone and a desktop** (the owner's round 7 profile design, "First five seconds"). Status: building (`feat/first-five-seconds`).
+  It is shown on the redesigned profile and never counted: no grade, tier, rank or points read it, and its card has no tally.
+  The desktop reading uses the capture's own visit: a timer reads the screen at five seconds, and the capture presses nothing before it.
+  The phone reading cannot: a phone over a mobile connection loads the page differently from a desktop page made narrow later, so it is one more visit, throttled as Lighthouse's mobile run.
+  That is a second navigation of the kind #300 removed from the capture, so it is made only after the capture's own visit is over and its page closed, in a fresh browser context: a site that answers a repeat visit with a bot check then loses only this reading (stored as not measured, with the reason), never its screenshots, text or facts.
+  It is bounded to 15 seconds (about 5 in practice) and skipped when under 90 seconds of the capture's time limit is left, so it cannot push a capture over its limit.
+  "Still on an intro or loading" compares the five-second screen with the capture's settled view of the same screen, which is taken after the capture's waits and passes; the reading cannot tell an intro from a slow load, so the row says both.
+  It has its own version (`facts.first_five.v`), and the facts version stays 4, as for the cookie check.
+
 ### Capture problems the owner can see (2026-11-22)
 
 - **A Capture problems page in the admin, and one line in the nightly alert** (owner, 2026-11-22: yes to a "Capture problems" list). Status: building (#275).
