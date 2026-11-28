@@ -6,7 +6,9 @@
 //   - a site whose protection challenges every repeat visit (as Cloudflare
 //     did on 28 of the 30 sites whose refresh failed "only on our second
 //     visit at phone size") is captured with its desktop view; a first
-//     capture and a refresh alike;
+//     capture and a refresh alike; the phone's first five seconds
+//     (pipeline/first-five.mjs) is the one visit of its own, made after the
+//     capture, so the challenge only makes that reading "not measured";
 //   - a site that reloads itself when the window narrows, into that
 //     challenge, keeps its desktop capture: the narrow view is recorded as
 //     missing in the meta, with its reason, and is never a failed capture
@@ -81,8 +83,10 @@ let base;
 let db;
 let root;
 const results = {};
-/** The browser's document loads, per path (the plain pre-check sends no sec-fetch-mode). */
+/** The capture's document loads, per path (the plain pre-check sends no sec-fetch-mode). */
 const loads = {};
+/** The phone's five-second visits, per path. */
+const phoneLoads = {};
 const url = (p) => `${base}${p}`;
 const OLD_TEXT = "Old good page text of the portfolio";
 const OLD_AT = "2026-07-01 00:00:00";
@@ -91,6 +95,13 @@ before(async () => {
   server = http.createServer((req, res) => {
     const html = { "content-type": "text/html" };
     const navigation = req.headers["sec-fetch-mode"] === "navigate";
+    // The phone's first five seconds (pipeline/first-five.mjs): a visit of its own, after the capture's, with a
+    // phone's User-Agent. Counted apart; a site that challenges repeat visits challenges it too.
+    if (navigation && /\bMobile\b/.test(req.headers["user-agent"] ?? "")) {
+      phoneLoads[req.url] = (phoneLoads[req.url] ?? 0) + 1;
+      if (REPEAT_CHALLENGED.has(req.url)) return res.writeHead(403, { ...html, "cf-mitigated": "challenge" }).end(CHALLENGE);
+      return res.writeHead(pages[req.url] ? 200 : 404, html).end(pages[req.url] ?? "not found");
+    }
     if (navigation) loads[req.url] = (loads[req.url] ?? 0) + 1;
     if (navigation && REPEAT_CHALLENGED.has(req.url) && loads[req.url] >= 2) {
       return res.writeHead(403, { ...html, "cf-mitigated": "challenge" }).end(CHALLENGE);
@@ -144,6 +155,15 @@ test("the narrow view is the loaded page resized: one document load, a 390 x 844
   assert.ok(meta.fullPage.phone.bytes > 0);
   const m = await sharp(fileOf("/once", "mobile.jpg")).metadata();
   assert.deepEqual([m.width, m.height], [390, 844]);
+  // The first five seconds: the desktop read on this visit, the phone on a throttled visit of its own, made after it.
+  assert.equal(phoneLoads["/once"], 1);
+  const ff = JSON.parse(String((await rowOf("/once")).facts)).first_five;
+  assert.deepEqual([ff.v, ff.desktop.state, ff.mobile.state], [1, "measured", "measured"], JSON.stringify(ff));
+  assert.deepEqual([ff.desktop.at5.biggest, ff.desktop.at5.nameHit, ff.desktop.intro], ["Jane Doe", "jane", false]);
+  assert.deepEqual([ff.mobile.at5.biggest, ff.mobile.at5.nameHit, ff.mobile.intro], ["Jane Doe", "jane", false]);
+  assert.ok(ff.desktop.at5.atMs >= 5000 && ff.mobile.at5.atMs >= 5000);
+  assert.match(ff.mobile.applied, /^412x823 at 1\.75x; 562\.5 ms latency/);
+  assert.equal(ff.desktop.applied, "1440x900 at 1x; no throttling");
 });
 
 test("a site that challenges every repeat visit is captured from its one visit, first capture and refresh alike", async () => {
@@ -153,6 +173,12 @@ test("a site that challenges every repeat visit is captured from its one visit, 
   assert.match(String(row.page_text), /Backend engineer/);
   assert.equal(loads["/cf-repeat"], 1, "no second visit for the challenge to answer");
   assert.equal((await metaOf("/cf-repeat")).fullPage.phone.width, 390);
+  // The phone's five-second visit, made once the capture was over, met the challenge: only that reading is lost.
+  assert.equal(phoneLoads["/cf-repeat"], 1);
+  const ff = JSON.parse(String(row.facts)).first_five;
+  assert.equal(ff.desktop.state, "measured");
+  assert.equal(ff.mobile.state, "not-measured");
+  assert.equal(ff.mobile.reason, "the second visit was answered with HTTP 403 (challenge)");
 
   assert.match(results["/cf-repeat-refresh"], /^live/, results["/cf-repeat-refresh"]);
   const refreshed = await rowOf("/cf-repeat-refresh");

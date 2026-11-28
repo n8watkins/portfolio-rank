@@ -18,6 +18,8 @@
   --ink-projects: #6ee7a0;
   --tint-mobile: rgba(167, 139, 250, 0.15);
   --ink-mobile: #c4b5fd;
+  --tint-first5: rgba(110, 150, 255, 0.14);
+  --ink-first5: #a3bcff;
   --gold: linear-gradient(135deg, #fde68a 0%, #fbbf24 38%, #f59e0b 70%, #ea7a0c 100%);
   --header-h: 64px;
   --p: 0;
@@ -897,6 +899,21 @@
   color: var(--ink-mobile);
 }
 
+.t-first5 {
+  background: var(--tint-first5);
+}
+.t-first5 .tileIc,
+.t-first5 .thIc {
+  color: var(--ink-first5);
+}
+
+/* A wide card (the first five seconds) runs the full width above the columns, on every screen. */
+.wideCards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
 /* Cards: one column on phones; on wide screens two columns that end level, the cards of the shorter
    one sharing its extra height, so no card ends in a deep empty band and no gap is ragged. */
 .cards {
@@ -1330,6 +1347,46 @@
 .dvRun:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+/* Mobile and Desktop pairs (the first five seconds): the question in regular weight, both answers left
+   aligned under their heads, the same size and weight; a quote has no mark. */
+.subcap {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--color-mute);
+}
+.ptPairs thead th:first-child {
+  width: 42%;
+}
+.ptPairs thead th {
+  text-align: left;
+}
+.ptPairs th,
+.ptPairs td {
+  vertical-align: top;
+}
+.ptPairs td {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.ptPairs .ptH svg {
+  color: var(--ink-first5);
+}
+.ptQuote {
+  font-weight: 600 !important;
+}
+@media (max-width: 380px) {
+  .ptPairs thead th:first-child {
+    width: 38%;
+  }
+  .ptPairs th,
+  .ptPairs td {
+    padding: 8px 5px;
+  }
+  .ptPairs {
+    font-size: 13.5px;
+  }
 }
 .dvCap {
   caption-side: bottom;

@@ -345,6 +345,100 @@ test("helpers: days in UTC, Lighthouse states, the PageSpeed link", () => {
   assert.equal(pageSpeedUrl("https://a.dev/x?y=1"), "https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fa.dev%2Fx%3Fy%3D1&form_factor=mobile");
 });
 
+// ---------------------------------------------------------------- First five seconds
+
+/** One view of facts.first_five (pipeline/first-five.mjs), measured. */
+const view = (at5, { intro = false, at = "2026-11-24T06:00:00.000Z" } = {}) => ({ state: "measured", at, applied: "x", at5: { atMs: 5004, words: 40, ...at5 }, later: null, intro });
+const firstFive = (mobile, desktop) => ({ v: 1, mobile, desktop });
+const PRARIT = firstFive(view({ biggest: "Prarit Sidana", nameHit: "prarit", way: "Explore my work" }), view({ biggest: "Prarit Sidana", nameHit: "prarit", way: "Projects" }));
+/** A stored Lighthouse result with its Largest Contentful Paint (ms) and how many runs it averages. */
+const lh = (lcpMs, runs = 2) => ({ ok: true, scores: { performance: 90 }, runs, metrics: [{ id: "largest-contentful-paint", label: "Largest Contentful Paint", value: `${(lcpMs / 1000).toFixed(1)} s`, numeric: lcpMs }] });
+const pair = (r, id) => card(r, "first5").data.rows.find((x) => x.id === id);
+
+test("first five seconds: the card's rows, Mobile and Desktop side by side, first among the cards", () => {
+  const r = run({ inspect: inspect(), facts: facts(), firstFive: PRARIT, psi: lh(3400), psiDesktop: lh(1100) });
+  const c = card(r, "first5");
+  assert.equal(r.cards[0].id, "first5");
+  assert.deepEqual([c.name, c.kind, c.wide, c.tally], ["First five seconds", "first5", true, false]);
+  assert.equal(
+    c.data.caption,
+    "The first screen only, with no scrolling, read by code five seconds after the page starts loading. Mobile on a typical mobile connection, Desktop on a fast one.",
+  );
+  assert.deepEqual(
+    c.data.rows.map((x) => [x.label, x.m.v, x.m.st, x.d.v, x.d.st]),
+    [
+      ["The first screen says", "“Prarit Sidana”", "info", "“Prarit Sidana”", "info"],
+      ["Your name is visible", "Yes", "yes", "Yes", "yes"],
+      ["A way to reach you or see your work is visible", "Yes", "yes", "Yes", "yes"],
+      ["Still on an intro or loading", "No", "yes", "No", "yes"],
+      ["Main content appears after", "3.4 s", "warn", "1.1 s", "yes"],
+    ],
+  );
+  assert.equal(pair(r, "says").def, "The biggest text on screen at that moment, quoted.");
+  assert.equal(pair(r, "says").m.quote, true);
+  assert.equal(pair(r, "lcp").def, "From Google Lighthouse, the average of two runs. Under 2.5 seconds is good.");
+  assert.deepEqual(c.data.notes, []);
+  // Nothing to fix, and the card is never counted.
+  assert.equal(c.fixes, 0);
+  assert.deepEqual(r.recommendations, []);
+  assert.equal(r.checkedOn, "24 Nov 2026", "the reading's own time counts");
+});
+
+test("first five seconds: the main content row needs a stored Lighthouse result, and says one run where it is one", () => {
+  assert.equal(pair(run({ firstFive: PRARIT }), "lcp"), undefined, "no Lighthouse result: no row");
+  const one = pair(run({ firstFive: PRARIT, psi: lh(2500, 1) }), "lcp");
+  assert.deepEqual([one.m.v, one.m.st, one.d.v, one.d.st], ["2.5 s", "yes", "Not measured", "info"]);
+  assert.equal(one.def, "From Google Lighthouse, one run. Under 2.5 seconds is good.");
+  const mixed = pair(run({ firstFive: PRARIT, psi: lh(2600, 2), psiDesktop: { ...lh(900), runs: undefined } }), "lcp");
+  assert.equal(mixed.def, "From Google Lighthouse (Mobile: the average of two runs; Desktop: one run). Under 2.5 seconds is good.");
+  assert.equal(mixed.m.st, "warn");
+  // A failed Lighthouse run is not a result.
+  assert.equal(pair(run({ firstFive: PRARIT, psi: { ok: false, error: "timeout" } }), "lcp"), undefined);
+});
+
+test("first five seconds: no name and an intro on mobile are the two recommendations, after the basics", () => {
+  const ff = firstFive(view({ biggest: null, nameHit: null, way: null, words: 0 }, { intro: true }), view({ biggest: "Home About Projects Resume Contact", nameHit: null, way: "Projects", words: 5 }, { intro: true }));
+  const r = run({ inspect: inspect({ description: null }), facts: facts(), firstFive: ff });
+  const rows = card(r, "first5").data.rows;
+  assert.deepEqual(
+    rows.map((x) => [x.id, x.m.v, x.m.st, x.d.v, x.d.st]),
+    [
+      ["says", "Nothing readable yet", "info", "“Home About Projects Resume Contact”", "info"],
+      ["name", "No", "no", "No", "no"],
+      ["way", "No", "no", "Yes", "yes"],
+      ["intro", "Yes", "no", "Yes", "no"],
+    ],
+  );
+  assert.deepEqual(r.recommendations, [
+    'Add a search description (<meta name="description">).',
+    "Show your name on the first screen on mobile.",
+    "Shorten or remove the intro: on mobile the first screen is still loading after five seconds.",
+  ]);
+  assert.match(r.prompt, /does not show my name \(nothing readable shows there yet\)\. Put my name near the top of the hero/);
+  assert.match(r.prompt, /Shorten or remove the intro\. Five seconds after loading on mobile over a slow 4G connection/);
+  // The biggest text is quoted in the prompt when there is one.
+  const named = run({ firstFive: firstFive(view({ biggest: "Portfolio", nameHit: null, way: "Let's talk" }), view({ biggest: "Portfolio", nameHit: "delba", way: "Let's talk" })) });
+  assert.match(named.prompt, /\(the biggest text there is "Portfolio"\)/);
+  assert.deepEqual(named.recommendations, ["Show your name on the first screen on mobile."]);
+  // The desktop alone never makes a recommendation (the owner's list is about mobile).
+  const desk = run({ firstFive: firstFive(view({ biggest: "Hi", nameHit: "jane", way: "Contact" }), view({ biggest: "Hi", nameHit: null, way: null }, { intro: true })) });
+  assert.deepEqual(desk.recommendations, []);
+});
+
+test("first five seconds: a view that was not measured says so and why; with neither measured there is no card", () => {
+  const failed = { state: "not-measured", reason: "the second visit was answered with HTTP 403 (challenge)", at: "2026-11-24T06:00:00.000Z", applied: "x" };
+  const r = run({ firstFive: firstFive(failed, PRARIT.desktop) });
+  const c = card(r, "first5");
+  assert.ok(c.data.rows.every((x) => x.m.v === "Not measured" && x.m.st === "info"));
+  assert.equal(pair(r, "name").d.v, "Yes");
+  assert.deepEqual(c.data.notes, ["Mobile was not measured: the second visit was answered with HTTP 403 (challenge)."]);
+  assert.deepEqual(r.recommendations, [], "nothing is recommended from a view that was not read");
+  assert.equal(card(run({ firstFive: firstFive(failed, failed) }), "first5"), undefined);
+  assert.equal(card(run({ facts: facts() }), "first5"), undefined, "facts from before the reading: no card");
+  // The facts' own copy is read when no separate one is given.
+  assert.ok(card(run({ facts: facts({ first_five: PRARIT }) }), "first5"));
+});
+
 test("the launch switch: off unless PROFILE_NEXT is exactly true (any case), and on in production (owner, 2026-11-26)", () => {
   assert.equal(profileNextEnabled({}), false);
   assert.equal(profileNextEnabled({ PROFILE_NEXT: "false" }), false);
