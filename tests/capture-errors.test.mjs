@@ -28,6 +28,7 @@ import { captureSite, keyOf } from "../pipeline/capture.mjs";
 import { BLOCKED_PREFIX, BOT_WALL } from "../pipeline/capture-blocked.mjs";
 import { ACTIVE, ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
+import { ensureCaptureProblemSchema } from "../lib/capture-problems.mjs";
 
 const SITE = `<!doctype html><title>Jane Doe</title><body style="font:18px system-ui;max-width:800px;margin:40px auto"><h1>Jane Doe</h1><h2>Backend engineer</h2>
 <p>${"I build payment systems and developer tools that stay up at three in the morning. ".repeat(6)}</p>
@@ -53,6 +54,9 @@ const pages = {
     <style>@media (max-width: 500px) { body.site > :not(.gate) { display: none } .gate { display: grid !important } }</style></body>`
   ),
   // The desktop view leaves a cookie and reloads the page when the window narrows; that load (which sends the cookie) gets a 503.
+  // Until the reload's document arrives, the old one is still the page (loaded, with the site's text and
+  // the old 200): the capture must wait for the new one, or it scrolls the error page through
+  // (pipeline/capture.mjs documentArrived; under load, about 2 runs in 5 did before it).
   "/phone503": SITE.replace("</body>", `<script>document.cookie="seen=1; path=/";addEventListener("resize",()=>{if(innerWidth<500)location.reload()})</script></body>`),
   // A preloader line until the page is scrolled; the scroll-through shows the site.
   "/scrollreveal": `<!doctype html><title>Jane Doe</title><body style="font:18px system-ui;margin:0"><p>Loading the portfolio of Jane Doe, please wait while it gets ready: 87%</p><div style="height:3000px"></div>
@@ -112,6 +116,7 @@ before(async () => {
   db = createClient({ url: `file:${path.join(root, "db.sqlite")}` });
   await ensureRosterSchema(db);
   await ensureFreshnessSchema(db);
+  await ensureCaptureProblemSchema(db);
   for (const p of ["/ratelimit", "/flaky", "/e502"]) await seedGood(p);
   browser = await chromium.launch();
   const run = async (p, opts = {}) => {
