@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.1 - 2026-11-27
+
+_Maintenance release: no user-facing changes._
+
+## 0.11.0 - 2026-11-26
+
+### New
+
+- The redesigned profile is on, at /p/<address>/next ([#313](https://github.com/n8watkins/portfolio-rank/pull/313))
+
 ## 0.10.0 - 2026-11-25
 
 ### New

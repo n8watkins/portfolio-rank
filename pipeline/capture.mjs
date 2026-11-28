@@ -320,28 +320,65 @@ const closeWithin = (ctx) => (ctx ? within(ctx.close(), CLOSE_LIMIT_MS, "closing
  * Follows a page's main document: the status and cf-mitigated header of the
  * last response its own navigation got (a challenge that reloads into the
  * site ends on the site's response). { status: 0 } until there is one.
+ * `arrived`: the latest navigation is over (documentArrived).
  * @param {import("playwright").Page} page
  */
 function trackDocument(page) {
-  const doc = { status: 0, cfMitigated: "", navigations: 0 };
+  const doc = { status: 0, cfMitigated: "", navigations: 0, arrived: true };
+  const mainNavigation = (req) => {
+    try {
+      return req.isNavigationRequest() && req.frame() === page.mainFrame();
+    } catch {
+      return false; // a request without a frame (a service worker's): not the document
+    }
+  };
+  // The main document's requests not yet answered, and whether the latest one ended in a new document
+  // (parsed) or in none (failed, or a 204 or 205, which keeps the page as it was).
+  const inFlight = new Set();
+  const settle = () => {
+    if (inFlight.size === 0) doc.arrived = true;
+  };
   // `navigations`: the main document's requests (the first load, a reload, the page sending the browser on).
   page.on("request", (req) => {
-    try {
-      if (req.isNavigationRequest() && req.frame() === page.mainFrame()) doc.navigations++;
-    } catch {
-      // a request without a frame (a service worker's): not the document
-    }
+    if (!mainNavigation(req)) return;
+    doc.navigations++;
+    doc.arrived = false;
+    inFlight.delete(req.redirectedFrom());
+    inFlight.add(req);
   });
   page.on("response", (res) => {
     try {
-      if (res.frame() !== page.mainFrame() || !res.request().isNavigationRequest()) return;
+      if (!mainNavigation(res.request())) return;
       doc.status = res.status();
       doc.cfMitigated = res.headers()["cf-mitigated"] ?? "";
+      inFlight.delete(res.request());
+      if (res.status() === 204 || res.status() === 205) settle();
     } catch {
       // a response without a frame (a service worker's): not the document
     }
   });
+  page.on("requestfailed", (req) => {
+    if (!inFlight.delete(req)) return;
+    settle();
+  });
+  page.on("domcontentloaded", settle);
   return doc;
+}
+
+/**
+ * Waits up to `ms` for the main document's latest navigation (a reload, the
+ * page sending the browser on) to arrive: answered and, unless it failed or
+ * had nothing to show, the new document parsed. Until then the page is still
+ * the old document: its load state, its text and `doc.status` (the old
+ * response's) say nothing about what the navigation brought, so an error
+ * page judged then passes for the site and gets the waits and the
+ * scroll-through. Returns whether it arrived.
+ * @param {import("playwright").Page} page
+ */
+async function documentArrived(page, doc, ms = 30000) {
+  const until = Date.now() + ms;
+  while (!doc.arrived && Date.now() < until && !page.isClosed()) await page.waitForTimeout(100).catch(() => {});
+  return doc.arrived;
 }
 
 /** How long a challenge-looking error page (isChallengeStatus) gets to reload into the site. */
@@ -357,6 +394,8 @@ async function waitOutChallenge(page, doc, ms = CHALLENGE_WAIT_MS) {
   const until = Date.now() + ms;
   while (doc.status >= 400 && Date.now() < until) await page.waitForTimeout(500);
   if (doc.status >= 400) return false;
+  // The answer is in, but the challenge page is the document until the site's is parsed.
+  await documentArrived(page, doc);
   await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
   return true;
 }
@@ -475,6 +514,7 @@ export async function narrowView(page, doc) {
   let handled = before;
   for (let round = 0; round < 2 && doc.navigations > handled; round++) {
     handled = doc.navigations;
+    await documentArrived(page, doc);
     await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
     if (doc.status >= 400) {
       const early = await judgeNarrow(page, doc, passes);
@@ -495,6 +535,7 @@ export async function narrowView(page, doc) {
   await arrive();
   if (doc.navigations > handled) {
     // A late reload (a debounced resize handler): the new load is judged and settled before the image.
+    await documentArrived(page, doc);
     await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
     if (doc.status >= 400) {
       const early = await judgeNarrow(page, doc, passes);

@@ -199,6 +199,19 @@ test("projects: the checked links are listed when the capture stored them, each 
   ]);
 });
 
+test("projects: a link named only with generic text is named by its address, like a link with no text", () => {
+  const rowsOf = (names) =>
+    card(run({ facts: facts({ project_links: { checked: names.length, ok: names.length, broken: 0, blocked: 0, items: names.map((name, i) => ({ url: `https://p${i}.example.dev/app/`, name, kind: "outbound", verdict: "ok" })) } }) }), "projects").data.links.items;
+  const generic = ["View", "  view  ", "LIVE DEMO", "Visit Site →", "Demo ↗", "Click here.", "Learn more »", "Source Code", "GitHub", "Repo", "View Project  ›"];
+  for (const row of rowsOf(generic)) {
+    assert.equal(row.name, row.address, row.url);
+    assert.match(row.address, /^p\d+\.example\.dev\/app$/);
+  }
+  // A real name that merely contains a generic word keeps its name.
+  const kept = ["Viewfinder app", "Live chat", "Demo reel studio", "Open source tracker", "Code Quest"];
+  assert.deepEqual(rowsOf(kept).map((r) => r.name), kept);
+});
+
 test("projects: the product's words and counting, so this page and today's profile never disagree", () => {
   const cases = [
     { checked: 5, ok: 5, broken: 0, blocked: 0 },

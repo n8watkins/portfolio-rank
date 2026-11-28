@@ -4,6 +4,44 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.11.1",
+      "tag": "v0.11.1",
+      "date": "2026-11-27",
+      "time": "2026-11-28T04:09:36Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.11.1",
+      "previous": "v0.11.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
+      "version": "0.11.0",
+      "tag": "v0.11.0",
+      "date": "2026-11-26",
+      "time": "2026-11-26T11:23:17Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.11.0",
+      "previous": "v0.10.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "profile",
+          "text": "The redesigned profile is on, at /p/<address>/next",
+          "breaking": false,
+          "pr": 313,
+          "prUrl": "https://github.com/n8watkins/portfolio-rank/pull/313",
+          "commit": "3d928a05da8c412f0d569b3f2dea6d52f6d90261",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/3d928a05da8c412f0d569b3f2dea6d52f6d90261"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.10.0",
       "tag": "v0.10.0",
       "date": "2026-11-25",

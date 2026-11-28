@@ -57,6 +57,10 @@ async function seed(db, url) {
         { url: "https://github.com/someone/gone", name: null, kind: "outbound", verdict: "broken" },
         { url: "https://old.example.dev/demo", name: "Old demo", kind: "outbound", verdict: "broken" },
         { url: "https://shop.example.dev/", name: "Shop", kind: "outbound", verdict: "blocked" },
+        // Only generic link text, and a long address: named by the address, cut to two lines.
+        { url: "https://firstnaukri.example.com/contests/codequezt-contest-sharp-3-with-a-very-long-path-name/leaderboard", name: "View →", kind: "outbound", verdict: "not_counted" },
+        // A real name with a long address: the address line under it stays on one line.
+        { url: "https://firstnaukri.example.com/contests/codequezt-contest-sharp-3-with-a-very-long-path-name/entries", name: "Contest platform", kind: "outbound", verdict: "ok" },
       ],
     },
     measured_at: "2026-11-22T08:00:00Z",
@@ -122,7 +126,9 @@ test("with the switch on: the report from the saved checks, the actions, the cla
     "1 behind a bot check.",
     // The checked links themselves, each a link that opens in a new tab and passes no ranking credit.
     'href="https://chess.example.dev/" target="_blank" rel="noopener noreferrer nofollow ugc">Chess engine</a>',
-    'href="https://github.com/someone/gone" target="_blank" rel="noopener noreferrer nofollow ugc">github.com/someone/gone</a>',
+    'href="https://github.com/someone/gone" target="_blank" rel="noopener noreferrer nofollow ugc" title="github.com/someone/gone">github.com/someone/gone</a>',
+    'ugc" title="firstnaukri.example.com/contests/codequezt-contest-sharp-3-with-a-very-long-path-name/leaderboard">firstnaukri.example.com/contests/codequezt-contest-sharp-3-with-a-very-long-path-name/leaderboard</a>',
+    ' title="firstnaukri.example.com/contests/codequezt-contest-sharp-3-with-a-very-long-path-name/entries">firstnaukri.example.com/contests/codequezt-contest-sharp-3-with-a-very-long-path-name/entries</span>',
     "Does not load",
     "Behind a bot check",
     "Run this test",
